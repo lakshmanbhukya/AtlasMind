@@ -10,7 +10,6 @@ import LandingPage from './components/LandingPage';
 import ErrorBoundary from './components/ErrorBoundary';
 import { cn } from './lib/utils';
 import { fetchDashboard, removeDashboardPin } from './services/api';
-import './index.css';
 
 /** Simple responsive hook */
 function useMediaQuery(query) {

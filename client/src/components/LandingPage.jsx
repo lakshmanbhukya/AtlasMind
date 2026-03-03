@@ -195,7 +195,7 @@ export default function LandingPage({ onConnected }) {
     setAvailableDbs([]);
     try {
       // POST /api/connections/connect — server validates DB, then sets httpOnly JWT cookie
-      await api.post('/connections/connect', {
+      await api.post('connections/connect', {
         connectionString: connStr,
         dbName,
         label: 'My Database',

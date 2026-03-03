@@ -7,7 +7,7 @@ import axios from 'axios';
  * with every request automatically. No manual connectionId needed.
  */
 const api = axios.create({
-    baseURL: (import.meta.env.VITE_SERVER_URL || '') + '/api',
+    baseURL: (import.meta.env.VITE_SERVER_URL || '').replace(/\/$/, '') + '/api/',
     timeout: 60000,
     withCredentials: true, // Send cookies on every request
     headers: {
@@ -38,7 +38,7 @@ api.interceptors.response.use(
  * @returns {Promise<object>} { aiMessage, pipeline, results, chartType, ... }
  */
 export async function sendQuery(text) {
-    const { data } = await api.post('/query', { text });
+    const { data } = await api.post('query', { text });
     return data;
 }
 
@@ -50,7 +50,7 @@ export async function sendQuery(text) {
 export async function sendVoice(audioBlob) {
     const formData = new FormData();
     formData.append('audio', audioBlob, 'recording.webm');
-    const { data } = await api.post('/voice', formData, {
+    const { data } = await api.post('voice', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 30000,
     });
@@ -65,7 +65,7 @@ export async function sendVoice(audioBlob) {
  * @returns {Promise<object>}
  */
 export async function fetchSchema(forceRefresh = false) {
-    const endpoint = forceRefresh ? '/schema/refresh' : '/schema';
+    const endpoint = forceRefresh ? 'schema/refresh' : 'schema';
     const { data } = await api.get(endpoint);
     return data.data || data;
 }
@@ -77,7 +77,7 @@ export async function fetchSchema(forceRefresh = false) {
  * @returns {Promise<Array>}
  */
 export async function fetchQueryHistory() {
-    const { data } = await api.get('/query/history');
+    const { data } = await api.get('query/history');
     return data.data || [];
 }
 
@@ -85,7 +85,7 @@ export async function fetchQueryHistory() {
 
 /** @returns {Promise<Array>} */
 export async function fetchDashboard() {
-    const { data } = await api.get('/dashboard');
+    const { data } = await api.get('dashboard');
     return data;
 }
 
@@ -94,18 +94,18 @@ export async function fetchDashboard() {
  * @returns {Promise<object>}
  */
 export async function pinToDashboard(pin) {
-    const { data } = await api.post('/dashboard/pin', pin);
+    const { data } = await api.post('dashboard/pin', pin);
     return data;
 }
 
 /** @param {string} pinId */
 export async function removeDashboardPin(pinId) {
-    await api.delete(`/dashboard/${pinId}`);
+    await api.delete(`dashboard/${pinId}`);
 }
 
 /** @param {string} pinId */
 export async function refreshDashboardPin(pinId) {
-    const { data } = await api.post(`/dashboard/${pinId}/refresh`);
+    const { data } = await api.post(`dashboard/${pinId}/refresh`);
     return data;
 }
 
@@ -116,7 +116,7 @@ export async function refreshDashboardPin(pinId) {
  * @param {{ query, pipeline, collection, results }} payload
  */
 export async function exportQueryResults(payload) {
-    const { data } = await api.post('/query/export', payload);
+    const { data } = await api.post('query/export', payload);
     return data;
 }
 

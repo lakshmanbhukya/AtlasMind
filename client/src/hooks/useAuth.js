@@ -19,7 +19,7 @@ export function useAuth() {
     const checkSession = useCallback(async () => {
         setIsLoading(true);
         try {
-            const { data } = await api.get('/auth/me');
+            const { data } = await api.get('auth/me');
             if (data.success) {
                 setIsAuthenticated(true);
                 setConnectionMeta({
@@ -47,7 +47,7 @@ export function useAuth() {
 
     const logout = useCallback(async () => {
         try {
-            await api.post('/auth/logout');
+            await api.post('auth/logout');
         } catch {
             // Ignore logout errors — clear state regardless
         }

@@ -7,7 +7,7 @@ import axios from 'axios';
  * with every request automatically. No manual connectionId needed.
  */
 const api = axios.create({
-    baseURL: (import.meta.env.VITE_SERVER_URL || '').replace(/\/$/, '') + '/api/',
+    baseURL: (import.meta.env.VITE_SERVER_URL || window.location.origin).replace(/\/$/, '') + '/api/',
     timeout: 60000,
     withCredentials: true, // Send cookies on every request
     headers: {

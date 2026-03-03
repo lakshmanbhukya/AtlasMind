@@ -248,8 +248,8 @@ export default function AtlasChatPanel({ onLastMessage, onNewQuery, onPinAdded }
                 <div className="absolute inset-0 rounded-[40px] border border-white/5 pointer-events-none" />
               </div>
             </div>
-            <h2 className="font-display font-extrabold text-4xl sm:text-5xl tracking-tight text-foreground leading-tight">
-              Talk to your <span className="text-primary italic">data.</span>
+            <h2 className="font-display font-syne text-4xl sm:text-5xl tracking-tight text-foreground leading-tight">
+              Talk to your <span className="font-syne text-primary">data.</span>
             </h2>
             <p className="max-w-[500px] text-muted-foreground text-base sm:text-lg leading-relaxed">
               AtlasMind transforms your natural language into production-grade MQL in <span className="text-foreground font-medium">sub-200ms</span>.

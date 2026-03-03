@@ -5,6 +5,30 @@
 const request = require('supertest');
 const app = require('../src/index');
 
+// Mock MongoClient to prevent real connections
+jest.mock('mongodb', () => {
+    const mockDb = {
+        collection: jest.fn(() => ({
+            aggregate: jest.fn().mockReturnThis(),
+            toArray: jest.fn().mockResolvedValue([]),
+            insertOne: jest.fn().mockResolvedValue({}),
+            findOne: jest.fn().mockResolvedValue(null),
+            find: jest.fn().mockReturnThis(),
+            sort: jest.fn().mockReturnThis(),
+            limit: jest.fn().mockReturnThis(),
+        })),
+        databaseName: 'test-db',
+    };
+    const mockClient = {
+        connect: jest.fn().mockResolvedValue(true),
+        db: jest.fn(() => mockDb),
+        close: jest.fn().mockResolvedValue(true),
+    };
+    return {
+        MongoClient: jest.fn(() => mockClient),
+    };
+});
+
 // Mock DB connection
 jest.mock('../src/db/connection', () => ({
     getDb: jest.fn(() => ({

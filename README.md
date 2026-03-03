@@ -4,7 +4,7 @@
   <p><b>Talk to your data. AI-Powered Conversational BI for MongoDB.</b></p>
   
   <p>
-    <a href="https://atlasmind19.netlify.app/"><b>🌐 Live Demo</b></a> • <br>
+    <a href="https://atlasmind19.netlify.app/"><b>🌐 Live Demo</b></a> • <br><br>
     <img alt="Stars" src="https://img.shields.io/github/stars/lakshmanbhukya/AtlasMind?style=for-the-badge&logo=github"/>
     <img alt="Status" src="https://img.shields.io/badge/Status-Active-brightgreen?style=for-the-badge"/>
     <img alt="License" src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge"/>

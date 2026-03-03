@@ -81,5 +81,9 @@ This creates sample collections (sales, inventory, customers) with benchmark dat
 3. **Database Access**: Create a user with `atlasAdmin` or `readWriteAnyDatabase` roles.
 4. **Connect**: Copy the SRV connection string into your `.env`.
 
+## 🚢 Production Deployment
+
+For deploying the application to **Netlify** (Frontend) and **Render** (Backend), refer to the **[Deployment Guide](./DEPLOYMENT.md)**.
+
 ---
 [⬅️ Back to README](../README.md)

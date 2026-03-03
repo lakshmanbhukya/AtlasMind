@@ -4,6 +4,7 @@
   <p><b>Talk to your data. AI-Powered Conversational BI for MongoDB.</b></p>
   
   <p>
+    <a href="https://atlasmind19.netlify.app/"><b>🌐 Live Demo</b></a> •
     <img alt="Stars" src="https://img.shields.io/github/stars/lakshmanbhukya/AtlasMind?style=for-the-badge&logo=github"/>
     <img alt="Status" src="https://img.shields.io/badge/Status-Active-brightgreen?style=for-the-badge"/>
     <img alt="License" src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge"/>
@@ -29,6 +30,7 @@ To keep things organized, our documentation is split into several focused guides
 | 🌟 **[Features & Usage](./docs/FEATURES.md)** | Key features, query patterns, and example asks. |
 | 📡 **[API Reference](./docs/API.md)** | Endpoint definitions and request/response examples. |
 | 📄 **[Development](./docs/DEVELOPMENT.md)** | Project structure, testing strategies, and roadmap. |
+| 🚀 **[Deployment](./docs/DEPLOYMENT.md)** | Manual deployment to Netlify (Frontend) and Render (Backend). |
 | 🔧 **[Troubleshooting](./docs/TROUBLESHOOTING.md)** | Common issues, 429 errors, and connection fixes. |
 
 ---

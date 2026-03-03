@@ -1,0 +1,2064 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap');
+
+/* =====================================================================
+   AtlasMind — Modern Analytics Design System (Synced with Landing Page)
+   ===================================================================== */
+
+html {
+  scroll-behavior: smooth;
+}
+
+:root {
+  /* Colors - Modern Dark Slate Palette (#0D1117) */
+  --bg-primary: #0D1117;
+  --bg-secondary: #0a0e14;
+  --bg-tertiary: #161b22;
+  --bg-hover: #161b22;
+  --bg-active: #21262d;
+
+  --surface: rgba(255, 255, 255, 0.03); 
+  --surface-hover: rgba(255, 255, 255, 0.05);
+  --surface-active: rgba(255, 255, 255, 0.08);
+  --surface-border: rgba(255, 255, 255, 0.07);
+
+  --border-default: rgba(255, 255, 255, 0.07);
+  --border-hover: rgba(255, 255, 255, 0.12);
+  --border-focus: #00ED64; 
+
+  --text-primary: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --text-tertiary: #64748b;
+  --text-muted: #475569;
+
+  --accent: #00ED64;
+  --accent-light: #33F083;
+  --accent-glow: rgba(0, 237, 100, 0.15);
+  --accent-secondary: #00684A;
+  --accent-tertiary: #116149;
+
+  --success: #00ED64;
+  --warning: #FFC000;
+  --error: #EF4C4C;
+  --info: #016EE9;
+
+  /* Typography */
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  --font-mono: 'SF Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
+
+  /* Typography Scale */
+  --text-display: 32px;
+  --text-h1: 24px;
+  --text-h2: 18px;
+  --text-h3: 16px;
+  --text-body: 14px;
+  --text-body-small: 13px;
+  --text-caption: 12px;
+  --text-label: 11px;
+  --text-code: 13px;
+  --text-code-small: 11px;
+
+  /* Spacing */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+  --space-3xl: 64px;
+
+  /* Border Radius - Apple HIG */
+  --radius-none: 0px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-full: 9999px;
+
+  /* Shadows - HIG Soft Depth */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.6);
+  --shadow-glow: 0 0 0 2px rgba(0, 237, 100, 0.4);
+  --shadow-glow-cyan: 0 0 0 2px rgba(0, 104, 74, 0.4);
+  --shadow-glow-orange: 0 0 0 2px rgba(0, 237, 100, 0.4);
+
+  /* Animation Timing */
+  --timing-fast: 150ms;
+  --timing-base: 250ms;
+  --timing-slow: 400ms;
+  --timing-slower: 600ms;
+
+  /* Easing Functions - Apple Springs */
+  --ease-out: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-sharp: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.1);
+
+  /* Sidebar */
+  --sidebar-width: 320px;
+  --sidebar-collapsed: 64px;
+}
+
+/* --- Reset --- */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  width: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--text-body);
+  line-height: 1.5;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  letter-spacing: -0.01em;
+}
+
+/* --- Background Treatment --- */
+.mesh-bg {
+  background-color: var(--bg-primary);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Apple HIG Ambient Glows */
+.mesh-bg::before {
+  content: "";
+  position: absolute;
+  top: -20%;
+  left: 20%;
+  width: 60vw;
+  height: 60vw;
+  background: radial-gradient(circle, rgba(0, 237, 100, 0.05) 0%, transparent 60%);
+  filter: blur(100px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.mesh-bg::after {
+  content: "";
+  position: absolute;
+  bottom: -20%;
+  right: -10%;
+  width: 50vw;
+  height: 50vw;
+  background: radial-gradient(circle, rgba(0, 104, 74, 0.05) 0%, transparent 70%);
+  filter: blur(120px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* --- Scrollbar --- */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-hover);
+}
+
+/* =====================================================================
+   LAYOUT
+   ===================================================================== */
+
+.app {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+/* --- Sidebar --- */
+.sidebar {
+  width: var(--sidebar-width);
+  min-width: var(--sidebar-width);
+  height: 100vh;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--surface-border);
+  display: flex;
+  flex-direction: column;
+  transition: width 0.25s cubic-bezier(0.16, 1, 0.3, 1), min-width 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+  z-index: 10;
+}
+
+.sidebar.collapsed {
+  width: var(--sidebar-collapsed);
+  min-width: var(--sidebar-collapsed);
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-lg);
+  border-bottom: 1px solid var(--surface-border);
+  height: 60px;
+  min-height: 60px;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.brand-icon {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.brand-text {
+  font-size: 16px;
+  font-weight: 700;
+  background: var(--accent-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  white-space: nowrap;
+}
+
+.sidebar-toggle {
+  background: none;
+  border: 1px solid var(--surface-border);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  transition: all 0.2s;
+}
+
+.sidebar-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* --- Sidebar Nav --- */
+.sidebar-nav {
+  padding: var(--space-md) var(--space-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.sidebar-nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  transition: all 0.2s;
+  white-space: nowrap;
+  position: relative;
+}
+
+.sidebar-nav-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.sidebar-nav-item.active {
+  background: var(--accent-glow);
+  color: var(--accent-light);
+}
+
+.sidebar-nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 60%;
+  background: var(--accent);
+  border-radius: 0 3px 3px 0;
+}
+
+.nav-badge {
+  margin-left: auto;
+  background: var(--accent);
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 10px;
+  line-height: 1.5;
+}
+
+/* --- Sidebar Schema --- */
+.sidebar-schema {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 var(--space-sm);
+  border-top: 1px solid var(--surface-border);
+}
+
+/* --- Sidebar Footer --- */
+.sidebar-footer {
+  padding: var(--space-md) var(--space-lg);
+  border-top: 1px solid var(--surface-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+}
+
+.sidebar-footer-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.sidebar-footer-link:hover {
+  color: var(--accent-light);
+}
+
+.sidebar-footer-version {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+/* --- Main Content --- */
+.main-content {
+  flex: 1;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* =====================================================================
+   SCHEMA EXPLORER
+   ===================================================================== */
+
+.schema-section {
+  padding: var(--space-sm) 0;
+}
+
+.sidebar-section-title {
+  padding: var(--space-md) var(--space-md) var(--space-sm);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.schema-collection {
+  margin-bottom: 2px;
+}
+
+.schema-collection-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+  padding: 6px var(--space-md);
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background 0.15s;
+}
+
+.schema-collection-header:hover {
+  background: var(--bg-hover);
+}
+
+.doc-count {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.schema-fields {
+  padding: 2px 0 var(--space-sm) var(--space-2xl);
+}
+
+.schema-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 3px var(--space-md);
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.field-type {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--accent-light);
+  background: var(--accent-glow);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+/* =====================================================================
+   CHAT PAGE
+   ===================================================================== */
+
+.chat-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* --- Messages --- */
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+}
+
+/* --- Welcome / Empty State --- */
+.chat-welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  height: 100vh;
+  padding: 4rem 2rem;
+  gap: 1.5rem;
+  pointer-events: none;
+}
+
+.chat-welcome > * {
+  pointer-events: auto;
+}
+
+.chat-welcome-icon {
+  margin-bottom: 1rem;
+}
+
+.chat-welcome h2 {
+  font-family: 'Syne', sans-serif;
+  font-size: clamp(32px, 6vw, 52px);
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+}
+
+.chat-welcome p {
+  max-width: 520px;
+  color: var(--text-secondary);
+  font-size: 17px;
+  line-height: 1.7;
+  opacity: 0.7;
+}
+
+/* --- Suggestions --- */
+.chat-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 2rem;
+  max-width: 700px;
+}
+
+.chat-suggestion {
+  padding: 10px 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(12px);
+  color: var(--text-secondary);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 14px;
+  transition: all 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  white-space: nowrap;
+}
+
+.chat-suggestion:hover {
+  border-color: var(--primary);
+  background: rgba(0, 237, 100, 0.06);
+  color: var(--primary);
+  transform: translateY(-2px);
+  box-shadow: 0 5px 20px rgba(0, 237, 100, 0.15);
+}
+
+/* --- Message Bubble --- */
+.message {
+  display: flex;
+  gap: var(--space-md);
+  max-width: 800px;
+  width: 100%;
+  margin: 0 auto;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.message.user {
+  flex-direction: row-reverse;
+}
+
+.message-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--bg-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+  border: 1px solid var(--surface-border);
+}
+
+.message.user .message-avatar {
+  background: var(--accent-glow);
+}
+
+.message-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.message-bubble {
+  padding: 18px 22px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--text-primary);
+}
+
+.message.user .message-bubble {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--bg-primary);
+  font-weight: 500;
+  box-shadow: 0 4px 15px rgba(0, 237, 100, 0.15);
+}
+
+/* --- Typing Indicator --- */
+.typing-indicator {
+  display: flex;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.typing-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-light);
+  animation: typing 1.2s ease-in-out infinite;
+}
+
+.typing-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.typing-dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes typing {
+
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* --- MQL Display --- */
+.mql-display {
+  margin-top: var(--space-md);
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--border-default);
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+.mql-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--text-label);
+  font-weight: 700;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.mql-copy-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-label);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: color var(--timing-fast) var(--ease-out);
+}
+
+.mql-copy-btn:hover {
+  color: var(--accent-secondary);
+}
+
+.mql-code {
+  padding: var(--space-md);
+  font-family: var(--font-mono);
+  font-size: var(--text-code);
+  color: var(--success);
+  overflow-x: auto;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* --- Safety Warning --- */
+.safety-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  background: rgba(255, 107, 107, 0.08);
+  border: 1px solid rgba(255, 107, 107, 0.2);
+  border-radius: var(--radius-md);
+  margin-top: var(--space-md);
+  font-size: 13px;
+  color: var(--error);
+}
+
+/* --- Execution Badge --- */
+.exec-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: var(--space-md);
+  padding: 3px 10px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-xl);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* --- Input Area --- */
+.chat-input-area {
+  padding: var(--space-lg) var(--space-xl) var(--space-xl);
+  background: transparent;
+}
+
+.chat-input-container {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-sm);
+  max-width: 800px;
+  margin: 0 auto;
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-sm);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.chat-input-container:focus-within {
+  border-color: var(--border-default);
+  box-shadow: none;
+}
+
+.chat-input {
+  flex: 1;
+  resize: none;
+  border: none;
+  background: none;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  padding: var(--space-sm) var(--space-md);
+  outline: none;
+  min-height: 22px;
+  max-height: 120px;
+}
+
+.chat-input::placeholder {
+  color: var(--text-muted);
+}
+
+.chat-input-btn {
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.chat-input-btn:hover:not(:disabled) {
+  color: var(--accent-light);
+  background: var(--accent-glow);
+}
+
+.chat-input-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.send-btn {
+  background: var(--accent);
+  color: white;
+  border-radius: var(--radius-md);
+}
+
+.send-btn:hover:not(:disabled) {
+  background: var(--accent-light);
+  color: white;
+  transform: scale(1.05);
+}
+
+/* --- Voice Button --- */
+.voice-btn.recording {
+  color: var(--error);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 107, 107, 0.4);
+  }
+
+  50% {
+    box-shadow: 0 0 0 8px rgba(255, 107, 107, 0);
+  }
+}
+
+/* --- Brutalist Input Styles --- */
+.voice-btn-recording {
+  animation: pulse-brutalist 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-brutalist {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(239, 68, 68, 0);
+  }
+}
+
+.voice-btn-default:hover {
+  border-color: #3f4f63 !important;
+  color: #e2e8f0 !important;
+}
+
+.send-btn-brutalist:hover:not(:disabled) {
+  background: #ff8555 !important;
+}
+
+.send-btn-brutalist:active:not(:disabled) {
+  transform: scale(0.95) !important;
+}
+
+/* Input container focus state */
+.relative.flex.items-center:has(input:focus) {
+  border-color: #06b6d4 !important;
+  box-shadow: 0 0 0 2px #06b6d4 !important;
+}
+
+/* =====================================================================
+   BUTTON AND INTERACTIVE ELEMENT ANIMATIONS
+   Requirements: 8.1, 8.3, 8.4, 8.6
+   ===================================================================== */
+
+/* --- Base Button Styles with Mechanical Animations --- */
+button,
+.btn,
+[role="button"] {
+  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  position: relative;
+}
+
+button:hover:not(:disabled),
+.btn:hover:not(:disabled),
+[role="button"]:hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+}
+
+button:active:not(:disabled),
+.btn:active:not(:disabled),
+[role="button"]:active:not(:disabled) {
+  transform: scale(0.98);
+  transition-duration: 100ms;
+}
+
+/* --- Primary Button Animations --- */
+.send-btn,
+button[type="submit"],
+.btn-primary {
+  transition: background-color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+              transform 150ms cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.send-btn:hover:not(:disabled),
+button[type="submit"]:hover:not(:disabled),
+.btn-primary:hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.5);
+}
+
+.send-btn:active:not(:disabled),
+button[type="submit"]:active:not(:disabled),
+.btn-primary:active:not(:disabled) {
+  transform: scale(0.95);
+  box-shadow: none;
+}
+
+/* --- Secondary/Ghost Button Animations --- */
+.sidebar-toggle,
+.sidebar-nav-item,
+.chat-input-btn,
+.dashboard-card-btn,
+.mql-copy-btn,
+.chart-type-btn,
+.pin-btn {
+  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sidebar-toggle:hover,
+.sidebar-nav-item:hover,
+.chat-input-btn:hover:not(:disabled),
+.dashboard-card-btn:hover,
+.mql-copy-btn:hover,
+.chart-type-btn:hover,
+.pin-btn:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.3);
+}
+
+.sidebar-toggle:active,
+.sidebar-nav-item:active,
+.chat-input-btn:active:not(:disabled),
+.dashboard-card-btn:active,
+.mql-copy-btn:active,
+.chart-type-btn:active,
+.pin-btn:active {
+  transform: translate(0, 0);
+  box-shadow: none;
+}
+
+/* --- Suggestion Chips Animation --- */
+.chat-suggestion {
+  transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.chat-suggestion:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.5);
+}
+
+.chat-suggestion:active {
+  transform: scale(0.98);
+  box-shadow: none;
+}
+
+/* --- Schema Collection Header Animation --- */
+.schema-collection-header {
+  transition: background-color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+              color 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.schema-collection-header:active {
+  transform: scale(0.99);
+}
+
+/* --- Dashboard Card Interactive Animation --- */
+.dashboard-card {
+  transition: border-color 200ms cubic-bezier(0.4, 0, 0.2, 1), 
+              box-shadow 200ms cubic-bezier(0.4, 0, 0.2, 1),
+              transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dashboard-card:hover {
+  transform: translate(-1px, -1px);
+}
+
+/* --- Loading State Animations --- */
+.loading-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border-default);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 600ms cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-dots {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.loading-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: loading-bounce 1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.loading-dot:nth-child(1) {
+  animation-delay: 0ms;
+}
+
+.loading-dot:nth-child(2) {
+  animation-delay: 150ms;
+}
+
+.loading-dot:nth-child(3) {
+  animation-delay: 300ms;
+}
+
+@keyframes loading-bounce {
+  0%, 100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  50% {
+    transform: translateY(-6px);
+    opacity: 1;
+  }
+}
+
+/* Loading bar animation */
+.loading-bar {
+  height: 2px;
+  background: var(--border-default);
+  position: relative;
+  overflow: hidden;
+}
+
+.loading-bar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 40%;
+  background: var(--accent);
+  animation: loading-slide 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes loading-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(350%);
+  }
+}
+
+/* Skeleton loading animation */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-secondary) 0%,
+    var(--bg-tertiary) 50%,
+    var(--bg-secondary) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* --- Link Animations --- */
+a,
+.link {
+  transition: color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sidebar-footer-link {
+  transition: color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+              transform 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sidebar-footer-link:hover {
+  transform: translateX(2px);
+}
+
+/* --- Input Focus Animations --- */
+input,
+textarea,
+select {
+  transition: border-color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 200ms cubic-bezier(0.4, 0, 0.2, 1),
+              background-color 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.chat-input-container {
+  transition: border-color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* --- Active State Accent Bar Animation --- */
+.sidebar-nav-item.active::before {
+  animation: slide-in-left 250ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes slide-in-left {
+  from {
+    transform: translateX(-100%) translateY(-50%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0) translateY(-50%);
+    opacity: 1;
+  }
+}
+
+/* --- Chart Button Active State --- */
+.chart-type-btn.active,
+.pin-btn.pinned {
+  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.chart-type-btn.active:hover,
+.pin-btn.pinned:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.5);
+}
+
+/* --- Delete Button Danger Animation --- */
+.dashboard-card-btn.delete {
+  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dashboard-card-btn.delete:hover {
+  transform: translate(-1px, -1px) scale(1.05);
+}
+
+.dashboard-card-btn.delete:active {
+  transform: scale(0.95);
+}
+
+/* --- Badge Animations --- */
+.nav-badge,
+.field-type,
+.exec-badge {
+  transition: transform 150ms cubic-bezier(0.4, 0, 0.2, 1),
+              background-color 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* --- Chevron Rotation Animation --- */
+.schema-collection-header svg {
+  transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.schema-collection.expanded .schema-collection-header svg {
+  transform: rotate(90deg);
+}
+
+/* --- Disabled State --- */
+button:disabled,
+.btn:disabled,
+[role="button"]:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* =====================================================================
+   FOCUS INDICATORS AND KEYBOARD NAVIGATION
+   Requirements: 11.3, 11.6
+   Task: 6.2
+   ===================================================================== */
+
+/* Skip link for keyboard navigation accessibility */
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: var(--accent-primary);
+  color: var(--bg-primary);
+  padding: 8px 16px;
+  text-decoration: none;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 0 0 2px 0;
+  z-index: 9999;
+  transition: top 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.skip-link:focus {
+  top: 0;
+  outline: 2px solid var(--accent-secondary);
+  outline-offset: 2px;
+}
+
+/* Base focus styles for all interactive elements */
+button:focus-visible,
+.btn:focus-visible,
+[role="button"]:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible,
+.chat-suggestion:focus-visible,
+.sidebar-nav-item:focus-visible,
+.schema-collection-header:focus-visible,
+.chart-type-btn:focus-visible,
+.pin-btn:focus-visible,
+.mql-copy-btn:focus-visible,
+.dashboard-card-btn:focus-visible,
+.voice-btn:focus-visible {
+  outline: none;
+  transition: outline-offset 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Enhanced focus for primary action buttons */
+button[type="submit"]:focus-visible,
+.chat-input-btn:focus-visible,
+button[type="submit"]:focus,
+.chat-input-btn:focus {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+/* Focus styles for card containers with interactive content */
+.dashboard-card:focus-within {
+  border-color: var(--accent-secondary);
+  box-shadow: 0 0 0 2px var(--accent-secondary);
+}
+
+/* Focus styles for schema explorer items */
+.schema-collection:focus-within {
+  background-color: var(--bg-tertiary);
+}
+
+/* Focus styles for chat input container */
+.chat-input-container:focus-within {
+  border-color: var(--border-default);
+  box-shadow: none;
+}
+
+/* Ensure focus indicators are visible on dark backgrounds */
+*:focus-visible {
+  outline-color: var(--accent-secondary);
+  outline-width: 2px;
+  outline-style: solid;
+  outline-offset: 2px;
+}
+
+/* Also apply to regular focus for programmatic focus */
+button:focus,
+.btn:focus,
+[role="button"]:focus,
+a:focus,
+.chat-suggestion:focus,
+.sidebar-nav-item:focus,
+.schema-collection-header:focus,
+.chart-type-btn:focus,
+.pin-btn:focus,
+.mql-copy-btn:focus,
+.dashboard-card-btn:focus,
+.voice-btn:focus {
+  outline: none;
+}
+
+/* Remove default focus outline only for mouse users */
+*:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Focus indicator for links within text content */
+.chat-message a:focus-visible,
+.message-content a:focus-visible {
+  outline: 2px solid var(--accent-secondary);
+  outline-offset: 2px;
+  background-color: rgba(6, 182, 212, 0.1);
+  border-radius: 2px;
+}
+
+/* Focus styles for icon buttons */
+button[aria-label]:focus-visible,
+button[title]:focus-visible {
+  outline: 2px solid var(--accent-secondary);
+  outline-offset: 2px;
+}
+
+/* Focus styles for toggle/checkbox elements */
+[role="switch"]:focus-visible,
+[role="checkbox"]:focus-visible,
+[role="radio"]:focus-visible {
+  outline: 2px solid var(--accent-secondary);
+  outline-offset: 2px;
+}
+
+/* Focus styles for dropdown/select elements */
+[role="listbox"]:focus-visible,
+[role="option"]:focus-visible,
+[role="combobox"]:focus-visible {
+  outline: 2px solid var(--accent-secondary);
+  outline-offset: 2px;
+}
+
+/* Focus styles for modal and dialog elements */
+[role="dialog"]:focus-visible,
+[role="alertdialog"]:focus-visible {
+  outline: 2px solid var(--accent-secondary);
+  outline-offset: 2px;
+}
+
+/* Ensure focus indicators work with hover states */
+button:hover:focus-visible,
+.btn:hover:focus-visible,
+[role="button"]:hover:focus-visible {
+  outline: 2px solid var(--accent-secondary);
+  outline-offset: 2px;
+}
+
+/* Focus styles for voice recording button */
+.voice-btn.recording:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+/* Focus styles for active/selected states */
+.sidebar-nav-item.active:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.chart-type-btn.active:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+/* Focus styles for danger actions */
+.dashboard-card-btn.delete:focus-visible,
+button.delete:focus-visible {
+  outline: 2px solid var(--error);
+  outline-offset: 2px;
+}
+
+/* Ensure focus indicators are visible on all backgrounds */
+.bg-\[#0a0e14\] *:focus-visible,
+.bg-\[#151b24\] *:focus-visible,
+.bg-\[#1a2332\] *:focus-visible {
+  outline-color: var(--accent-secondary);
+}
+
+/* Focus styles for custom styled inputs */
+input[type="text"]:focus-visible,
+input[type="search"]:focus-visible,
+input[type="email"]:focus-visible,
+input[type="password"]:focus-visible,
+input[type="number"]:focus-visible,
+input[type="text"]:focus,
+input[type="search"]:focus,
+input[type="email"]:focus,
+input[type="password"]:focus,
+input[type="number"]:focus {
+  outline: none;
+}
+
+/* Focus styles for textareas */
+textarea:focus-visible,
+textarea:focus {
+  outline: 2px solid var(--accent-secondary);
+  outline-offset: 2px;
+  border-color: var(--accent-secondary);
+}
+
+/* Keyboard navigation visual feedback */
+body.using-keyboard *:focus {
+  outline: 2px solid var(--accent-secondary);
+  outline-offset: 2px;
+}
+
+/* Focus trap for modals and overlays */
+[role="dialog"] *:focus-visible,
+[role="alertdialog"] *:focus-visible,
+.modal *:focus-visible,
+.overlay *:focus-visible {
+  outline: 2px solid var(--accent-secondary);
+  outline-offset: 2px;
+}
+
+/* Enhanced focus for search inputs */
+input[type="search"]:focus-visible,
+.search-input:focus-visible {
+  outline: none;
+}
+
+/* Focus styles for collection expand/collapse buttons */
+.schema-collection-header:focus-visible {
+  outline: 2px solid var(--accent-secondary);
+  outline-offset: 2px;
+  background-color: var(--bg-tertiary);
+}
+
+/* Focus styles for suggestion chips */
+.chat-suggestion:focus-visible {
+  outline: 2px solid var(--accent-secondary);
+  outline-offset: 2px;
+  border-color: var(--accent-secondary);
+  transform: translate(-1px, -1px);
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.5);
+}
+
+/* Focus styles for refresh button */
+button[aria-label*="refresh"]:focus-visible,
+button[aria-label*="Refresh"]:focus-visible {
+  outline: 2px solid var(--accent-secondary);
+  outline-offset: 2px;
+}
+
+/* Focus styles for close buttons */
+button[aria-label*="close"]:focus-visible,
+button[aria-label*="Close"]:focus-visible {
+  outline: 2px solid var(--accent-secondary);
+  outline-offset: 2px;
+}
+
+/* Focus styles for copy buttons */
+.mql-copy-btn:focus-visible,
+button[aria-label*="copy"]:focus-visible,
+button[aria-label*="Copy"]:focus-visible {
+  outline: 2px solid var(--accent-secondary);
+  outline-offset: 2px;
+}
+
+/* Focus styles for share and download buttons */
+button[aria-label*="share"]:focus-visible,
+button[aria-label*="Share"]:focus-visible,
+button[aria-label*="download"]:focus-visible,
+button[aria-label*="Download"]:focus-visible {
+  outline: 2px solid var(--accent-secondary);
+  outline-offset: 2px;
+}
+
+/* Ensure minimum touch target size for keyboard navigation */
+button,
+.btn,
+[role="button"],
+a,
+input[type="checkbox"],
+input[type="radio"] {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+/* Exception for icon-only buttons that are already sized */
+button.w-8,
+button.h-8,
+.btn.w-8,
+.btn.h-8 {
+  min-width: 32px;
+  min-height: 32px;
+}
+
+/* Focus visible on framer-motion buttons */
+motion-button:focus-visible,
+[data-framer-component-type="button"]:focus-visible {
+  outline: 2px solid var(--accent-secondary);
+  outline-offset: 2px;
+}
+
+/* =====================================================================
+   REDUCED MOTION SUPPORT
+   Requirement: 8.7
+   ===================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  /* Keep only opacity and color transitions */
+  button,
+  .btn,
+  [role="button"],
+  a,
+  .link,
+  input,
+  textarea,
+  select {
+    transition-property: opacity, color, background-color, border-color !important;
+  }
+
+  /* Disable transform animations */
+  button:hover,
+  .btn:hover,
+  [role="button"]:hover,
+  button:active,
+  .btn:active,
+  [role="button"]:active {
+    transform: none !important;
+  }
+
+  .dashboard-card:hover {
+    transform: none !important;
+  }
+
+  .chat-suggestion:hover,
+  .chat-suggestion:active {
+    transform: none !important;
+  }
+
+  /* Keep loading indicators but simplify */
+  .loading-spinner {
+    animation: spin 1s linear infinite !important;
+  }
+
+  .typing-dot {
+    animation: none !important;
+    opacity: 0.6 !important;
+  }
+
+  /* IMPORTANT: Keep focus indicators visible with reduced motion */
+  *:focus-visible {
+    outline: 2px solid var(--accent-secondary) !important;
+    outline-offset: 2px !important;
+    transition: none !important;
+  }
+
+  button:focus-visible,
+  .btn:focus-visible,
+  [role="button"]:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible {
+    outline: 2px solid var(--accent-secondary) !important;
+    outline-offset: 2px !important;
+    transition: none !important;
+  }
+
+  /* Keep focus-within styles for containers */
+  .dashboard-card:focus-within,
+  .chat-input-container:focus-within {
+    border-color: var(--accent-secondary) !important;
+    box-shadow: 0 0 0 2px var(--accent-secondary) !important;
+    transition: none !important;
+  }
+}
+
+.chat-input-hint {
+  max-width: 800px;
+  margin: var(--space-sm) auto 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* =====================================================================
+   CHART RENDERER
+   ===================================================================== */
+
+.chart-container {
+  margin-top: var(--space-lg);
+  border-radius: var(--radius-md);
+  border: 2px solid var(--border-default);
+  background: var(--bg-primary);
+  overflow: hidden;
+}
+
+.chart-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-sm) var(--space-md);
+  background: #0a0e14;
+  border-bottom: 2px solid var(--border-default);
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.chart-toolbar-group {
+  display: flex;
+  gap: 2px;
+}
+
+.chart-type-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border: 2px solid var(--border-default);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.chart-type-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+  border-color: var(--border-hover);
+}
+
+.chart-type-btn.active {
+  background: #ff6b35;
+  color: #0a0e14;
+  border-color: #ff6b35;
+  font-weight: 600;
+}
+
+.pin-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 2px solid var(--border-default);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pin-btn:hover {
+  border-color: var(--border-hover);
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.pin-btn.pinned {
+  background: #ff6b35;
+  border-color: #ff6b35;
+  color: #0a0e14;
+  font-weight: 600;
+}
+
+/* Chart area - applies to the container holding the actual chart */
+.chart-container > div:not(.chart-toolbar) {
+  padding: 16px;
+  background: #0a0e14;
+}
+
+/* =====================================================================
+   DASHBOARD PAGE
+   ===================================================================== */
+
+.dashboard-page {
+  height: 100%;
+  overflow-y: auto;
+  padding: var(--space-xl);
+}
+
+.dashboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-xl);
+}
+
+.dashboard-header h2 {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+/* Dashboard Empty State - Data Brutalism Style */
+.dashboard-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  height: 60vh;
+  gap: var(--space-md);
+}
+
+.dashboard-empty-icon {
+  width: 64px;
+  height: 64px;
+  color: #2d3748;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dashboard-empty h3 {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.dashboard-empty p {
+  max-width: 400px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-muted);
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(480px, 1fr));
+  gap: var(--space-xl);
+}
+
+/* Dashboard Card - Interactive States with 200ms transition */
+.dashboard-card {
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  transition: border-color 200ms cubic-bezier(0.4, 0, 0.2, 1), 
+              box-shadow 200ms cubic-bezier(0.4, 0, 0.2, 1),
+              transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dashboard-card:hover {
+  border-color: var(--border-hover);
+  box-shadow: var(--shadow-sm);
+  transform: translate(-1px, -1px);
+}
+
+.dashboard-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: var(--space-lg);
+  border-bottom: 1px solid var(--surface-border);
+}
+
+.dashboard-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+.dashboard-card-time {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.dashboard-card-actions {
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.dashboard-card-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--surface-border);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  transition: all 0.15s;
+}
+
+.dashboard-card-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.dashboard-card-btn.delete:hover {
+  background: rgba(255, 107, 107, 0.1);
+  border-color: rgba(255, 107, 107, 0.3);
+  color: var(--error);
+}
+
+/* =====================================================================
+   RESPONSIVE
+   ===================================================================== */
+
+/* Desktop (≥1440px) */
+@media (min-width: 1440px) {
+  .sidebar {
+    width: var(--sidebar-width);
+    min-width: var(--sidebar-width);
+  }
+  .dashboard-grid {
+    grid-template-columns: repeat(auto-fill, minmax(480px, 1fr));
+  }
+}
+
+/* Tablet (768px - 1439px) */
+@media (min-width: 768px) and (max-width: 1439px) {
+  .sidebar {
+    width: 280px;
+    min-width: 280px;
+  }
+  .sidebar.collapsed {
+    width: var(--sidebar-collapsed);
+    min-width: var(--sidebar-collapsed);
+  }
+  .dashboard-grid {
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  }
+}
+
+/* Mobile (<768px) */
+@media (max-width: 767px) {
+  .app {
+    flex-direction: column;
+  }
+  
+  .sidebar {
+    position: fixed;
+    z-index: 100;
+    width: 100%;
+    min-width: 100%;
+    height: 100%;
+    transform: translateX(-100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  .sidebar.open {
+    transform: translateX(0);
+    box-shadow: var(--shadow-lg);
+  }
+
+  /* Increase touch targets */
+  button, .btn, [role="button"], a, input, select, .sidebar-nav-item, .schema-collection-header {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .chat-input-hint {
+    display: none;
+  }
+
+  .chat-welcome h2 {
+    font-size: 24px;
+  }
+  
+  .chat-messages {
+    padding: var(--space-md);
+    gap: var(--space-md);
+  }
+
+  .chat-input-area {
+    padding: var(--space-md);
+  }
+
+  .chat-suggestions {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  /* Guarantee minimum font size for readability */
+  body, input, textarea, button {
+    font-size: max(13px, var(--text-body));
+  }
+  
+  .text-xs { font-size: max(11px, 0.75rem); }
+  .text-sm { font-size: max(12px, 0.875rem); }
+}
+
+/* =====================================================================
+   RECHARTS OVERRIDE
+   ===================================================================== */
+.recharts-cartesian-grid-horizontal line,
+.recharts-cartesian-grid-vertical line {
+  stroke: rgba(255, 255, 255, 0.04);
+}
+
+.recharts-legend-item-text {
+  color: var(--text-secondary) !important;
+  font-size: 11px !important;
+}
+
+
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 3.9%;
+    --primary: 0 0% 9%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 0 0% 96.1%;
+    --secondary-foreground: 0 0% 9%;
+    --muted: 0 0% 96.1%;
+    --muted-foreground: 0 0% 45.1%;
+    --accent: 0 0% 96.1%;
+    --accent-foreground: 0 0% 9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 89.8%;
+    --input: 0 0% 89.8%;
+    --ring: 0 0% 3.9%;
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+    --radius: 0.5rem;
+  }
+  .dark {
+    --background: 0 0% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 0 0% 3.9%;
+    --card-foreground: 0 0% 98%;
+    --popover: 0 0% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 0 0% 9%;
+    --secondary: 0 0% 14.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 0 0% 14.9%;
+    --muted-foreground: 0 0% 63.9%;
+    --accent: 0 0% 14.9%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 14.9%;
+    --input: 0 0% 14.9%;
+    --ring: 0 0% 83.1%;
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+  }
+}
+
+/* =====================================================================
+   ATLASMIND LOVABLE DESIGN TOKENS (HSL shadcn-compatible variables)
+   Used by AtlasTopNav, AtlasLeftSidebar, AtlasChatPanel, AtlasAnalyticsInspector
+   ===================================================================== */
+
+@layer base {
+  :root {
+    /* Backgrounds - Sync with #0D1117 (approx. 216 28% 9%) */
+    --background: 216 28% 9%;
+    --foreground: 214 32% 91%;
+
+    /* Card / Panel - Minimal Glass instead of solid navy */
+    --card: 216 28% 9%;
+    --card-foreground: 214 32% 91%;
+
+    /* Popover */
+    --popover: 216 32% 12%;
+    --popover-foreground: 214 32% 91%;
+
+    /* Primary — MongoDB Spring Green */
+    --primary: 145 100% 46%;
+    --primary-foreground: 216 28% 9%;
+
+    /* Secondary */
+    --secondary: 216 20% 14%;
+    --secondary-foreground: 214 32% 91%;
+
+    /* Muted */
+    --muted: 216 16% 16%;
+    --muted-foreground: 215 16% 65%;
+
+    /* Accent */
+    --accent: 216 24% 18%;
+    --accent-foreground: 214 32% 91%;
+
+    /* Destructive */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Warning / Success */
+    --warning: 38 92% 50%;
+    --warning-foreground: 216 28% 9%;
+    --success: 145 100% 46%;
+    --success-foreground: 216 28% 9%;
+
+    /* Border / Input / Ring */
+    --border: 216 20% 18%;
+    --input: 216 20% 18%;
+    --ring: 145 100% 46%;
+
+    /* Border Radius - Sync with landing page buttons/pill rounded-2xl */
+    --radius: 1rem;
+
+    /* Sidebar - Matching background foundation */
+    --sidebar-background: 216 28% 7%;
+    --sidebar-foreground: 214 32% 85%;
+    --sidebar-primary: 145 100% 46%;
+    --sidebar-primary-foreground: 216 28% 9%;
+    --sidebar-accent: 216 28% 12%;
+    --sidebar-accent-foreground: 145 100% 46%;
+    --sidebar-border: 216 20% 15%;
+    --sidebar-ring: 145 100% 46%;
+  }
+}
+
+/* --- Glass Utility Classes --- */
+@layer utilities {
+  .atlas-glass {
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(12px) saturate(160%);
+    -webkit-backdrop-filter: blur(12px) saturate(160%);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+  }
+
+  .atlas-glass-subtle {
+    background: rgba(255, 255, 255, 0.015);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+  }
+
+  .grid-bg-dashboard {
+    background-image: linear-gradient(rgba(0, 237, 100, 0.03) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(0, 237, 100, 0.03) 1px, transparent 1px);
+    background-size: 60px 60px;
+  }
+}
+
+/* --- Atlas Animation Keyframes --- */
+@keyframes atlas-fade-in {
+  0%   { opacity: 0; transform: translateY(10px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes atlas-scale-in {
+  0%   { transform: scale(0.95); opacity: 0; }
+  100% { transform: scale(1);    opacity: 1; }
+}
+
+@keyframes atlas-slide-in-right {
+  0%   { transform: translateX(100%); }
+  100% { transform: translateX(0); }
+}
+
+@keyframes atlas-pulse-dot {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.5; }
+}
+
+.animate-atlas-fade-in        { animation: atlas-fade-in 0.4s ease-out; }
+.animate-atlas-scale-in       { animation: atlas-scale-in 0.2s ease-out; }
+.animate-atlas-slide-in-right { animation: atlas-slide-in-right 0.3s ease-out; }
+.animate-atlas-pulse-dot      { animation: atlas-pulse-dot 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+
+@keyframes atlas-slide-in-left {
+  0%   { transform: translateX(-100%); opacity: 0; }
+  100% { transform: translateX(0);     opacity: 1; }
+}
+.animate-atlas-slide-in-left { animation: atlas-slide-in-left 0.3s cubic-bezier(0.16, 1, 0.3, 1); }

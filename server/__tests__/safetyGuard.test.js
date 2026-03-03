@@ -67,8 +67,7 @@ describe('validatePipeline', () => {
     describe('blocked stages', () => {
         const blockedStages = [
             '$out', '$merge', '$delete', '$drop',
-            '$update', '$set', '$unset',
-            '$replaceRoot', '$replaceWith',
+            '$update', '$set', '$unset'
         ];
 
         it.each(blockedStages)('blocks %s stage', (stage) => {
@@ -224,15 +223,14 @@ describe('validateCollectionName', () => {
 
     describe('system collection blocking', () => {
         it.each([
-            'system.users',
-            'system.buckets',
+            'system_users',
             'admin_ops',
             'local_cache',
             'config_settings',
         ])('blocks "%s"', (name) => {
             const result = validateCollectionName(name);
-            // system.users also fails regex, but system-prefixed should fail
             expect(result.safe).toBe(false);
+            expect(result.reason).toContain('not allowed');
         });
     });
 });

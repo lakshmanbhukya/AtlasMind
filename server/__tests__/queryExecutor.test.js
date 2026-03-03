@@ -34,7 +34,7 @@ describe('queryExecutor', () => {
             });
 
             const pipeline = [{ $match: {} }];
-            const result = await executePipeline('sales', pipeline);
+            const result = await executePipeline(mockDb, 'sales', pipeline);
 
             expect(mockDb.collection).toHaveBeenCalledWith('sales');
             expect(mockCollection.aggregate).toHaveBeenCalledWith(pipeline, expect.objectContaining({
@@ -49,7 +49,7 @@ describe('queryExecutor', () => {
             const mockToArray = jest.fn().mockResolvedValue([]);
             mockCollection.aggregate.mockReturnValue({ toArray: mockToArray });
 
-            await executePipeline('sales', [], { maxTimeMS: 5000, allowDiskUse: false });
+            await executePipeline(mockDb, 'sales', [], { maxTimeMS: 5000, allowDiskUse: false });
 
             expect(mockCollection.aggregate).toHaveBeenCalledWith([], {
                 maxTimeMS: 5000,
@@ -62,7 +62,7 @@ describe('queryExecutor', () => {
                 toArray: jest.fn().mockRejectedValue(new Error('DB Connection Failed')),
             });
 
-            await expect(executePipeline('sales', []))
+            await expect(executePipeline(mockDb, 'sales', []))
                 .rejects.toThrow('DB Connection Failed');
         });
     });

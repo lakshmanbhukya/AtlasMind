@@ -31,8 +31,13 @@ if (process.env.NODE_ENV === "production") {
 
 app.use(
   cors({
-    origin: true, // Allow all origins
-    credentials: true, // Required: allows cookies to be sent cross-origin
+    origin: function (origin, callback) {
+      // Allow all origins
+      callback(null, true);
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   }),
 );
 

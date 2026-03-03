@@ -24,7 +24,13 @@ function requireAuth(req, res, next) {
         next();
     } catch (err) {
         // Token expired or tampered
-        res.clearCookie(COOKIE_NAME, { httpOnly: true, sameSite: 'lax' });
+        const isProd = process.env.NODE_ENV === 'production';
+        res.clearCookie(COOKIE_NAME, { 
+            httpOnly: true, 
+            secure: isProd,
+            sameSite: isProd ? 'none' : 'lax',
+            path: '/' 
+        });
         return res.status(401).json({
             success: false,
             error: { code: 'session_expired', message: 'Session expired. Please reconnect.' },

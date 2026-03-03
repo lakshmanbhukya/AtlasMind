@@ -21,7 +21,10 @@ router.post('/connect', async (req, res) => {
     let client = null;
 
     try {
-        const { connectionString, dbName, label } = req.body;
+        let { connectionString, dbName, label } = req.body;
+
+        if (connectionString) connectionString = connectionString.trim();
+        if (dbName) dbName = dbName.trim();
 
         if (!connectionString || !connectionString.startsWith('mongodb')) {
             return res.status(400).json({
@@ -94,12 +97,18 @@ router.post('/connect', async (req, res) => {
 
         // Issue JWT cookie
         const token = signToken(connectionId);
-        res.cookie(COOKIE_NAME, token, {
+        
+        // Cookie options for production vs local
+        const isProd = process.env.NODE_ENV === 'production';
+        const cookieOpts = {
             httpOnly: true,
-            sameSite: 'lax',
+            secure: isProd, // Must be true on Render (HTTPS)
+            sameSite: isProd ? 'none' : 'lax', // 'none' for cross-site (Render), 'lax' for local
             maxAge: COOKIE_MAX_AGE,
             path: '/',
-        });
+        };
+
+        res.cookie(COOKIE_NAME, token, cookieOpts);
 
         return res.json({
             success: true,

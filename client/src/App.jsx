@@ -84,8 +84,18 @@ export default function App() {
 
   const toggleSidebar = useCallback(() => setSidebarOpen((prev) => !prev), []);
 
-  // ── Loading state (auth check in progress) ────────────────────────────────
-  if (isLoading) {
+  // ── Loading state (initial auth check only) ──────────────────────────────
+  // We use a separate state to handle the first load vs. subsequent refetches
+  // to avoid unmounting the entire app UI (like LandingPage) during re-auth.
+  const [initialLoading, setInitialLoading] = useState(true);
+
+  useEffect(() => {
+    if (!isLoading) {
+       setInitialLoading(false);
+    }
+  }, [isLoading]);
+
+  if (initialLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-background">
         <div className="flex flex-col items-center gap-4">

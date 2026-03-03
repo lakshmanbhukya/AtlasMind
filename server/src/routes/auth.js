@@ -22,7 +22,13 @@ router.get('/me', requireAuth, async (req, res) => {
 
         if (!conn) {
             // Connection was deleted from DB but cookie still valid — clear it
-            res.clearCookie(COOKIE_NAME, { httpOnly: true, sameSite: 'lax' });
+            const isProd = process.env.NODE_ENV === 'production';
+            res.clearCookie(COOKIE_NAME, { 
+                httpOnly: true, 
+                secure: isProd,
+                sameSite: isProd ? 'none' : 'lax',
+                path: '/' 
+            });
             return res.status(401).json({
                 success: false,
                 error: { code: 'connection_not_found', message: 'Session is invalid. Please reconnect.' },
@@ -49,7 +55,13 @@ router.get('/me', requireAuth, async (req, res) => {
  * The frontend will redirect to the landing page after this call.
  */
 router.post('/logout', (_req, res) => {
-    res.clearCookie(COOKIE_NAME, { httpOnly: true, sameSite: 'lax', path: '/' });
+    const isProd = process.env.NODE_ENV === 'production';
+    res.clearCookie(COOKIE_NAME, { 
+        httpOnly: true, 
+        secure: isProd,
+        sameSite: isProd ? 'none' : 'lax',
+        path: '/' 
+    });
     return res.json({ success: true, message: 'Logged out' });
 });
 

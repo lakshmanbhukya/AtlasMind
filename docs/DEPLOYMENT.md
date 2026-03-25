@@ -1,44 +1,45 @@
-# 🚀 Deployment Guide: AtlasMind (Netlify + Render)
+# Deployment Guide (Netlify + Render)
 
-This guide outlines the production deployment flow for AtlasMind without using Docker.
+This guide deploys AtlasMind as:
 
-## 🏗️ Backend: Render (Web Service)
+- Backend on Render
+- Frontend on Netlify
 
-Render is the recommended host for the Node.js API.
+## Backend on Render
 
-### **Steps:**
-1. **GitHub Connection**: Connect your repository to Render.
-2. **Setup Settings**:
-   - **Service Type**: `Web Service`
-   - **Environment**: `Node`
-   - **Root Directory**: `server`
-   - **Build Command**: `npm install`
-   - **Start Command**: `npm start`
-3. **Environment Variables**:
-   - `NODE_ENV`: `production` (Crucial for cross-site cookie security)
-   - `PORT`: `3001`
-   - `MONGODB_URI`: (Your Atlas Mind Mongo URI)
-   - `GROQ_API_KEY`: (Your Groq API Key)
-   - `ENCRYPTION_KEY`: (32-byte / 64-char Hex Key)
-   - `JWT_SECRET`: (Long random string)
+Create a Render Web Service with:
 
----
+- Root directory: server
+- Build command: npm install
+- Start command: npm start
 
-## 🎨 Frontend: Netlify
+Set environment variables:
 
-Netlify hosts the static Vite application.
+- NODE_ENV=production
+- PORT=3001
+- MONGODB_URI=your_metadata_db_uri
+- GROQ_API_KEY=your_groq_api_key
+- JWT_SECRET=your_long_random_secret
+- ENCRYPTION_KEY=64_hex_chars
 
-### **Steps:**
-1. **GitHub Connection**: Select your repository.
-2. **Build Settings**:
-   - **Base directory**: `client`
-   - **Build command**: `npm run build`
-   - **Publish directory**: `client/dist`
-3. **Environment Variables**:
-   - `VITE_SERVER_URL`: `https://your-server-name.onrender.com` (Your Render URL)
+## Frontend on Netlify
 
-### **Routing (netlify.toml)**
-A `netlify.toml` file is required in the `client/` folder to handle SPA routing:
+Create a Netlify site with:
+
+- Base directory: client
+- Build command: npm run build
+- Publish directory: client/dist
+
+Set environment variable:
+
+- VITE_SERVER_URL=https://your-render-service.onrender.com
+
+The client already appends /api and trims trailing slash in runtime config.
+
+## SPA Routing
+
+Ensure client/netlify.toml contains a redirect to index.html:
+
 ```toml
 [[redirects]]
   from = "/*"
@@ -46,30 +47,28 @@ A `netlify.toml` file is required in the `client/` folder to handle SPA routing:
   status = 200
 ```
 
----
+## Cookies and CORS Notes
 
-## 🔗 CORS & Cookie Configuration
+Session behavior:
 
-Your application is pre-configured for this split deployment:
+- Cookie name: am_token
+- In production: Secure=true, SameSite=None, HttpOnly=true
+- Client requests must include credentials
 
-### **CORS (server/src/index.js)**:
-Allows credentials (cookies) and origin matching.
+CORS behavior in current server implementation:
 
-### **Cookies (server/src/routes/connections.js)**:
-In production (`NODE_ENV=production`), cookies are set with:
-- `Secure: true`: Required for cross-site cookies.
-- `SameSite: 'None'`: Allows the cookie to be sent from the Netlify domain to the Render domain.
-- `HttpOnly: true`: Prevents XSS.
+- Credentials enabled
+- Origin callback currently allows all origins
 
----
+For stricter production posture, restrict origin allow-list explicitly before go-live.
 
-## ✅ Deployment Checklist
+## Verification Checklist
 
-1. [ ] Push repo to GitHub.
-2. [ ] Wait for Render build to show `🚀 AtlasMind server running...`.
-3. [ ] Wait for Netlify build to succeed.
-4. [ ] Ensure `VITE_SERVER_URL` on Netlify has no trailing slash.
-5. [ ] **Live URL**: [https://atlasmind19.netlify.app/](https://atlasmind19.netlify.app/)
+1. Render service starts and /api/health returns success.
+2. Netlify frontend loads and can call backend.
+3. Connect flow sets cookie and /api/auth/me returns success.
+4. Query, schema, voice, and dashboard routes work with authenticated session.
 
 ---
-[⬅️ Back to README](../README.md)
+
+[Back to README](../README.md)

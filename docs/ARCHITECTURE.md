@@ -1,93 +1,82 @@
-# 🏗️ Architecture & Design
+# Architecture and Design
 
-AtlasMind is built with a decoupled architecture, separating the AI intelligence layer from the core data processing and visualization.
+AtlasMind is split into a React client and an Express backend, with a cookie-authenticated session layer and an AI-assisted query execution pipeline.
 
-## 🧭 System Flow
+## System Flow
 
 ```mermaid
 flowchart TD
     subgraph Client
-    A[User] --> B[Open AtlasMind]
-    B --> C[Chat Interface]
-    C --> D{Natural Language Query}
+    A[User] --> B[Landing Connect Form]
+    B --> C[/api/connections/connect]
+    C --> D[Session Cookie am_token]
+    D --> E[Chat and Dashboard UI]
     end
 
-    subgraph Backend_Services
-    D --> E[Schema Profiler]
-    E --> F[Few-Shot Retriever]
-    F --> G[Groq LLM - Llama 3.3]
-    G --> H[MQL Pipeline Generated]
-    H --> I[Safety Guard Validation]
+    subgraph Backend
+    E --> F[/api/query or /api/voice]
+    F --> G[Schema Profiler]
+    G --> H[Few-Shot Retriever]
+    H --> I[Groq LLM llama-3.3-70b-versatile]
+    I --> J[Safety Guard]
+    J --> K[Query Executor]
     end
 
-    subgraph Database_Layer
-    I -->|Safe| J[Query Executor]
-    I -->|Unsafe| K[Approval Required]
-    K --> J
-    J --> L[MongoDB Atlas]
+    subgraph Data
+    K --> L[(User MongoDB Database)]
+    K --> M[(AtlasMind Metadata DB)]
     end
 
-    subgraph UI_Updates
-    L --> M[Results + Visualization]
-    M --> N{Pin to Dashboard?}
-    N -->|Yes| O[Live Dashboard Widget]
-    N -->|No| C
-    end
+    L --> N[Results and Chart]
+    N --> O[/api/dashboard/pin]
 ```
 
-## 🧠 AI Query Generation Lifecycle
-
-The AI pipeline is designed for low latency and high accuracy by combining schema context with few-shot examples.
+## Query Lifecycle
 
 ```mermaid
 graph LR
-    subgraph User_Input
-    NL[Natural Language Query]
-    end
-    
-    subgraph AI_Pipeline
-    SP[Schema Profiler]
-    FSR[Few-Shot Retriever]
-    LLM[Groq Llama 3.3]
-    SG[Safety Guard]
-    end
-    
-    subgraph Database
-    QE[Query Executor]
-    MDB[(MongoDB Atlas)]
-    end
-    
-    NL --> SP
-    SP --> FSR
-    FSR --> LLM
-    LLM --> SG
-    SG --> QE
-    QE --> MDB
-    MDB --> NL
+    NL[Natural language input] --> SC[Schema context]
+    SC --> FS[Few-shot examples]
+    FS --> LLM[Groq LLM]
+    LLM --> SG[Safety validation]
+    SG -->|safe| EX[Aggregate execution]
+    SG -->|blocked| ERR[Safety error response]
+    EX --> UI[Result rendering]
 ```
 
-## 🛠️ Tech Stack
+Notes:
+
+- Unsafe stages/operators are blocked and returned as safety violations.
+- A limit stage is injected when none is present.
+- Schema profiling excludes AtlasMind internal collections.
+
+## Tech Stack
 
 ### Frontend
-- **React 18** + **Vite**: Ultra-fast development and optimized production builds.
-- **Tailwind CSS**: Modern styling with glassmorphism effects.
-- **TanStack Query (React Query)**: Efficient state management and caching.
-- **Recharts**: Responsive and interactive data visualizations.
-- **Lucide React**: Premium icon set.
 
-### Backend & AI
-- **Node.js** & **Express**: Lightweight and scalable server architecture.
-- **Groq LPU Acceleration**: Powering sub-200ms LLM inference.
-- **Llama 3.3 70B**: State-of-the-art language model for MQL generation.
-- **MongoDB Atlas**: Cloud-native document database.
+- React 19 + Vite
+- Tailwind CSS + custom UI components
+- TanStack Query for schema fetch caching/invalidation
+- Recharts for visualization
+- Axios for API access (with credentials)
 
-## 🎨 Key Design Patterns
+### Backend and AI
 
-- **Service Layer Pattern**: Business logic (AI, Executor, Profiler) is strictly separated from API routes.
-- **Chain of Responsibility**: Query validation passes through multiple "guards" before execution.
-- **Strategy Pattern**: visualization strategies are dynamically selected based on query result structure.
-- **Singleton Pattern**: Database connection and LLM clients are managed as internal singletons.
-- **Clean Architecture**: Clear separation between UI, Services, and Data layers.
+- Node.js 18+ and Express 4
+- MongoDB Node Driver
+- Groq SDK (llama-3.3-70b-versatile + whisper-large-v3-turbo)
+- JWT cookie auth + encryption for stored connection URIs
+- express-rate-limit for API and auth route throttling
+
+## Key Design Patterns
+
+- Service layer: AI, schema, execution, and safety logic live outside routes.
+- Stateless route handlers + shared infrastructure singletons.
+- Guard-first execution: generated pipelines are validated before DB execution.
+- Dual data context:
+  - User database for analytics queries.
+  - AtlasMind metadata database for saved connections, history, and dashboard pins.
 
 ---
-[⬅️ Back to README](../README.md)
+
+[Back to README](../README.md)

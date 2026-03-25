@@ -1,52 +1,81 @@
-# 📄 Development & Contributing
+# Development and Contributing
 
-Guidelines for developers looking to extend or maintain AtlasMind.
+Guidelines for extending and maintaining AtlasMind.
 
-## 📁 Project Structure
+## Project Structure
 
 ```text
 AtlasMind/
-├── client/                 # React (Vite) Frontend
-│   ├── src/components/     # Reusable UI (Shadcn/UI components)
-│   ├── src/hooks/          # Logic hooks (useChat, useSchema)
-│   └── src/services/       # API interface (Axios)
-├── server/                 # Node.js (Express) Backend
-│   ├── src/routes/         # API Endpoints
-│   ├── src/services/       # AI Pipeline & Business Logic
-│   └── src/db/             # MongoDB Connection & Seeds
-└── docs/                   # Documentation files
+├── client/
+│   ├── src/components/
+│   ├── src/hooks/
+│   ├── src/pages/
+│   └── src/services/
+├── server/
+│   ├── src/routes/
+│   ├── src/services/
+│   ├── src/middleware/
+│   ├── src/db/
+│   └── __tests__/
+└── docs/
 ```
 
-## 🧪 Testing
+## Local Commands
 
-AtlasMind maintains **95%+ test coverage** on the backend logic.
+Backend:
 
-### Running Backend Tests
 ```bash
 cd server
-npm test               # Run all tests
-npm run test:coverage  # Generate coverage report
+npm run dev
+npm test
+npm run test:coverage
+npm run seed
 ```
 
-### Key Service Tests
-- `groqService.test.js`: Validates MQL generation with mock LLM responses.
-- `safetyGuard.test.js`: Checks the blocklist of destructive MQL commands.
-- `schemaProfiler.test.js`: Tests database introspection.
+Frontend:
 
-## 🛠️ Development Workflow
+```bash
+cd client
+npm run dev
+npm run lint
+npm run test:e2e
+```
 
-1. **Feature Branching**: Use `feature/your-feature` naming.
-2. **Linting**: Run `npm run lint` in both `client` and `server`.
-3. **Drafting MQL**: Always verify generated pipelines against the `seed` data.
+## Testing Notes
 
-## 🗺️ Roadmap
+Backend tests cover core services and route integration paths, including:
 
-- [x] Multi-format Export (CSV/JSON/XLSX)
-- [x] Responsive Mobile Drawer
-- [x] Advanced Charts (Scatter/Composed)
-- [ ] Multi-database support (Postgres Connector)
-- [ ] User authentication with Auth0
-- [ ] Collaborative shared dashboards
+- groqService
+- safetyGuard
+- schemaProfiler
+- queryExecutor
+- fewShotRetriever
+- routes integration
+
+Run test:coverage to inspect current coverage numbers for your branch.
+
+## Code Workflow
+
+1. Create a feature branch.
+2. Keep API contracts aligned between server routes and client service wrappers.
+3. For route changes, update docs/API.md in the same PR.
+4. Validate protected route behavior with cookie session (auth/me and query flow).
+5. Run backend tests and client lint before opening PR.
+
+## Architecture Conventions
+
+- Put orchestration/business logic in server/src/services.
+- Keep route handlers thin and focused on validation/response mapping.
+- Maintain success/error envelope consistency.
+- Preserve safety-first behavior for generated pipelines.
+
+## Roadmap Snapshot
+
+- Ongoing hardening of query safety and schema-aware prompting.
+- Better dashboard refresh/resilience and richer chart defaults.
+- Expanded provider/runtime options for AI and speech.
+- Collaboration and multi-tenant enhancements.
 
 ---
-[⬅️ Back to README](../README.md)
+
+[Back to README](../README.md)

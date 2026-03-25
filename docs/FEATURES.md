@@ -1,40 +1,54 @@
-# 🌟 Key Features & Usage
+# Key Features and Usage
 
-AtlasMind provides a comprehensive suite of tools for conversational data analytics.
+AtlasMind is a conversational analytics experience for MongoDB with session-based access, AI-assisted query generation, and built-in safety checks.
 
-## 💬 Conversational BI
+## Conversational Analytics
 
-- **Natural Language Queries**: No MQL knowledge needed. Ask "What was our highest selling product last quarter?"
-- **Context-Aware Chat**: The AI remembers previous queries, allowing for drill-downs.
-- **Auto-Visualization**: Automatically selects between Bar, Line, Pie, Area, or Scatter charts based on the data shape.
-- **Rich AI Explanations**: Every query comes with a plain-English explanation of how the AI translated your intent.
+- Natural language to MQL: ask questions without writing aggregation manually.
+- Schema-aware generation: prompt context includes profiled collections and fields.
+- Few-shot augmentation: similar historical examples improve generation quality.
+- AI explanation output: responses include readable reasoning text.
 
-## 🎙️ Voice-to-Insights
+## Voice to Insights
 
-- **Speech-to-Query**: High-accuracy transcription that feeds directly into the AI pipeline.
-- **Real-time Feedback**: Visual audio wave indicators and pulsating status updates during processing.
+- Upload audio to run speech transcription and query execution in one flow.
+- Uses Groq speech transcription then standard query pipeline.
+- Returns transcript/text plus full query result payload.
 
-## 📊 Live Dashboards
+## Dashboard Workflow
 
-- **Pin queries**: Instantly save any successful query as a persistent dashboard widget.
-- **Multi-Panel View**: Switch between the Chat view for exploration and the Dashboard for monitoring.
-- **Responsive Layout**: Works seamlessly on Mobile, Tablet, and Desktop.
+- Pin any successful query output to dashboard storage.
+- List existing pins, delete pins, and request refresh for a pin.
+- Chart rendering supports bar, line, area, pie, scatter, composed, and table views.
 
-## 🛡️ Query Safety & Governance
+## Safety and Guardrails
 
-- **Read-Only by Default**: The system is optimized for data exploration and prevents destructive MQL.
-- **Approval Gates**: Sensitive operations (like deep deletions) trigger a mandatory UI approval gate.
-- **Schema Protection**: MQL generation is restricted to the collections detected by the Schema Profiler.
+- Write/mutate stages and operators are blocked before execution.
+- Collection names are validated and restricted.
+- If no limit stage exists, a max result limit is automatically added.
+- Unsafe output is returned as a safety violation response.
 
-## 💡 Example Queries
+## Session and Access Model
 
-| Category | Ask AtlasMind... |
-|---|---|
-| **Basic** | "List the first 10 customers" |
-| **Sales** | "Total sales revenue grouped by category" |
-| **Trends** | "Show monthly order count for the last year as a line chart" |
-| **Inventory** | "Find products with stock less than 15" |
-| **Correlation** | "Scatter plot of product price vs. units sold" |
+- Users connect a MongoDB database through the landing flow.
+- Server issues an httpOnly JWT cookie session.
+- Query/schema/voice/dashboard routes require authenticated session.
+
+## Query History and Export
+
+- Recent query history is available for sidebar recall.
+- Query export endpoint returns JSON payload for results/pipeline metadata.
+
+## Example Prompts
+
+| Category    | Ask AtlasMind                                              |
+| ----------- | ---------------------------------------------------------- |
+| Basic       | List the first 10 customers                                |
+| Revenue     | Total sales by category this quarter                       |
+| Trend       | Monthly order count for the last 12 months as a line chart |
+| Inventory   | Products with stock below 15                               |
+| Correlation | Scatter plot of product price vs units sold                |
 
 ---
-[⬅️ Back to README](../README.md)
+
+[Back to README](../README.md)

@@ -1,89 +1,117 @@
-# ⚙️ Installation & Setup
+# Installation and Setup
 
-Follow these steps to get AtlasMind running on your local machine.
+Follow these steps to run AtlasMind locally.
 
-## 📋 Prerequisites
+## Prerequisites
 
-Ensure you have the following installed:
-- **Node.js** 18+ and **npm**
-- **MongoDB Atlas** Account ([Create one here](https://www.mongodb.com/cloud/atlas))
-- **Groq API Key** ([Get it here](https://console.groq.com))
+- Node.js 18+
+- npm
+- MongoDB Atlas account
+- Groq API key
 
-## 🚀 Quick Start
+## 1. Clone Repository
 
-### 1. Clone the Repository
 ```bash
 git clone https://github.com/lakshmanbhukya/AtlasMind.git
 cd AtlasMind
 ```
 
-### 2. Backend Configuration
+## 2. Install Dependencies
+
 ```bash
 cd server
 npm install
-```
-
-Create a `.env` file in the `server` directory:
-```env
-# MongoDB Atlas connection string
-MONGODB_URI=mongodb+srv://<username>:<password>@<cluster>.mongodb.net/<database>
-
-# Groq Cloud API key
-GROQ_API_KEY=your-groq-api-key-here
-
-# Server configuration
-PORT=3001
-NODE_ENV=development
-```
-
-### 3. Frontend Configuration
-```bash
 cd ../client
 npm install
 ```
 
-### 4. Running the Application
-We recommend using the root `start.bat` (Windows) or running separately:
+## 3. Configure Backend Environment
 
-**Start Backend:**
+Create server/.env:
+
+```env
+# AtlasMind metadata database connection
+MONGODB_URI=mongodb+srv://<username>:<password>@<cluster>.mongodb.net/<metadata_db>
+
+# Groq
+GROQ_API_KEY=your-groq-api-key
+
+# Auth and encryption
+JWT_SECRET=your-long-random-secret
+ENCRYPTION_KEY=64_hex_chars_for_aes_256
+
+# Server
+PORT=3001
+NODE_ENV=development
+```
+
+Important:
+
+- MONGODB_URI is used by AtlasMind for internal collections (connections/history/dashboards).
+- The user analytics database is provided at runtime via the Connect form and /api/connections/connect.
+
+## 4. Start App
+
+Option A (Windows):
+
+```bash
+start.bat
+```
+
+Option B (manual):
+
 ```bash
 cd server
 npm run dev
 ```
 
-**Start Frontend:**
+In another terminal:
+
 ```bash
 cd client
 npm run dev
 ```
 
-The application will be available at `http://localhost:5173`.
+Default URLs:
 
-## 📂 Database Setup
+- Frontend: http://localhost:5173
+- Backend: http://localhost:3001
+- Health: http://localhost:3001/api/health
 
-### Seed Sample Data (Highly Recommended)
-To explore the dual-panel analytics immediately, run the seeder:
+## 5. Connect a User Database
+
+From the landing page, provide:
+
+- MongoDB connection string
+- Database name
+
+AtlasMind validates the DB, stores encrypted connection metadata, and starts a cookie session.
+
+## Optional: Seed Internal Demo Data
+
 ```bash
 cd server
 npm run seed
 ```
-This creates sample collections (sales, inventory, customers) with benchmark data.
 
-## 🔑 Obtaining Credentials
+## Credentials Quick Notes
 
-### Groq API
-1. Sign up at [Groq Console](https://console.groq.com).
-2. Go to **API Keys** → **Create New Key**.
+Groq:
 
-### MongoDB Atlas
-1. Create a free cluster at [MongoDB Atlas](https://www.mongodb.com/cloud/atlas).
-2. **Network Access**: Add your IP (or `0.0.0.0/0` for dev).
-3. **Database Access**: Create a user with `atlasAdmin` or `readWriteAnyDatabase` roles.
-4. **Connect**: Copy the SRV connection string into your `.env`.
+1. Create key at https://console.groq.com
+2. Paste into GROQ_API_KEY
 
-## 🚢 Production Deployment
+MongoDB Atlas:
 
-For deploying the application to **Netlify** (Frontend) and **Render** (Backend), refer to the **[Deployment Guide](./DEPLOYMENT.md)**.
+1. Create cluster
+2. Add IP access
+3. Create DB user
+4. Use SRV connection string
+
+## Next
+
+For production deployment, see [DEPLOYMENT.md](./DEPLOYMENT.md).
 
 ---
-[⬅️ Back to README](../README.md)
+
+[Back to README](../README.md)

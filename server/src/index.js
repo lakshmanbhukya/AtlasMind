@@ -20,6 +20,22 @@ const connectionsRoutes = require("./routes/connections");
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+function isAllowedOrigin(origin) {
+  // Allow non-browser clients (curl, health checks) with no Origin header.
+  if (!origin) return true;
+
+  // In non-production, preserve permissive behavior for local development.
+  if (process.env.NODE_ENV !== "production") return true;
+
+  // In production, require explicit origin allow-list.
+  return allowedOrigins.includes(origin);
+}
+
 // ---------------------------------------------------------------------------
 // Middleware
 // ---------------------------------------------------------------------------
@@ -32,8 +48,12 @@ if (process.env.NODE_ENV === "production") {
 app.use(
   cors({
     origin: function (origin, callback) {
-      // Allow all origins
-      callback(null, true);
+      if (isAllowedOrigin(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error("CORS origin not allowed"));
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],

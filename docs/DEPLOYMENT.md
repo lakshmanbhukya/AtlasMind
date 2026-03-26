@@ -17,6 +17,7 @@ Set environment variables:
 
 - NODE_ENV=production
 - PORT=3001
+- `CORS_ALLOWED_ORIGINS=https://your-netlify-site.netlify.app`
 - MONGODB_URI=your_metadata_db_uri
 - GROQ_API_KEY=your_groq_api_key
 - JWT_SECRET=your_long_random_secret
@@ -32,7 +33,7 @@ Create a Netlify site with:
 
 Set environment variable:
 
-- VITE_SERVER_URL=https://your-render-service.onrender.com
+- `VITE_SERVER_URL=https://your-render-service.onrender.com`
 
 The client already appends /api and trims trailing slash in runtime config.
 
@@ -58,7 +59,11 @@ Session behavior:
 CORS behavior in current server implementation:
 
 - Credentials enabled
-- Origin callback currently allows all origins
+- In production, requests are allowed only from origins listed in CORS_ALLOWED_ORIGINS
+
+If you need multiple allowed origins, separate them with commas:
+
+- `CORS_ALLOWED_ORIGINS=https://your-netlify-site.netlify.app,https://preview--your-site.netlify.app`
 
 For stricter production posture, restrict origin allow-list explicitly before go-live.
 

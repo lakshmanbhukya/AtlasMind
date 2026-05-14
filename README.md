@@ -2,7 +2,7 @@
   <img src="https://user-images.githubusercontent.com/74038190/212284100-561aa473-3905-4a80-b561-0d28506553ee.gif" width="100%" alt="AtlasMind banner" />
 
   <h1>AtlasMind</h1>
-  <p><strong>Talk to your data. Get production-ready insights in <200 seconds.</strong></p>
+  <p><strong>Talk to your data. Get production-ready insights in <200 ms.</strong></p>
 
   <p>
     <a href="https://atlasmind19.netlify.app/"><strong>Live Demo</strong></a>

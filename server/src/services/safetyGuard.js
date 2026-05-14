@@ -84,6 +84,7 @@ function validatePipeline(pipeline) {
                     safe: false,
                     reason: `Blocked stage "${key}" found at position ${i}. Write operations are not permitted.`,
                     pipeline,
+                    isWrite: true,
                 };
             }
         }
@@ -95,6 +96,7 @@ function validatePipeline(pipeline) {
                 safe: false,
                 reason: `Blocked operator "${blockedOp}" found at stage ${i}. Mutating operations are not permitted.`,
                 pipeline,
+                isWrite: true,
             };
         }
     }

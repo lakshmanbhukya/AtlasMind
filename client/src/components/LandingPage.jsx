@@ -44,10 +44,26 @@ function TerminalWindow() {
   const [visibleLines, setVisibleLines] = useState([]);
   const [active, setActive] = useState(true);
   useEffect(() => {
+    const timers = [];
+    setVisibleLines([]);
+    setActive(true);
+
     lines.forEach((line) => {
-      setTimeout(() => setVisibleLines((p) => [...p, line]), line.delay);
+      const t = setTimeout(() => {
+        setVisibleLines((p) => {
+          if (p.some((existing) => existing.text === line.text)) return p;
+          return [...p, line];
+        });
+      }, line.delay);
+      timers.push(t);
     });
-    setTimeout(() => setActive(false), 4500);
+
+    const activeTimer = setTimeout(() => setActive(false), 4500);
+    timers.push(activeTimer);
+
+    return () => {
+      timers.forEach(clearTimeout);
+    };
   }, []);
   const colors = { input: "#e2e8f0", system: "#64748b", code: GREEN, success: "#34d399" };
   return (
@@ -390,7 +406,7 @@ export default function LandingPage({ onConnected }) {
             </Reveal>
 
             <Reveal delay={0.15}>
-                <div className="space-y-4 max-w-2xl mx-auto">
+                <div className="space-y-5 max-w-2xl mx-auto">
                     {/* Connection String Pill */}
                     <div className="glass-card" style={{ padding: 6, position: "relative" }}>
                         <div style={{ position: "absolute", inset: 0, borderRadius: 16, background: `linear-gradient(135deg, ${GREEN}08, transparent 60%)`, pointerEvents: "none" }} />
@@ -404,7 +420,7 @@ export default function LandingPage({ onConnected }) {
                         </div>
                     </div>
 
-                    <div style={{ display: "flex", gap: 12 }} className="flex-col sm:flex-row">
+                    <div style={{ display: "flex", gap: 16 }} className="flex-col sm:flex-row">
                         {/* Database Name Pill */}
                         <div className="glass-card flex-1" style={{ padding: 6, position: "relative" }}>
                             <div style={{ position: "absolute", inset: 0, borderRadius: 16, background: `linear-gradient(135deg, ${GREEN}08, transparent 60%)`, pointerEvents: "none" }} />

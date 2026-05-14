@@ -15,12 +15,19 @@ const queryClient = new QueryClient({
 })
 
 import ErrorBoundary from './components/ErrorBoundary.jsx'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import SharedDashboardPage from './pages/SharedDashboardPage.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <ErrorBoundary label="AtlasMind Application">
       <QueryClientProvider client={queryClient}>
-        <App />
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<App />} />
+            <Route path="/shared/:id" element={<SharedDashboardPage />} />
+          </Routes>
+        </BrowserRouter>
       </QueryClientProvider>
     </ErrorBoundary>
   </StrictMode>,

@@ -24,7 +24,9 @@ const CustomTooltip = ({ active, payload, label }) => {
     return null;
 };
 
-const InsightDashboard = ({ data, type = 'bar', title }) => {
+const InsightDashboard = ({ data, type = 'bar', title, pinId, hideActions = false }) => {
+    const [toastMsg, setToastMsg] = React.useState(null);
+
     if (!data || data.length === 0) return null;
 
     // Smart Key Detection
@@ -37,6 +39,52 @@ const InsightDashboard = ({ data, type = 'bar', title }) => {
     };
 
     const { nameKey, valueKey } = getChartKeys(data);
+
+    const handleShare = () => {
+        if (!pinId) {
+            setToastMsg('Cannot share: pin ID is missing');
+            setTimeout(() => setToastMsg(null), 3000);
+            return;
+        }
+        const url = `${window.location.origin}/shared/${pinId}`;
+        navigator.clipboard.writeText(url).then(() => {
+            setToastMsg('Public link copied!');
+            setTimeout(() => setToastMsg(null), 3000);
+        }).catch(err => {
+            console.error('Failed to copy link', err);
+            setToastMsg('Failed to copy link');
+            setTimeout(() => setToastMsg(null), 3000);
+        });
+    };
+
+    const handleDownload = () => {
+        if (!data || data.length === 0) return;
+        
+        const keys = Object.keys(data[0]);
+        const csvContent = [
+            keys.join(','),
+            ...data.map(row => keys.map(k => {
+                let val = row[k] === null || row[k] === undefined ? '' : row[k];
+                // Escape commas by wrapping in quotes
+                if (typeof val === 'string' && val.includes(',')) {
+                    val = `"${val}"`;
+                }
+                return val;
+            }).join(','))
+        ].join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', `${title.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'export'}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        setToastMsg('Data downloaded!');
+        setTimeout(() => setToastMsg(null), 3000);
+    };
 
     const renderChart = () => {
         switch (type) {
@@ -122,6 +170,12 @@ const InsightDashboard = ({ data, type = 'bar', title }) => {
             {/* Subtle glow effect behind chart */}
             <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-500/10 rounded-full blur-[100px] pointer-events-none opacity-50 group-hover:opacity-100 transition-opacity duration-700" />
             
+            {toastMsg && (
+                <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-blue-500 text-white text-xs font-bold px-3 py-1 rounded shadow-lg z-50">
+                    {toastMsg}
+                </div>
+            )}
+
             <div className="flex justify-between items-center mb-6 relative z-10">
                 <div>
                     <h3 className="text-[14px] font-semibold text-white flex items-center gap-2" style={{ fontFamily: 'DM Sans' }}>
@@ -132,14 +186,24 @@ const InsightDashboard = ({ data, type = 'bar', title }) => {
                         Showing <strong>{valueKey}</strong> by <strong>{nameKey}</strong>
                     </p>
                 </div>
-                <div className="flex gap-2">
-                    <button className="w-8 h-8 flex items-center justify-center border border-[#2d3748] bg-transparent rounded-[2px] text-[#94a3b8] hover:bg-[#1a2332] hover:border-[#3f4f63] hover:text-[#e2e8f0] transition-all duration-150">
-                        <Share2 size={16} />
-                    </button>
-                    <button className="w-8 h-8 flex items-center justify-center border border-[#2d3748] bg-transparent rounded-[2px] text-[#94a3b8] hover:bg-[#1a2332] hover:border-[#ef4444] hover:text-[#ef4444] transition-all duration-150">
-                        <Download size={16} />
-                    </button>
-                </div>
+                {!hideActions && (
+                    <div className="flex gap-2">
+                        <button 
+                            onClick={handleShare}
+                            className="w-8 h-8 flex items-center justify-center border border-[#2d3748] bg-[#0a0e14]/50 backdrop-blur rounded-[2px] text-[#94a3b8] hover:bg-[#1a2332] hover:border-[#3f4f63] hover:text-[#e2e8f0] transition-all duration-150 relative"
+                            title="Share as Public Link"
+                        >
+                            <Share2 size={16} />
+                        </button>
+                        <button 
+                            onClick={handleDownload}
+                            className="w-8 h-8 flex items-center justify-center border border-[#2d3748] bg-[#0a0e14]/50 backdrop-blur rounded-[2px] text-[#94a3b8] hover:bg-[#1a2332] hover:border-[#3b82f6] hover:text-[#3b82f6] transition-all duration-150"
+                            title="Download Data as CSV"
+                        >
+                            <Download size={16} />
+                        </button>
+                    </div>
+                )}
             </div>
 
             <div className="flex-1 w-full min-h-0">

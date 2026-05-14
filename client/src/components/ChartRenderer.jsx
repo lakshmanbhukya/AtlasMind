@@ -12,6 +12,7 @@ import {
     BarChart3, TrendingUp, PieChart as PieIcon, Layers,
     Pin, PinOff, Table2, Crosshair, GitMerge,
 } from 'lucide-react';
+import { cn } from '../lib/utils';
 
 /* ------------------------------------------------------------------ */
 /* Design tokens — synced with Atlas dark theme                        */
@@ -117,7 +118,23 @@ function useChartKeys(data) {
 export default function ChartRenderer({ data, chartType: initialChartType = 'bar', query, onPin, isPinned = false }) {
     const [activeType, setActiveType] = useState(initialChartType || 'bar');
     const [pinned, setPinned] = useState(isPinned);
-    const { labelKey, valueKeys } = useChartKeys(data);
+
+    // Clean/flatten data for Recharts to handle nested MongoDB _id / other objects smoothly
+    const processedData = useMemo(() => {
+        if (!data?.length) return [];
+        return data.map((item) => {
+            const cleaned = { ...item };
+            for (const key of Object.keys(cleaned)) {
+                const val = cleaned[key];
+                if (val !== null && typeof val === 'object') {
+                    cleaned[key] = val.$oid || val._id || val.id || val.name || JSON.stringify(val);
+                }
+            }
+            return cleaned;
+        });
+    }, [data]);
+
+    const { labelKey, valueKeys } = useChartKeys(processedData);
 
     const handlePin = useCallback(() => {
         setPinned((p) => !p);
@@ -127,8 +144,19 @@ export default function ChartRenderer({ data, chartType: initialChartType = 'bar
     if (!data?.length || !labelKey) return null;
 
     /* --- Chart bodies --- */
-    const commonProps = { data, margin: { top: 12, right: 20, left: 0, bottom: 4 } };
-    const axisProps   = { tick: { fill: TICK_COLOR, fontSize: 11, fontFamily: TICK_FONT }, axisLine: false, tickLine: false };
+    const commonProps = { data: processedData, margin: { top: 12, right: 20, left: 0, bottom: processedData.length > 8 ? 48 : 4 } };
+    const tickAngle   = data.length > 8 ? -35 : 0;
+    const axisProps   = {
+        tick: { fill: TICK_COLOR, fontSize: 11, fontFamily: TICK_FONT },
+        axisLine: false,
+        tickLine: false,
+    };
+    const xAxisProps  = {
+        ...axisProps,
+        angle: tickAngle,
+        textAnchor: tickAngle !== 0 ? 'end' : 'middle',
+        interval: data.length > 20 ? Math.floor(data.length / 10) : 0,
+    };
     const gridProps   = { stroke: GRID_COLOR, strokeDasharray: '0' };
 
     const renderBody = () => {
@@ -137,7 +165,7 @@ export default function ChartRenderer({ data, chartType: initialChartType = 'bar
                 return (
                     <BarChart {...commonProps}>
                         <CartesianGrid {...gridProps} />
-                        <XAxis dataKey={labelKey} {...axisProps} />
+                        <XAxis dataKey={labelKey} {...xAxisProps} />
                         <YAxis {...axisProps} />
                         <Tooltip content={<AtlasTooltip />} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
                         <Legend wrapperStyle={{ fontFamily: TICK_FONT, fontSize: 11, color: TICK_COLOR }} />
@@ -161,7 +189,7 @@ export default function ChartRenderer({ data, chartType: initialChartType = 'bar
                 return (
                     <LineChart {...commonProps}>
                         <CartesianGrid {...gridProps} />
-                        <XAxis dataKey={labelKey} {...axisProps} />
+                        <XAxis dataKey={labelKey} {...xAxisProps} />
                         <YAxis {...axisProps} />
                         <Tooltip content={<AtlasTooltip />} cursor={false} />
                         <Legend wrapperStyle={{ fontFamily: TICK_FONT, fontSize: 11, color: TICK_COLOR }} />
@@ -202,7 +230,7 @@ export default function ChartRenderer({ data, chartType: initialChartType = 'bar
                             ))}
                         </defs>
                         <CartesianGrid {...gridProps} />
-                        <XAxis dataKey={labelKey} {...axisProps} />
+                        <XAxis dataKey={labelKey} {...xAxisProps} />
                         <YAxis {...axisProps} />
                         <Tooltip content={<AtlasTooltip />} cursor={false} />
                         <Legend wrapperStyle={{ fontFamily: TICK_FONT, fontSize: 11, color: TICK_COLOR }} />
@@ -222,23 +250,26 @@ export default function ChartRenderer({ data, chartType: initialChartType = 'bar
             case 'pie': {
                 const pieKey = valueKeys[0];
                 return (
-                    <PieChart>
+                    <PieChart margin={{ top: 10, right: 30, left: 30, bottom: 10 }}>
                         <Tooltip content={<AtlasTooltip />} />
                         <Pie
-                            data={data}
+                            data={processedData}
                             dataKey={pieKey}
                             nameKey={labelKey}
                             cx="50%" cy="50%"
-                            outerRadius={110} innerRadius={50}
+                            outerRadius={100} innerRadius={44}
                             strokeWidth={2} stroke="#0D1117"
-                            label={({ name, percent }) => `${String(name).slice(0, 12)} ${(percent * 100).toFixed(0)}%`}
-                            labelLine={{ stroke: TICK_COLOR, strokeWidth: 1 }}
+                            label={false}
+                            labelLine={false}
                         >
-                            {data.map((_, i) => (
+                            {processedData.map((_, i) => (
                                 <Cell key={i} fill={COLORS[i % COLORS.length]} />
                             ))}
                         </Pie>
-                        <Legend wrapperStyle={{ fontFamily: TICK_FONT, fontSize: 11, color: TICK_COLOR }} />
+                        <Legend
+                            wrapperStyle={{ fontFamily: TICK_FONT, fontSize: 11, color: TICK_COLOR }}
+                            formatter={(value) => String(value).slice(0, 18)}
+                        />
                     </PieChart>
                 );
             }
@@ -252,8 +283,8 @@ export default function ChartRenderer({ data, chartType: initialChartType = 'bar
                         <XAxis dataKey={xKey} name={xKey} {...axisProps} />
                         <YAxis dataKey={yKey} name={yKey} {...axisProps} />
                         <Tooltip content={<AtlasTooltip />} cursor={{ stroke: TICK_COLOR, strokeDasharray: '3 3' }} />
-                        <Scatter name={`${xKey} vs ${yKey}`} data={data} strokeWidth={1} stroke="#0D1117">
-                            {data.map((entry, index) => (
+                        <Scatter name={`${xKey} vs ${yKey}`} data={processedData} strokeWidth={1} stroke="#0D1117">
+                            {processedData.map((entry, index) => (
                                 <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                             ))}
                         </Scatter>
@@ -265,7 +296,7 @@ export default function ChartRenderer({ data, chartType: initialChartType = 'bar
                 return (
                     <ComposedChart {...commonProps}>
                         <CartesianGrid {...gridProps} />
-                        <XAxis dataKey={labelKey} {...axisProps} />
+                        <XAxis dataKey={labelKey} {...xAxisProps} />
                         <YAxis {...axisProps} />
                         <Tooltip content={<AtlasTooltip />} cursor={false} />
                         <Legend wrapperStyle={{ fontFamily: TICK_FONT, fontSize: 11, color: TICK_COLOR }} />
@@ -305,13 +336,23 @@ export default function ChartRenderer({ data, chartType: initialChartType = 'bar
                                         {columns.map((col) => {
                                             const val = row[col];
                                             const isNum = typeof val === 'number';
+                                            
+                                            let displayVal = '—';
+                                            if (val !== null && val !== undefined) {
+                                                if (typeof val === 'object') {
+                                                    displayVal = val.$oid || val._id || val.id || JSON.stringify(val);
+                                                } else {
+                                                    displayVal = String(val);
+                                                }
+                                            }
+
                                             return (
                                                 <td key={col} style={{
                                                     padding: '8px 14px',
                                                     color: isNum ? '#00ED64' : '#e2e8f0',
                                                     fontFamily: isNum ? '"JetBrains Mono", monospace' : TICK_FONT,
                                                 }}>
-                                                    {isNum ? val.toLocaleString() : (val === null || val === undefined ? '—' : String(val))}
+                                                    {isNum ? val.toLocaleString() : displayVal}
                                                 </td>
                                             );
                                         })}
@@ -342,30 +383,21 @@ export default function ChartRenderer({ data, chartType: initialChartType = 'bar
                 gap: 8,
                 flexWrap: 'wrap',
             }}>
-                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                <div className="flex gap-1.5 flex-wrap">
                     {CHART_TYPES.map(({ id, label, Icon }) => (
                         <button
                             key={id}
                             onClick={() => setActiveType(id)}
                             title={label}
                             aria-label={`Switch to ${label} chart`}
-                            style={{
-                                display: 'flex', alignItems: 'center', gap: 5,
-                                padding: '5px 10px',
-                                borderRadius: 8,
-                                border: activeType === id
-                                    ? '1px solid rgba(0,237,100,0.4)'
-                                    : '1px solid rgba(255,255,255,0.07)',
-                                background: activeType === id
-                                    ? 'rgba(0,237,100,0.12)'
-                                    : 'transparent',
-                                color: activeType === id ? '#00ED64' : TICK_COLOR,
-                                fontSize: 11, fontFamily: TICK_FONT, fontWeight: 600,
-                                cursor: 'pointer',
-                                transition: 'all 0.2s',
-                            }}
+                            className={cn(
+                                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[11px] font-medium transition-all duration-200 cursor-pointer",
+                                activeType === id
+                                    ? "border-primary/40 bg-primary/15 text-primary shadow-[0_0_12px_rgba(0,237,100,0.15)]"
+                                    : "border-white/5 bg-white/[0.02] text-muted-foreground hover:bg-white/[0.06] hover:text-foreground hover:border-white/10"
+                            )}
                         >
-                            <Icon size={12} />
+                            <Icon size={12} className={cn("transition-colors", activeType === id ? "text-primary" : "text-muted-foreground/60")} />
                             {label}
                         </button>
                     ))}
@@ -375,19 +407,18 @@ export default function ChartRenderer({ data, chartType: initialChartType = 'bar
                     <button
                         onClick={handlePin}
                         aria-label={pinned ? 'Unpin from dashboard' : 'Pin to dashboard'}
-                        style={{
-                            display: 'flex', alignItems: 'center', gap: 5,
-                            padding: '5px 10px',
-                            borderRadius: 8,
-                            border: pinned ? '1px solid rgba(0,237,100,0.4)' : '1px solid rgba(255,255,255,0.07)',
-                            background: pinned ? 'rgba(0,237,100,0.12)' : 'transparent',
-                            color: pinned ? '#00ED64' : TICK_COLOR,
-                            fontSize: 11, fontFamily: TICK_FONT, fontWeight: 600,
-                            cursor: 'pointer',
-                            transition: 'all 0.2s',
-                        }}
+                        className={cn(
+                            "flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[11px] font-medium transition-all duration-200 cursor-pointer",
+                            pinned
+                                ? "border-primary/40 bg-primary/15 text-primary shadow-[0_0_12px_rgba(0,237,100,0.15)]"
+                                : "border-white/5 bg-white/[0.02] text-muted-foreground hover:bg-white/[0.06] hover:text-foreground hover:border-white/10"
+                        )}
                     >
-                        {pinned ? <PinOff size={12} /> : <Pin size={12} />}
+                        {pinned ? (
+                            <PinOff size={12} className="text-primary" />
+                        ) : (
+                            <Pin size={12} className="text-muted-foreground/60 group-hover:text-foreground" />
+                        )}
                         {pinned ? 'Unpin' : 'Pin to Dashboard'}
                     </button>
                 )}

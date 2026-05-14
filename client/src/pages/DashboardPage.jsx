@@ -57,6 +57,7 @@ export default function DashboardPage({ pins, onRemovePin }) {
                                     data={pin.results}
                                     type={pin.chartType || 'bar'}
                                     title={pin.chartTitle || pin.queryText || 'Untitled'}
+                                    pinId={pin._id || pin.id}
                                 />
                             </motion.div>
                         ))}

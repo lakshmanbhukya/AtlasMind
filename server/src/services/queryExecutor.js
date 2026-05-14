@@ -46,8 +46,19 @@ async function executePipeline(db, collectionName, pipeline, options = {}) {
 async function saveQueryHistory(entry) {
     try {
         const db = getDb();
+        // Extract results if present, and slice to first 100 rows for storage safety
+        let resultsSnapshot = undefined;
+        if (entry.results && Array.isArray(entry.results)) {
+            resultsSnapshot = entry.results.slice(0, 100);
+        }
+
+        const entryToSave = { ...entry };
+        if (resultsSnapshot !== undefined) {
+            entryToSave.results = resultsSnapshot;
+        }
+
         await db.collection('query_history').insertOne({
-            ...entry,
+            ...entryToSave,
             timestamp: new Date(),
         });
     } catch (error) {

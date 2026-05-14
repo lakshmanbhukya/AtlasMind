@@ -27,21 +27,41 @@ function getGroqClient() {
  * @param {object[]} fewShotExamples - Similar NL→MQL examples
  * @returns {Promise<{ pipeline: object[], collection: string, chartType: string }>}
  */
-async function generateMQL(naturalLanguage, schemaContext, fewShotExamples) {
+async function generateMQL(naturalLanguage, schemaContext, fewShotExamples, model = 'llama-3.3-70b-versatile') {
     const client = getGroqClient();
     const systemPrompt = buildSystemPrompt(schemaContext, fewShotExamples);
 
-    const chatCompletion = await client.chat.completions.create({
-        messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: naturalLanguage },
-        ],
-        model: 'llama-3.3-70b-versatile',
-        temperature: 0.1,          // Low temperature for deterministic query generation
-        max_tokens: 2048,
-        top_p: 1,
-        response_format: { type: 'json_object' },
-    });
+    let chatCompletion;
+    try {
+        chatCompletion = await client.chat.completions.create({
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: naturalLanguage },
+            ],
+            model: model,
+            temperature: 0.1,          // Low temperature for deterministic query generation
+            max_tokens: 2048,
+            top_p: 1,
+            response_format: { type: 'json_object' },
+        });
+    } catch (err) {
+        if (model !== 'llama-3.3-70b-versatile') {
+            console.warn(`⚠️ Custom model "${model}" execution failed, falling back to "llama-3.3-70b-versatile":`, err.message);
+            chatCompletion = await client.chat.completions.create({
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: naturalLanguage },
+                ],
+                model: 'llama-3.3-70b-versatile',
+                temperature: 0.1,
+                max_tokens: 2048,
+                top_p: 1,
+                response_format: { type: 'json_object' },
+            });
+        } else {
+            throw err;
+        }
+    }
 
     const content = chatCompletion.choices[0]?.message?.content;
 

@@ -1,24 +1,214 @@
-import { useState, useEffect, useMemo } from "react";
-import { Plus, MessageSquare, LayoutDashboard, ChevronDown, Database, Loader2, AlertCircle, Search, X, RefreshCw, Hash, Type, Eye } from "lucide-react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { Plus, MessageSquare, LayoutDashboard, ChevronDown, Database, Loader2, AlertCircle, Search, X, RefreshCw, Hash, Type, Eye, MoreVertical, Pencil, Trash2, Check, PinOff } from "lucide-react";
 import { Button } from "./ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
 import { cn } from "../lib/utils";
-import { fetchQueryHistory, fetchDashboard } from "../services/api";
+import { fetchQueryHistory, fetchDashboard, deleteQueryHistoryItem, renameQueryHistoryItem } from "../services/api";
 import { useSchema } from "../hooks/useSchema";
 
 /**
- * AtlasLeftSidebar — Fixed left sidebar with REAL data from backend.
- *
- * - Recent queries: GET /api/query/history (with live search filter)
- * - Pinned Dashboards: GET /api/dashboard
- * - Collections: GET /api/schema (real collection names + document counts)
+ * ItemMenu — Generic ⋮ dots menu for both history and pins.
  */
-export default function AtlasLeftSidebar({ onNewQuery, activeView, onViewChange, pins = [] }) {
+function ItemMenu({ 
+  onRename, 
+  onDelete, 
+  deleteLabel = "Delete", 
+  deleteIcon: DeleteIcon = Trash2,
+  showRename = true 
+}) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  return (
+    <div ref={menuRef} className="absolute right-2 top-1/2 -translate-y-1/2 z-20" onClick={(e) => e.stopPropagation()}>
+      <button
+        onClick={() => setOpen((p) => !p)}
+        className="opacity-0 group-hover/item:opacity-100 focus:opacity-100 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-white/10 transition-all duration-150 outline-none"
+        title="More options"
+        aria-label="More options"
+      >
+        <MoreVertical className="h-3.5 w-3.5" />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full mt-1 w-40 bg-popover/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.5)] overflow-hidden z-50 animate-atlas-scale-in">
+          {showRename && (
+            <>
+              <button
+                onClick={() => { onRename(); setOpen(false); }}
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-[12.5px] text-foreground/80 hover:bg-white/5 hover:text-foreground transition-colors outline-none"
+              >
+                <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                Rename
+              </button>
+              <div className="h-px bg-white/5" />
+            </>
+          )}
+          <button
+            onClick={() => { onDelete(); setOpen(false); }}
+            className="w-full flex items-center gap-2.5 px-3 py-2 text-[12.5px] text-destructive/80 hover:bg-destructive/10 hover:text-destructive transition-colors outline-none"
+          >
+            <DeleteIcon className="h-3.5 w-3.5" />
+            {deleteLabel}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * HistoryItemRow — Manages single history item display and full-width inline editing.
+ */
+function HistoryItemRow({ item, onRename, onDelete, activeView, onViewChange, onSelectQueryId, highlightedMessageId }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editName, setEditName]   = useState(item.query);
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (isEditing) {
+      setEditName(item.query);
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+  }, [isEditing, item.query]);
+
+  const handleSave = async (e) => {
+    e?.stopPropagation();
+    const trimmed = editName.trim();
+    if (trimmed && trimmed !== item.query) {
+      await onRename(item.id, trimmed);
+    }
+    setIsEditing(false);
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSave();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setIsEditing(false);
+    }
+  };
+
+  if (isEditing) {
+    return (
+      <div 
+        className="w-full flex items-center gap-2 rounded-lg px-2.5 py-1.5 bg-white/[0.04] border border-primary/30 my-0.5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <input
+          ref={inputRef}
+          value={editName}
+          onChange={(e) => setEditName(e.target.value)}
+          onKeyDown={handleKeyDown}
+          className="flex-1 min-w-0 bg-white/[0.02] border border-white/5 rounded-md px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground/30 outline-none focus:border-primary/20 focus:bg-white/[0.04]"
+        />
+        <button 
+          onClick={handleSave} 
+          className="p-1 rounded text-primary hover:bg-primary/10 transition-colors outline-none"
+          title="Save Name"
+        >
+          <Check className="h-3.5 w-3.5" />
+        </button>
+        <button 
+          onClick={(e) => { e.stopPropagation(); setIsEditing(false); }} 
+          className="p-1 rounded text-muted-foreground hover:bg-white/10 hover:text-foreground transition-colors outline-none"
+          title="Cancel"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    );
+  }
+
+  const isHighlighted = activeView === 'chat' && 
+    (highlightedMessageId ? item.id === highlightedMessageId : item.active);
+
+  return (
+    <div
+      className={cn(
+        "w-full flex items-start gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition-all duration-200 hover:bg-sidebar-accent group/item relative cursor-pointer",
+        isHighlighted && "bg-sidebar-accent border-l-2 border-primary/60"
+      )}
+      onClick={() => {
+        onViewChange('chat');
+        if (onSelectQueryId && item.id) {
+          onSelectQueryId(item.id);
+        }
+      }}
+    >
+      <MessageSquare className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />
+      <div className="min-w-0 flex-1 pr-10">
+        <p className="truncate text-sidebar-foreground text-[13px]">{item.query}</p>
+        <p className="text-[11px] text-muted-foreground mt-0.5">{item.time}</p>
+      </div>
+      <ItemMenu
+        onEditStart={() => setIsEditing(true)}
+        onDelete={() => onDelete(item.id)}
+        onRename={() => setIsEditing(true)}
+      />
+    </div>
+  );
+}
+
+/**
+ * PinnedItemRow — Manages single pinned item display.
+ */
+function PinnedItemRow({ pin, onRemove, activeView, onViewChange }) {
+  const id = pin._id || pin.id;
+  const isActive = activeView === 'dashboard';
+
+  return (
+    <div
+      className={cn(
+        "w-full flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-all duration-200 hover:bg-sidebar-accent group/item relative cursor-pointer",
+        isActive && "bg-primary/10 border-l-2 border-primary"
+      )}
+      onClick={() => onViewChange('dashboard')}
+    >
+      <LayoutDashboard className={cn("h-4 w-4 shrink-0", isActive ? "text-primary" : "text-muted-foreground")} />
+      <div className="min-w-0 flex-1 pr-10">
+        <p className={cn("truncate text-[13px]", isActive ? "text-primary font-medium" : "text-sidebar-foreground")}>
+          {pin.name || pin.query}
+        </p>
+      </div>
+      <ItemMenu
+        onDelete={() => onRemove(id)}
+        deleteLabel="Remove Pin"
+        deleteIcon={PinOff}
+        showRename={false}
+      />
+    </div>
+  );
+}
+
+export default function AtlasLeftSidebar({ 
+  onNewQuery, 
+  activeView, 
+  onViewChange, 
+  pins = [], 
+  onRemovePin,
+  onSelectQueryId,
+  highlightedMessageId,
+  history = [],
+  historyLoading = false,
+  setHistory
+}) {
   const [recentOpen,   setRecentOpen]   = useState(true);
-  const [dashOpen,     setDashOpen]     = useState(false);
+  const [dashOpen,     setDashOpen]     = useState(true);
   const [collOpen,     setCollOpen]     = useState(true); 
-  const [history,      setHistory]      = useState([]);
-  const [loading,      setLoading]      = useState(true);
   const [searchQuery,  setSearchQuery]  = useState("");
 
   const { 
@@ -30,26 +220,27 @@ export default function AtlasLeftSidebar({ onNewQuery, activeView, onViewChange,
     refreshSchema
   } = useSchema();
 
-  // Fetch history + dashboards on mount
-  useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      try {
-        const [hist] = await Promise.all([
-          fetchQueryHistory().catch(() => []),
-        ]);
-        if (!cancelled) {
-          setHistory(hist);
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
+  const handleDeleteHistory = useCallback(async (id) => {
+    try {
+      await deleteQueryHistoryItem(id);
+      if (setHistory) {
+        setHistory((prev) => prev.filter((item) => item.id !== id));
       }
+    } catch (err) {
+      console.error("❌ Failed to delete query history log:", err);
     }
+  }, [setHistory]);
 
-    load();
-    return () => { cancelled = true; };
-  }, []);
+  const handleRenameHistory = useCallback(async (id, name) => {
+    try {
+      await renameQueryHistoryItem(id, name);
+      if (setHistory) {
+        setHistory((prev) => prev.map((item) => item.id === id ? { ...item, query: name } : item));
+      }
+    } catch (err) {
+      console.error("❌ Failed to rename query history log:", err);
+    }
+  }, [setHistory]);
 
   const collections = schema?.collections || [];
 
@@ -104,12 +295,12 @@ export default function AtlasLeftSidebar({ onNewQuery, activeView, onViewChange,
         {/* Recent Chats */}
         <div className="mt-2">
           <Collapsible open={recentOpen} onOpenChange={setRecentOpen}>
-            <CollapsibleTrigger className="flex w-full items-center justify-between px-3 py-2 text-[11px] font-bold uppercase tracking-[0.1em] text-muted-foreground/70 hover:text-foreground transition-colors">
+            <CollapsibleTrigger className="flex w-full items-center justify-between px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/50 hover:text-primary transition-colors">
               <div className="flex items-center gap-2">
                 <MessageSquare className="h-3.5 w-3.5" />
                 Recent Chats
                 {history.length > 0 && (
-                  <span className="text-[10px] text-muted-foreground/40 font-mono">
+                  <span className="text-[10px] text-primary/60 font-mono">
                     [{filteredHistory.length}]
                   </span>
                 )}
@@ -119,34 +310,27 @@ export default function AtlasLeftSidebar({ onNewQuery, activeView, onViewChange,
               />
             </CollapsibleTrigger>
             <CollapsibleContent className="space-y-0.5 mt-1">
-              {loading ? (
+              {historyLoading ? (
                 <div className="flex items-center justify-center py-6">
                   <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                 </div>
               ) : filteredHistory.length === 0 ? (
-                <p className="px-3 py-2 text-[12px] text-muted-foreground">
+                <p className="px-3 py-2 text-[12px] text-muted-foreground/60">
                   {searchQuery ? "No matching queries" : "No queries yet"}
                 </p>
               ) : (
                 <div className="space-y-0.5">
                   {filteredHistory.map((item) => (
-                    <button
+                    <HistoryItemRow
                       key={item.id}
-                      className={cn(
-                        "w-full flex items-start gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors hover:bg-sidebar-accent",
-                        (activeView === 'chat' && item.active) && "bg-sidebar-accent"
-                      )}
-                      onClick={() => {
-                        onViewChange('chat');
-                        // Optional: trigger navigation to specific message if item has ID
-                      }}
-                    >
-                      <MessageSquare className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sidebar-foreground text-[13px]">{item.query}</p>
-                        <p className="text-[11px] text-muted-foreground mt-0.5">{item.time}</p>
-                      </div>
-                    </button>
+                      item={item}
+                      onRename={handleRenameHistory}
+                      onDelete={handleDeleteHistory}
+                      activeView={activeView}
+                      onViewChange={onViewChange}
+                      onSelectQueryId={onSelectQueryId}
+                      highlightedMessageId={highlightedMessageId}
+                    />
                   ))}
                 </div>
               )}
@@ -155,9 +339,9 @@ export default function AtlasLeftSidebar({ onNewQuery, activeView, onViewChange,
         </div>
 
         {/* Pinned Dashboards */}
-        <div className="mt-4">
+        <div className="mt-4 pt-3.5 border-t border-white/[0.04]">
           <Collapsible open={dashOpen} onOpenChange={setDashOpen}>
-            <CollapsibleTrigger className="flex w-full items-center justify-between px-2 py-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors">
+            <CollapsibleTrigger className="flex w-full items-center justify-between px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/50 hover:text-primary transition-colors">
               <div className="flex items-center gap-1.5">
                 <LayoutDashboard className="h-3.5 w-3.5" />
                 Pinned Dashboards
@@ -166,21 +350,18 @@ export default function AtlasLeftSidebar({ onNewQuery, activeView, onViewChange,
                 className={cn("h-3.5 w-3.5 transition-transform duration-200", dashOpen && "rotate-180")}
               />
             </CollapsibleTrigger>
-            <CollapsibleContent className="space-y-0.5">
+            <CollapsibleContent className="space-y-0.5 mt-1">
               {pins.length === 0 ? (
-                <p className="px-3 py-1.5 text-[12px] text-muted-foreground">No pinned dashboards</p>
+                <p className="px-3 py-1.5 text-[12px] text-muted-foreground/60">No pinned dashboards</p>
               ) : (
                 pins.map((d) => (
-                  <button
+                  <PinnedItemRow
                     key={d._id || d.id}
-                    onClick={() => onViewChange('dashboard')}
-                    className={cn(
-                      "w-full rounded-lg px-2.5 py-1.5 text-left text-[13px] transition-colors hover:bg-sidebar-accent truncate",
-                      activeView === 'dashboard' ? "bg-primary/10 text-primary font-medium" : "text-sidebar-foreground"
-                    )}
-                  >
-                    {d.name || d.query}
-                  </button>
+                    pin={d}
+                    onRemove={onRemovePin}
+                    activeView={activeView}
+                    onViewChange={onViewChange}
+                  />
                 ))
               )}
             </CollapsibleContent>
@@ -188,9 +369,9 @@ export default function AtlasLeftSidebar({ onNewQuery, activeView, onViewChange,
         </div>
 
         {/* Collections — live from GET /api/schema */}
-        <div className="mt-2">
+        <div className="mt-4 pt-3.5 border-t border-white/[0.04]">
           <Collapsible open={collOpen} onOpenChange={setCollOpen}>
-            <CollapsibleTrigger className="flex w-full items-center justify-between px-2 py-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors">
+            <CollapsibleTrigger className="flex w-full items-center justify-between px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/50 hover:text-primary transition-colors">
               <div className="flex items-center gap-1.5">
                 <Database className="h-3.5 w-3.5" />
                 Collections
@@ -300,4 +481,3 @@ export default function AtlasLeftSidebar({ onNewQuery, activeView, onViewChange,
     </aside>
   );
 }
-

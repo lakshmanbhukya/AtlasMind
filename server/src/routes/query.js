@@ -27,7 +27,7 @@ router.post('/', async (req, res) => {
 
     try {
         // 1. Validate request body
-        const { text } = req.body;
+        const { text, model } = req.body;
         const connectionId = req.connectionId; // Set by requireAuth middleware
 
         if (!text || typeof text !== 'string' || text.trim().length === 0) {
@@ -74,8 +74,8 @@ router.post('/', async (req, res) => {
 
         const similarQueriesCount = fewShotExamples.length;
 
-        // 5. Generate MQL via Groq LLM
-        const llmResult = await generateMQL(query, schemaContext, fewShotExamples);
+        // 5. Generate MQL via Groq LLM with optional model parameter
+        const llmResult = await generateMQL(query, schemaContext, fewShotExamples, model);
 
         // 6. Handle AI fallback (no pipeline generated)
         if (llmResult.pipeline.length === 0) {
@@ -124,6 +124,46 @@ router.post('/', async (req, res) => {
 
         const pipelineCheck = validatePipeline(llmResult.pipeline);
         if (!pipelineCheck.safe) {
+            // Check if this is a mutating write action that can be staged for Human-in-the-Loop approval
+            if (pipelineCheck.isWrite) {
+                const jwt = require('jsonwebtoken');
+                // Generate secure 10-minute token with draft operation payload
+                const approvalToken = jwt.sign(
+                    {
+                        connectionId,
+                        collection: llmResult.collection,
+                        pipeline: llmResult.pipeline,
+                        query,
+                        type: 'write-approval',
+                    },
+                    process.env.JWT_SECRET,
+                    { expiresIn: '10m' }
+                );
+
+                return res.json({
+                    success: true,
+                    naturalLanguage: query,
+                    aiMessage: `⚠️ Database Write Intercepted: This action will modify your collection "${llmResult.collection}". To execute this change, review and approve it.`,
+                    pipeline: llmResult.pipeline,
+                    mql: llmResult.pipeline,
+                    collection: llmResult.collection,
+                    chartType: llmResult.chartType || 'table',
+                    explanation: llmResult.explanation,
+                    safetyStatus: 'approval-required',
+                    safetyBlocked: false,
+                    approvalToken,
+                    results: [],
+                    result: [],
+                    meta: {
+                        resultCount: 0,
+                        executionTimeMs: 0,
+                        totalTimeMs: Date.now() - startTime,
+                        similarQueriesCount,
+                        confidenceScore: 100,
+                    },
+                });
+            }
+
             return res.status(422).json({
                 success: false,
                 error: { code: 'safety_violation', message: pipelineCheck.reason },
@@ -161,6 +201,7 @@ router.post('/', async (req, res) => {
             confidenceScore,
             similarQueriesCount,
             schemaContext,
+            results, // Include results snapshot array for state reconstruction
         });
 
         // Add to few-shot memory for future AI context learning
@@ -253,6 +294,7 @@ router.post('/export', async (req, res) => {
  * GET /api/query/history
  *
  * Fetch recent query history for this connection (from central DB).
+ * Returns fully projected pipelines and result snapshots for frontend session replay.
  */
 router.get('/history', async (req, res) => {
     try {
@@ -273,6 +315,9 @@ router.get('/history', async (req, res) => {
                 collection: 1,
                 resultCount: 1,
                 schemaContext: 1,
+                generatedPipeline: 1,
+                chartType: 1,
+                results: 1,
             })
             .toArray();
 
@@ -297,6 +342,9 @@ router.get('/history', async (req, res) => {
                 collection: item.collection || '',
                 resultCount: item.resultCount || 0,
                 schemaContext: item.schemaContext || '',
+                pipeline: item.generatedPipeline || [],
+                chartType: item.chartType || 'table',
+                results: item.results || [],
                 active: false,
             };
         });
@@ -314,6 +362,213 @@ router.get('/history', async (req, res) => {
             success: false,
             error: { code: 'history_error', message: error.message },
         });
+    }
+});
+
+/**
+ * PATCH /api/query/history/:id
+ *
+ * Rename a specific query history item (update its naturalLanguage display label).
+ * Multi-tenant safe: verifies item belongs to the active connectionId.
+ */
+router.patch('/history/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { name } = req.body;
+        const connectionId = req.connectionId;
+        const { ObjectId } = require('mongodb');
+
+        if (!id) {
+            return res.status(400).json({
+                success: false,
+                error: { code: 'validation_error', message: 'History ID is required' },
+            });
+        }
+
+        if (!name || typeof name !== 'string' || !name.trim()) {
+            return res.status(400).json({
+                success: false,
+                error: { code: 'validation_error', message: '"name" string is required in request body' },
+            });
+        }
+
+        const db = getDb();
+        const filter = {
+            _id: new ObjectId(id),
+            ...(connectionId ? { connectionId } : {}),
+        };
+
+        const result = await db.collection('query_history').updateOne(filter, {
+            $set: { naturalLanguage: name.trim(), renamedAt: new Date() },
+        });
+
+        if (result.matchedCount === 0) {
+            return res.status(404).json({
+                success: false,
+                error: { code: 'not_found', message: 'History item not found or unauthorized' },
+            });
+        }
+
+        return res.json({ success: true, message: 'History item renamed successfully' });
+    } catch (error) {
+        console.error('❌ Rename history error:', error);
+        return res.status(500).json({
+            success: false,
+            error: { code: 'rename_error', message: error.message },
+        });
+    }
+});
+
+/**
+ * DELETE /api/query/history/:id
+ *
+ * Delete a specific query history log from database.
+ * Multi-tenant safe: checks that the item belongs to the active connectionId.
+ */
+router.delete('/history/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const connectionId = req.connectionId;
+        const { ObjectId } = require('mongodb');
+
+        if (!id) {
+            return res.status(400).json({
+                success: false,
+                error: { code: 'validation_error', message: 'History ID is required' },
+            });
+        }
+
+        const db = getDb();
+        const filter = {
+            _id: new ObjectId(id),
+            ...(connectionId ? { connectionId } : {}),
+        };
+
+        const result = await db.collection('query_history').deleteOne(filter);
+
+        if (result.deletedCount === 0) {
+            return res.status(404).json({
+                success: false,
+                error: { code: 'not_found', message: 'History item not found or unauthorized' },
+            });
+        }
+
+        return res.json({
+            success: true,
+            message: 'History item deleted successfully',
+        });
+    } catch (error) {
+        console.error('❌ Delete history error:', error);
+        return res.status(500).json({
+            success: false,
+            error: { code: 'delete_error', message: error.message },
+        });
+    }
+});
+
+/**
+ * POST /api/query/approve
+ *
+ * Secure execution of mutating write/update aggregation pipelines.
+ * Decrypts JWT approval token and executes transactions against USER DB.
+ */
+router.post('/approve', async (req, res) => {
+    const startTime = Date.now();
+    let client = null;
+
+    try {
+        const { approvalToken } = req.body;
+        if (!approvalToken) {
+            return res.status(400).json({
+                success: false,
+                error: { code: 'validation_error', message: 'Missing "approvalToken" field in request body' },
+            });
+        }
+
+        const jwt = require('jsonwebtoken');
+        let decoded;
+        try {
+            decoded = jwt.verify(approvalToken, process.env.JWT_SECRET);
+        } catch (err) {
+            return res.status(401).json({
+                success: false,
+                error: { code: 'expired_token', message: 'Approval draft has expired or is invalid. Please resend query.' },
+            });
+        }
+
+        if (decoded.type !== 'write-approval') {
+            return res.status(400).json({
+                success: false,
+                error: { code: 'invalid_token', message: 'Invalid token signature type' },
+            });
+        }
+
+        const { connectionId, collection, pipeline, query } = decoded;
+
+        // Verify active connection credentials
+        const userConn = await getConnectionById(connectionId);
+        if (!userConn) {
+            return res.status(404).json({
+                success: false,
+                error: { code: 'not_found', message: 'Active database session connection not found' },
+            });
+        }
+
+        const uri = decrypt(userConn.encryptedUri);
+
+        // Connect & execute write transaction
+        client = new MongoClient(uri, { serverSelectionTimeoutMS: 5000, maxPoolSize: 2 });
+        await client.connect();
+        const userDb = client.db(userConn.dbName);
+
+        // Run mutating aggregation pipeline directly on database collection
+        const { results, executionTimeMs } = await executePipeline(
+            userDb,
+            collection,
+            pipeline
+        );
+
+        // Log transaction to central query history
+        saveQueryHistory({
+            connectionId,
+            naturalLanguage: query,
+            generatedPipeline: pipeline,
+            collection,
+            chartType: 'table',
+            resultCount: results.length,
+            confidenceScore: 100,
+            similarQueriesCount: 0,
+            schemaContext: 'Transaction Authorized (Human-in-the-Loop Approved Write)',
+            results,
+        });
+
+        return res.json({
+            success: true,
+            naturalLanguage: query,
+            aiMessage: `✅ Transaction Authorized: Successfully executed approved write/update operation on database collection "${collection}".`,
+            pipeline,
+            mql: pipeline,
+            collection,
+            chartType: 'table',
+            results,
+            executionTimeMs,
+            safetyStatus: 'write-executed',
+            meta: {
+                resultCount: results.length,
+                executionTimeMs,
+                totalTimeMs: Date.now() - startTime,
+                similarQueriesCount: 0,
+                confidenceScore: 100,
+            },
+        });
+    } catch (error) {
+        console.error('❌ Approved write execution error:', error);
+        return res.status(500).json({
+            success: false,
+            error: { code: 'execution_error', message: error.message || 'Failed to apply approved write transaction' },
+        });
+    } finally {
+        if (client) await client.close();
     }
 });
 

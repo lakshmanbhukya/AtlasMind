@@ -7,6 +7,8 @@ import { useChat } from "../hooks/useChat";
 import { useVoice } from "../hooks/useVoice";
 import { sendVoice, pinToDashboard } from "../services/api";
 import ChartRenderer from "./ChartRenderer";
+import { MagicCard } from "./ui/magic-card";
+import { ShimmerButton } from "./ui/shimmer-button";
 
 /**
  * CollapsibleCodeBlock — toggleable MQL pipeline code block.
@@ -155,17 +157,97 @@ function ResultsCard({ msg, onPin }) {
  *   - executionTimeMs, confidenceScore, similarQueriesCount → metadata line
  *   - Voice: records audio → POST /api/voice (transcribes + executes) → addVoiceResult()
  */
-export default function AtlasChatPanel({ onLastMessage, onNewQuery, onPinAdded }) {
-  const { messages, isLoading, sendMessage, addVoiceResult } = useChat();
+const AVAILABLE_MODELS = [
+  {
+    id: 'llama-3.3-70b-versatile',
+    name: 'Llama 3.3 Versatile',
+    provider: 'Meta',
+    desc: 'Default balanced model. Superior MQL translation and schema reasoning.',
+    badge: '70B Params',
+    badgeColor: 'bg-primary/20 text-primary border border-primary/30',
+    speed: 'Fast'
+  },
+  {
+    id: 'meta-llama/llama-4-scout-17b-16e-instruct',
+    name: 'Llama 4 Scout',
+    provider: 'Meta Labs',
+    desc: 'Next-gen reasoning engine optimized for complex relational DB joints.',
+    badge: '17B (16e)',
+    badgeColor: 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30',
+    speed: 'Ultra'
+  },
+  {
+    id: 'openai/gpt-oss-120b',
+    name: 'GPT OSS 120B',
+    provider: 'OpenAI Community',
+    desc: 'Enormous open model with extreme deep multi-stage pipeline precision.',
+    badge: '120B Params',
+    badgeColor: 'bg-purple-500/20 text-purple-400 border border-purple-500/30',
+    speed: 'Balanced'
+  },
+  {
+    id: 'qwen/qwen3-32b',
+    name: 'Qwen 3 DeepSeek',
+    provider: 'Alibaba',
+    desc: 'Highly specialized coder architecture optimized for complex nested Mongo queries.',
+    badge: '32B Params',
+    badgeColor: 'bg-amber-500/20 text-amber-400 border border-amber-500/30',
+    speed: 'Very Fast'
+  },
+  {
+    id: 'groq/compound',
+    name: 'Groq Compound',
+    provider: 'Groq Labs',
+    desc: 'Multi-model agent router compiling safety validation and generation.',
+    badge: 'Hybrid Router',
+    badgeColor: 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30',
+    speed: 'Sub-150ms'
+  }
+];
+
+export default function AtlasChatPanel({ onLastMessage, onNewQuery, onPinAdded, highlightedMessageId, onQuerySuccess }) {
+  const { 
+    messages, 
+    isLoading, 
+    selectedModel, 
+    setSelectedModel, 
+    sendMessage, 
+    approveWrite, 
+    addVoiceResult, 
+    setMessages 
+  } = useChat(highlightedMessageId, onQuerySuccess);
   const { isRecording, startRecording, stopRecording, error: voiceError } = useVoice();
   const [input, setInput] = useState("");
   const [voiceLoading, setVoiceLoading] = useState(false);
+  const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
   const messagesEndRef = useRef(null);
 
   // Auto-scroll to bottom
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isLoading]);
+    // Only auto-scroll on new messages if there is no pending sidebar highlight interaction active
+    if (!highlightedMessageId) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages, isLoading, highlightedMessageId]);
+
+  // Scroll and focus highlight animation requested by Left Sidebar clicking
+  useEffect(() => {
+    if (highlightedMessageId) {
+      const targetId = `msg-${highlightedMessageId}`;
+      const element = document.getElementById(targetId) || 
+                      document.getElementById(`msg-user-${highlightedMessageId}`) || 
+                      document.getElementById(`msg-assistant-${highlightedMessageId}`);
+      if (element) {
+        element.scrollIntoView({ behavior: "smooth", block: "center" });
+        
+        // Premium scale & glowing highlight transition
+        element.classList.add("ring-2", "ring-[#00ed64]", "ring-offset-8", "ring-offset-background", "p-2", "bg-[#00ed64]/5", "rounded-2xl", "scale-[1.02]");
+        setTimeout(() => {
+          element.classList.remove("ring-2", "ring-[#00ed64]", "ring-offset-8", "ring-offset-background", "p-2", "bg-[#00ed64]/5", "rounded-2xl", "scale-[1.02]");
+        }, 2500);
+      }
+    }
+  }, [highlightedMessageId]);
 
   // Notify parent of the latest assistant message (for Inspector panel)
   useEffect(() => {
@@ -208,11 +290,15 @@ export default function AtlasChatPanel({ onLastMessage, onNewQuery, onPinAdded }
     }
   };
 
+  const [pinToast, setPinToast] = useState(null);
+
   // Pin a chart to the dashboard
   const handlePin = useCallback(async ({ query, chartType, results, collection, pipeline }) => {
     try {
       await pinToDashboard({ query, chartType, results, collection, pipeline });
       if (onPinAdded) onPinAdded();
+      setPinToast("Pinned to Dashboard");
+      setTimeout(() => setPinToast(null), 3000);
     } catch (err) {
       console.error("[Pin] Failed to pin:", err.message);
     }
@@ -276,7 +362,8 @@ export default function AtlasChatPanel({ onLastMessage, onNewQuery, onPinAdded }
           return (
             <div
               key={msg.id}
-              className={cn("flex flex-col animate-atlas-fade-in", isUser ? "items-end" : "items-start")}
+              id={`msg-${msg.id}`}
+              className={cn("flex flex-col animate-atlas-fade-in transition-all duration-500", isUser ? "items-end" : "items-start")}
             >
               {isUser ? (
                 /* User bubble — right aligned */
@@ -339,6 +426,64 @@ export default function AtlasChatPanel({ onLastMessage, onNewQuery, onPinAdded }
                         </div>
                       )}
 
+                      {/* Staged Write HITL Intercept Panel */}
+                      {msg.safetyStatus === 'approval-required' && msg.approvalToken && (
+                        <div className="mt-4 max-w-xl animate-atlas-fade-in relative z-25">
+                          <MagicCard
+                            className="p-5 flex flex-col gap-4 border border-amber-500/30 bg-neutral-950/60"
+                            gradientColor="#f59e0b"
+                            gradientOpacity={0.25}
+                          >
+                            <div className="flex items-start gap-3">
+                              <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-500 mt-0.5">
+                                <AlertTriangle className="h-5 w-5 animate-pulse" />
+                              </div>
+                              <div>
+                                <h4 className="text-sm font-bold text-foreground tracking-tight">Supervisor Authorization Required</h4>
+                                <p className="text-[12px] text-muted-foreground/90 mt-1 leading-relaxed">
+                                  This request involves executing a mutating database write operation on the <span className="font-mono text-[#00ed64] font-bold">"{msg.collection}"</span> collection. Under session safety rules, this action has been safely staged in draft form.
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="rounded-xl border border-white/5 bg-black/60 p-3.5 font-mono text-[11px] text-[#00ed64]/90 overflow-x-auto max-h-[160px]">
+                              <code>{JSON.stringify(msg.pipeline, null, 2)}</code>
+                            </div>
+
+                            <div className="flex items-center gap-3 mt-1.5">
+                              <ShimmerButton
+                                onClick={() => approveWrite(msg.id, msg.approvalToken)}
+                                disabled={isLoading}
+                                shimmerColor="#00ed64"
+                                background="#042f1a"
+                                borderRadius="12px"
+                                className="px-5 py-2 text-[12px] h-9.5 font-bold shadow-[0_4px_25px_rgba(0,237,100,0.2)] flex items-center gap-2"
+                              >
+                                {isLoading ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Check className="h-3.5 w-3.5 stroke-[3px]" />
+                                )}
+                                Authorize & Commit Changes
+                              </ShimmerButton>
+
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  // Discard token and restore to read-only clean slate
+                                  setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, approvalToken: null, content: '❌ Mutating database draft operation discarded.' } : m));
+                                }}
+                                disabled={isLoading}
+                                className="text-xs text-muted-foreground hover:text-foreground hover:bg-white/5 h-9.5 rounded-xl px-4"
+                              >
+                                Discard Draft
+                              </Button>
+                            </div>
+                          </MagicCard>
+                        </div>
+                      )}
+
                       {/* Metadata row */}
                       {(msg.executionTimeMs || msg.confidenceScore || msg.similarQueriesCount) && (
                         <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-muted-foreground border-t border-border/30 pt-2">
@@ -389,6 +534,11 @@ export default function AtlasChatPanel({ onLastMessage, onNewQuery, onPinAdded }
 
       {/* Input bar - Floating Premium Pill */}
       <div className="p-8 shrink-0 relative">
+        {pinToast && (
+          <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-full mb-2 bg-blue-500 text-white text-xs font-bold px-3 py-1 rounded shadow-lg z-50">
+            {pinToast}
+          </div>
+        )}
         <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-t from-background via-background/90 to-transparent pointer-events-none" />
         <div className="relative flex items-center gap-4 atlas-glass rounded-[32px] px-5 py-4 w-full max-w-4xl mx-auto shadow-[0_15px_50px_rgba(0,0,0,0.5)] border border-white/10 transition-all duration-500 focus-within:border-primary/60 focus-within:shadow-[0_0_40px_rgba(0,237,100,0.12)] focus-within:ring-1 focus-within:ring-primary/20">
           {/* New Query button */}
@@ -401,6 +551,75 @@ export default function AtlasChatPanel({ onLastMessage, onNewQuery, onPinAdded }
           >
             <Plus className="h-6 w-6 stroke-[2.5px]" />
           </Button>
+          
+          {/* Dynamic LLM Model Swapper */}
+          <div className="relative shrink-0 select-none">
+            <button
+              onClick={() => setModelDropdownOpen(!modelDropdownOpen)}
+              className="flex items-center gap-2 pl-2.5 pr-2 h-9 rounded-xl bg-white/[0.06] border border-white/[0.08] hover:bg-white/10 hover:border-primary/30 transition-all duration-200 shrink-0 outline-none select-none group"
+              title="Switch AI model"
+            >
+              {/* Accent dot */}
+              <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0 shadow-[0_0_6px_rgba(0,237,100,0.7)]" />
+              <span className="hidden md:inline text-[12px] font-semibold text-foreground/80 group-hover:text-foreground transition-colors max-w-[110px] truncate">
+                {AVAILABLE_MODELS.find(m => m.id === selectedModel)?.name || "Llama 3.3"}
+              </span>
+              <ChevronDown className={cn("h-3 w-3 text-muted-foreground/50 transition-transform duration-200 shrink-0", modelDropdownOpen && "rotate-180")} />
+            </button>
+            {/* Vertical separator */}
+            <div className="absolute -right-2.5 top-1/2 -translate-y-1/2 w-px h-5 bg-white/10" />
+
+            {modelDropdownOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setModelDropdownOpen(false)}
+                />
+                <div className="absolute bottom-12 left-0 w-[360px] bg-[#0c1118] border border-white/15 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.9)] z-50 animate-atlas-slide-in-bottom overflow-hidden">
+                  {/* Dropdown Header */}
+                  <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">Select Model</p>
+                    <span className="text-[10px] text-primary/60 font-mono bg-primary/5 px-2 py-0.5 rounded border border-primary/10">
+                      {AVAILABLE_MODELS.find(m => m.id === selectedModel)?.speed}
+                    </span>
+                  </div>
+                  {/* Model list */}
+                  <div className="flex flex-col gap-0.5 p-2 max-h-[380px] overflow-y-auto">
+                    {AVAILABLE_MODELS.map((m) => {
+                      const isCurrent = m.id === selectedModel;
+                      return (
+                        <button
+                          key={m.id}
+                          onClick={() => { setSelectedModel(m.id); setModelDropdownOpen(false); }}
+                          className={cn(
+                            "w-full text-left px-3 py-3 rounded-xl flex items-start gap-3 transition-all duration-150 border",
+                            isCurrent
+                              ? "bg-primary/10 border-primary/20"
+                              : "border-transparent hover:bg-white/[0.04] hover:border-white/5"
+                          )}
+                        >
+                          {/* Active indicator */}
+                          <div className={cn("w-1.5 h-1.5 rounded-full mt-1.5 shrink-0", isCurrent ? "bg-primary shadow-[0_0_6px_rgba(0,237,100,0.7)]" : "bg-white/10")} />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className={cn("text-[13px] font-semibold", isCurrent ? "text-primary" : "text-foreground/85")}>{m.name}</span>
+                              <span className={cn("text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider shrink-0 font-mono", m.badgeColor)}>{m.badge}</span>
+                            </div>
+                            {/* <p className="text-[11px] text-muted-foreground/60 leading-relaxed mt-1">{m.desc}</p> */}
+                            <div className="flex items-center gap-1.5 mt-1.5">
+                              <span className="text-[9.5px] text-muted-foreground/40 font-medium">{m.provider}</span>
+                              <span className="text-[9px] text-muted-foreground/25">·</span>
+                              <span className="text-[9.5px] text-primary/60 font-semibold">{m.speed}</span>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
 
           {isRecording ? (
             /* Voice wave indicator while recording */

@@ -150,7 +150,8 @@ export default function AtlasAnalyticsInspector({ lastMessage }) {
   const [exporting, setExporting] = useState(false);
 
   // Derive stats from lastMessage when available
-  const execTime   = lastMessage?.executionTimeMs   != null ? `${lastMessage.executionTimeMs}ms` : "—";
+  const execTimeVal = lastMessage?.executionTimeMs ?? lastMessage?.meta?.executionTimeMs ?? lastMessage?.meta?.totalTimeMs;
+  const execTime   = execTimeVal != null ? `${execTimeVal}ms` : "—";
   const confidence = lastMessage?.confidenceScore   != null ? `${lastMessage.confidenceScore}%`  : "—";
   const similar    = lastMessage?.similarQueriesCount != null ? String(lastMessage.similarQueriesCount) : "—";
 
@@ -214,10 +215,16 @@ export default function AtlasAnalyticsInspector({ lastMessage }) {
     return (
       <button
         onClick={() => setCollapsed(false)}
-        className="w-10 border-l border-white/5 bg-background/40 backdrop-blur-3xl flex items-center justify-center hover:bg-white/5 transition-all shrink-0 hover:shadow-[0_0_15px_rgba(0,237,100,0.1)]"
+        className="w-10 border-l border-white/5 bg-background/50 backdrop-blur-3xl flex flex-col items-center py-6 gap-6 hover:bg-white/[0.04] transition-all shrink-0 relative group outline-none"
         title="Expand Inspector"
       >
-        <ChevronLeft className="h-4 w-4 text-muted-foreground" />
+        <ChevronLeft className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-all group-hover:-translate-x-0.5 duration-200" />
+        <div className="text-[10px] font-bold text-muted-foreground/30 group-hover:text-muted-foreground/60 transition-colors font-sans tracking-[0.2em] [writing-mode:vertical-lr] uppercase select-none">
+          Inspector
+        </div>
+        {lastMessage && (
+          <span className="absolute bottom-6 w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_rgba(0,237,100,0.6)] animate-pulse" />
+        )}
       </button>
     );
   }
@@ -225,16 +232,16 @@ export default function AtlasAnalyticsInspector({ lastMessage }) {
   return (
     <aside className="w-96 border-l border-white/5 bg-background/80 backdrop-blur-xl flex flex-col h-full animate-atlas-slide-in-right shrink-0 shadow-[-10px_0_40px_rgba(0,0,0,0.3)]">
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-white/5 bg-white/5">
-        <span className="text-[11px] font-bold uppercase tracking-[0.15em] text-muted-foreground/60">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-white/5 bg-white/[0.02]">
+        <span className="text-[11px] font-bold uppercase tracking-[0.15em] text-muted-foreground/50 select-none">
           Query Inspector
         </span>
         <button
           onClick={() => setCollapsed(true)}
-          className="text-muted-foreground hover:text-foreground transition-colors p-1"
-          title="Collapse"
+          className="text-muted-foreground hover:text-foreground hover:bg-white/5 rounded-lg transition-all p-1.5 duration-200 group outline-none"
+          title="Collapse Inspector"
         >
-          <ChevronLeft className="h-4.5 w-4.5 rotate-180" />
+          <ChevronLeft className="h-4 w-4 rotate-180 text-muted-foreground group-hover:translate-x-0.5 transition-transform duration-200" />
         </button>
       </div>
 
@@ -340,7 +347,7 @@ export default function AtlasAnalyticsInspector({ lastMessage }) {
                 <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                   Generated MQL
                 </span>
-                <pre className="mt-2 rounded-[12px] bg-black/40 border border-white/5 p-3 text-[11px] font-mono text-primary/90 overflow-x-auto leading-relaxed max-h-48 shadow-inner">
+                <pre className="mt-2 rounded-[12px] bg-black/50 border border-white/5 p-3 text-[11.5px] font-mono font-medium text-primary overflow-x-auto leading-relaxed max-h-64 shadow-inner">
                   <code>{mqlToShow}</code>
                 </pre>
               </div>

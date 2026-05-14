@@ -35,10 +35,21 @@ api.interceptors.response.use(
 /**
  * Send a natural language query → MQL → execute → visualize.
  * @param {string} text
+ * @param {string} [model]
  * @returns {Promise<object>} { aiMessage, pipeline, results, chartType, ... }
  */
-export async function sendQuery(text) {
-    const { data } = await api.post('query', { text });
+export async function sendQuery(text, model) {
+    const { data } = await api.post('query', { text, model });
+    return data;
+}
+
+/**
+ * Approve and execute a staged write operation.
+ * @param {string} approvalToken
+ * @returns {Promise<object>}
+ */
+export async function approveWriteQuery(approvalToken) {
+    const { data } = await api.post('query/approve', { approvalToken });
     return data;
 }
 
@@ -81,6 +92,28 @@ export async function fetchQueryHistory() {
     return data.data || [];
 }
 
+/**
+ * Delete a specific query history item.
+ * @param {string} id
+ * @returns {Promise<object>}
+ */
+export async function deleteQueryHistoryItem(id) {
+    const { data } = await api.delete(`query/history/${id}`);
+    return data;
+}
+
+/**
+ * Rename a query history item's display label.
+ * @param {string} id
+ * @param {string} name
+ * @returns {Promise<object>}
+ */
+export async function renameQueryHistoryItem(id, name) {
+    const { data } = await api.patch(`query/history/${id}`, { name });
+    return data;
+}
+
+
 // ─── Dashboard API ──────────────────────────────────────────────────────────
 
 /** @returns {Promise<Array>} */
@@ -106,6 +139,12 @@ export async function removeDashboardPin(pinId) {
 /** @param {string} pinId */
 export async function refreshDashboardPin(pinId) {
     const { data } = await api.post(`dashboard/${pinId}/refresh`);
+    return data;
+}
+
+/** @param {string} pinId */
+export async function fetchSharedDashboardPin(pinId) {
+    const { data } = await api.get(`dashboard/shared/${pinId}`);
     return data;
 }
 

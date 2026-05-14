@@ -1,19 +1,16 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { sendQuery } from '../services/api';
+import { sendQuery, approveWriteQuery, fetchQueryHistory } from '../services/api';
 
 /**
  * Chat state management hook.
  * Maps backend response fields to the UI message structure.
- *
- * Response fields consumed:
- *   aiMessage, pipeline, mql, collection, chartType, results, result,
- *   safetyStatus, safetyBlocked, executionTimeMs, confidenceScore,
- *   similarQueriesCount, naturalLanguage, explanation
+ * Supports deep state persistence, model switching, and HITL approvals.
  */
-export function useChat() {
+export function useChat(selectedQueryId, onQuerySuccess) {
     const [messages, setMessages] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
+    const [selectedModel, setSelectedModel] = useState('llama-3.3-70b-versatile');
     const messagesEndRef = useRef(null);
 
     // Auto-scroll to bottom on new messages
@@ -35,29 +32,69 @@ export function useChat() {
 
     /**
      * Normalize a backend query response into the standard message metadata shape.
-     * Accepts responses from both POST /api/query and POST /api/voice.
      */
     const normalizeResponse = useCallback((response) => ({
-        // AI explanation — preferred over raw naturalLanguage as display text
         content: response.aiMessage || response.explanation || response.naturalLanguage || '',
-        // MQL pipeline (both field name aliases supported)
         pipeline: response.pipeline || response.mql || [],
         collection: response.collection || '',
         chartType: response.chartType || 'table',
-        // Results (both aliases)
         results: response.results || response.result || [],
-        // Safety status — new field; fall back to old safetyBlocked for compat
         safetyStatus: response.safetyStatus || (response.safetyBlocked ? 'approval-required' : 'read-only'),
         safetyBlocked: response.safetyBlocked || response.safetyStatus === 'approval-required' || false,
-        // UI metadata for the Inspector panel
+        approvalToken: response.approvalToken || null,
         executionTimeMs: response.executionTimeMs || response.meta?.executionTimeMs || null,
         confidenceScore: response.confidenceScore || response.meta?.confidenceScore || null,
         similarQueriesCount: response.similarQueriesCount || response.meta?.similarQueriesCount || null,
-        // Voice-specific
         transcript: response.transcript || response.text || null,
         naturalLanguage: response.naturalLanguage || '',
         schemaContext: response.schemaContext || '',
     }), []);
+
+    // Session-based conversational state reconstruction
+    useEffect(() => {
+        const restoreSelectedQuery = async () => {
+            if (!selectedQueryId) {
+                setMessages([]);
+                return;
+            }
+            setIsLoading(true);
+            try {
+                const history = await fetchQueryHistory();
+                const item = history.find((h) => h.id === selectedQueryId);
+                if (item) {
+                    setMessages([
+                        {
+                            id: `user-${item.id}`,
+                            role: 'user',
+                            content: item.query,
+                            timestamp: new Date(item.timestamp || Date.now()),
+                        },
+                        {
+                            id: `assistant-${item.id}`,
+                            role: 'assistant',
+                            content: item.explanation || `Generated query against collection "${item.collection}".`,
+                            pipeline: item.pipeline || [],
+                            collection: item.collection || '',
+                            chartType: item.chartType || 'table',
+                            results: item.results || [],
+                            safetyStatus: 'read-only',
+                            safetyBlocked: false,
+                            executionTimeMs: item.executionTimeMs || null,
+                            confidenceScore: item.confidenceScore || 100,
+                            similarQueriesCount: item.similarQueriesCount || 0,
+                            naturalLanguage: item.query,
+                            schemaContext: item.schemaContext || '',
+                        }
+                    ]);
+                }
+            } catch (err) {
+                console.warn('⚠️ Failed to restore query history item:', err.message);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        restoreSelectedQuery();
+    }, [selectedQueryId]);
 
     const sendMessage = useCallback(
         async (text) => {
@@ -68,38 +105,77 @@ export function useChat() {
             setIsLoading(true);
 
             try {
-                const response = await sendQuery(text);
+                const response = await sendQuery(text, selectedModel);
                 const normalized = normalizeResponse(response);
                 addMessage('assistant', normalized.content, normalized);
+                if (onQuerySuccess) {
+                    onQuerySuccess();
+                }
             } catch (err) {
-                const errorMessage = err.message || 'Failed to process your query. Please try again.';
+                const errorMessage = err.response?.data?.error?.message || err.message || 'Failed to process your query. Please try again.';
                 setError(errorMessage);
                 addMessage('assistant', errorMessage, { isError: true });
             } finally {
                 setIsLoading(false);
             }
         },
-        [isLoading, addMessage, normalizeResponse]
+        [isLoading, addMessage, normalizeResponse, selectedModel, onQuerySuccess]
     );
 
-    /**
-     * Handle a voice query response.
-     * Called by voice input components after sendVoice() resolves.
-     * The voice response already contains the full query result.
-     */
+    // Human-in-the-Loop Write Approval Executor
+    const approveWrite = useCallback(
+        async (messageId, approvalToken) => {
+            if (isLoading) return;
+
+            setError(null);
+            setIsLoading(true);
+
+            try {
+                const response = await approveWriteQuery(approvalToken);
+                const normalized = normalizeResponse(response);
+
+                // Update the original staged message in-place in state
+                setMessages((prev) =>
+                    prev.map((msg) =>
+                        msg.id === messageId
+                            ? {
+                                  ...msg,
+                                  content: normalized.content,
+                                  ...normalized,
+                                  safetyStatus: 'write-executed',
+                                  approvalToken: null,
+                              }
+                            : msg
+                    )
+                );
+                if (onQuerySuccess) {
+                    onQuerySuccess();
+                }
+            } catch (err) {
+                const errorMessage = err.response?.data?.error?.message || err.message || 'Failed to authorize transaction.';
+                setError(errorMessage);
+                addMessage('assistant', `❌ Authorization Failed: ${errorMessage}`, { isError: true });
+            } finally {
+                setIsLoading(false);
+            }
+        },
+        [isLoading, addMessage, normalizeResponse, onQuerySuccess]
+    );
+
     const addVoiceResult = useCallback(
         (response) => {
-            // Add the user's transcribed text as a user message
             const transcript = response.transcript || response.text || '';
             if (transcript) {
                 addMessage('user', transcript, { isVoice: true });
             }
 
-            // Add the assistant's response
             const normalized = normalizeResponse(response);
             addMessage('assistant', normalized.content, normalized);
+            if (onQuerySuccess) {
+                onQuerySuccess();
+            }
         },
-        [addMessage, normalizeResponse]
+        [addMessage, normalizeResponse, onQuerySuccess]
     );
 
     const clearChat = useCallback(() => {
@@ -111,9 +187,13 @@ export function useChat() {
         messages,
         isLoading,
         error,
+        selectedModel,
+        setSelectedModel,
         sendMessage,
+        approveWrite,
         addVoiceResult,
         clearChat,
+        setMessages,
         messagesEndRef,
     };
 }

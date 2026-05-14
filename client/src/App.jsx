@@ -9,7 +9,7 @@ import DashboardPage from './pages/DashboardPage';
 import LandingPage from './components/LandingPage';
 import ErrorBoundary from './components/ErrorBoundary';
 import { cn } from './lib/utils';
-import { fetchDashboard, removeDashboardPin } from './services/api';
+import { fetchDashboard, removeDashboardPin, fetchQueryHistory } from './services/api';
 
 /** Simple responsive hook */
 function useMediaQuery(query) {
@@ -44,6 +44,9 @@ export default function App() {
   const [sidebarOpen,  setSidebarOpen]  = useState(true);
   const [activeView,   setActiveView]   = useState('chat'); // 'chat' or 'dashboard'
   const [pinsLoading,  setPinsLoading]  = useState(false);
+  const [history,      setHistory]      = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [highlightedMessageId, setHighlightedMessageId] = useState(null);
 
   const isMobile  = useMediaQuery('(max-width: 767px)');
   const isTablet  = useMediaQuery('(max-width: 1023px)');
@@ -60,11 +63,24 @@ export default function App() {
     }
   }, []);
 
+  const loadHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const hist = await fetchQueryHistory();
+      setHistory(hist || []);
+    } catch (err) {
+      console.error('Failed to load history:', err);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (isAuthenticated) {
       loadPins();
+      loadHistory();
     }
-  }, [isAuthenticated, loadPins]);
+  }, [isAuthenticated, loadPins, loadHistory]);
 
   const handleRemovePin = useCallback(async (pinId) => {
     try {
@@ -78,6 +94,7 @@ export default function App() {
   const handleNewQuery = useCallback(() => {
     setLastMessage(null);
     setActiveView('chat');
+    setHighlightedMessageId(null);
     setChatKey((k) => k + 1);
     if (isMobile) setSidebarOpen(false);
   }, [isMobile]);
@@ -124,6 +141,8 @@ export default function App() {
         onMenuToggle={toggleSidebar}
         showMenu={true}
         onLogout={logout}
+        activeView={activeView}
+        onViewChange={setActiveView}
       />
 
       <div className="flex flex-1 overflow-hidden relative grid-bg-dashboard">
@@ -148,6 +167,12 @@ export default function App() {
               activeView={activeView}
               onViewChange={setActiveView}
               pins={pins}
+              onRemovePin={handleRemovePin}
+              onSelectQueryId={setHighlightedMessageId}
+              highlightedMessageId={highlightedMessageId}
+              history={history}
+              historyLoading={historyLoading}
+              setHistory={setHistory}
             />
           </ErrorBoundary>
         </div>
@@ -161,6 +186,8 @@ export default function App() {
                 onLastMessage={setLastMessage}
                 onNewQuery={handleNewQuery}
                 onPinAdded={loadPins}
+                highlightedMessageId={highlightedMessageId}
+                onQuerySuccess={loadHistory}
               />
             </ErrorBoundary>
           ) : (

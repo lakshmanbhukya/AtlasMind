@@ -36,37 +36,8 @@ jobs:
         description: "AtlasMind server tests completed successfully on ${{ github.ref_name }}."
         color: 0x00ff00
 
-  build-client:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    - name: Use Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20'
-        cache: 'npm'
-        cache-dependency-path: client/package-lock.json
-    - name: Install dependencies
-      run: |
-        cd client
-        npm ci
-    - name: Build
-      run: |
-        cd client
-        npm run build
-    
-    - name: Discord Notification
-      if: success()
-      uses: sarisia/actions-status-discord@v1
-      with:
-        webhook: ${{ secrets.DISCORD_WEBHOOK }}
-        status: ${{ job.status }}
-        title: "Client Build Passed"
-        description: "AtlasMind client build completed successfully on ${{ github.ref_name }}."
-        color: 0x00ff00
-
   release:
-    needs: [build-and-test-server, build-client]
+    needs: [build-and-test-server]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
@@ -96,21 +67,4 @@ jobs:
         status: ${{ job.status }}
         title: "Server Image Pushed"
         description: "AtlasMind server image successfully pushed to Docker Hub."
-        color: 0x0000ff
-
-    - name: Build and Push Client Image
-      uses: docker/build-push-action@v5
-      with:
-        context: ./client
-        push: true
-        tags: ${{ secrets.DOCKERHUB_USERNAME }}/atlasmind-client:latest,${{ secrets.DOCKERHUB_USERNAME }}/atlasmind-client:${{ github.sha }}
-
-    - name: Discord Notification (Client Image)
-      if: success()
-      uses: sarisia/actions-status-discord@v1
-      with:
-        webhook: ${{ secrets.DISCORD_WEBHOOK }}
-        status: ${{ job.status }}
-        title: "Client Image Pushed"
-        description: "AtlasMind client image successfully pushed to Docker Hub."
         color: 0x0000ff

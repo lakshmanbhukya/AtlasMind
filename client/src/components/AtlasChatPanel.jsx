@@ -168,11 +168,11 @@ const AVAILABLE_MODELS = [
     speed: 'Fast'
   },
   {
-    id: 'meta-llama/llama-4-scout-17b-16e-instruct',
-    name: 'Llama 4 Scout',
-    provider: 'Meta Labs',
-    desc: 'Next-gen reasoning engine optimized for complex relational DB joints.',
-    badge: '17B (16e)',
+    id: 'moonshotai/kimi-k2-instruct',
+    name: 'Kimi K2 Instruct',
+    provider: 'Moonshot AI',
+    desc: 'Frontier agentic model excelling at complex reasoning and multi-step MQL generation.',
+    badge: 'Kimi K2',
     badgeColor: 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30',
     speed: 'Ultra'
   },
@@ -186,13 +186,13 @@ const AVAILABLE_MODELS = [
     speed: 'Balanced'
   },
   {
-    id: 'qwen/qwen3-32b',
-    name: 'Qwen 3 DeepSeek',
-    provider: 'Alibaba',
-    desc: 'Highly specialized coder architecture optimized for complex nested Mongo queries.',
-    badge: '32B Params',
+    id: 'llama-3.1-8b-instant',
+    name: 'Llama 3.1 Instant',
+    provider: 'Meta',
+    desc: 'Ultra-low latency model for rapid MQL prototyping and lightweight query tasks.',
+    badge: '8B Instant',
     badgeColor: 'bg-amber-500/20 text-amber-400 border border-amber-500/30',
-    speed: 'Very Fast'
+    speed: 'Fastest'
   },
   {
     id: 'groq/compound',

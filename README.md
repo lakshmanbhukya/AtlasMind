@@ -56,6 +56,8 @@ You ask a question in plain English. AtlasMind profiles schema context, generate
 
 ![Groq](https://img.shields.io/badge/Groq-LPU-F55036?style=for-the-badge)
 ![Llama 3.3 70B](https://img.shields.io/badge/Llama-3.3_70B_Versatile-1E293B?style=for-the-badge)
+![Kimi K2](https://img.shields.io/badge/Kimi-K2_Instruct-6366F1?style=for-the-badge)
+![Llama 3.1 Instant](https://img.shields.io/badge/Llama-3.1_8B_Instant-F59E0B?style=for-the-badge)
 ![Whisper](https://img.shields.io/badge/Whisper-large_v3_turbo-0EA5E9?style=for-the-badge)
 ![Safety Guard](https://img.shields.io/badge/Safety-Read_Only_Guard-16A34A?style=for-the-badge)
 
@@ -82,63 +84,69 @@ You ask a question in plain English. AtlasMind profiles schema context, generate
 
 ```mermaid
 flowchart TD
-    U[User] --> C[Connect Database]
-    C --> S[Session Cookie am_token]
-    S --> Q[Ask Query or Upload Voice]
-    Q --> P[Schema + Few-shot Context]
-    P --> L[Groq LLM]
-    L --> G[Safety Guard]
-    G -->|Safe| E[Execute Aggregation]
-    G -->|Blocked| R[Safety Violation Response]
-    E --> V[Charts + Explanation]
-    V --> D[Pin to Dashboard]
+    subgraph CLIENT["🖥️  Client Layer"]
+        direction TB
+        U("👤 User")
+        UI("⚡ React + Vite UI")
+        VOICE("🎙️ Voice Upload")
+        PIN("📌 Pin to Dashboard")
+    end
+
+    subgraph GATEWAY["🔐  API Gateway  ·  Express + JWT"]
+        direction TB
+        AUTH("🔑 Auth · httpOnly Cookie")
+        ROUTE("🔀 Route · /query  /voice  /pin")
+        SCHEMA("🗂️ Schema Profiler · Field & Collection Metadata")
+        FEWSHOT("🧠 Few-Shot Retriever · Cosine Similarity")
+    end
+
+    subgraph AI["🤖  AI Pipeline  ·  Groq LPU"]
+        direction TB
+        LLM("⚡ LLM · llama-3.3-70b / kimi-k2 / compound")
+        GUARD("🛡️ Safety Guard · Read-Only Enforcer")
+        WHISPER("🎧 Whisper · whisper-large-v3-turbo")
+    end
+
+    subgraph DATA["🗄️  Data Layer  ·  MongoDB"]
+        direction TB
+        AGG("⚙️ Aggregation Executor")
+        RESULT("📊 Charts + Explanation")
+        DASH("🗃️ Dashboard Store")
+    end
+
+    U -- "Text Query" --> UI
+    U -- "Audio File" --> VOICE
+    UI --> AUTH
+    VOICE --> AUTH
+    AUTH --> ROUTE
+
+    ROUTE --> SCHEMA
+    SCHEMA --> FEWSHOT
+    FEWSHOT --> LLM
+
+    VOICE -- "Buffer" --> WHISPER
+    WHISPER -- "Transcript" --> LLM
+
+    LLM --> GUARD
+    GUARD -- "✅ Safe MQL" --> AGG
+    GUARD -- "🚫 Blocked" --> ROUTE
+
+    AGG --> RESULT
+    RESULT --> UI
+    RESULT --> PIN
+    PIN --> DASH
+
+    classDef clientNode  fill:#1e293b,stroke:#6366f1,color:#e2e8f0,rx:8
+    classDef gatewayNode fill:#1e293b,stroke:#0ea5e9,color:#e2e8f0,rx:8
+    classDef aiNode      fill:#1e293b,stroke:#f59e0b,color:#e2e8f0,rx:8
+    classDef dataNode    fill:#1e293b,stroke:#22c55e,color:#e2e8f0,rx:8
+
+    class U,UI,VOICE,PIN clientNode
+    class AUTH,ROUTE,SCHEMA,FEWSHOT gatewayNode
+    class LLM,GUARD,WHISPER aiNode
+    class AGG,RESULT,DASH dataNode
 ```
 
----
-
-## Quick Start
-
-### 1) Install
-
-```bash
-git clone https://github.com/lakshmanbhukya/AtlasMind.git
-cd AtlasMind
-
-cd server && npm install
-cd ../client && npm install
-```
-
-### 2) Configure server environment
-
-Create server/.env:
-
-```env
-MONGODB_URI=mongodb+srv://<username>:<password>@<cluster>.mongodb.net/<metadata_db>
-GROQ_API_KEY=your-groq-api-key
-JWT_SECRET=your-long-random-secret
-ENCRYPTION_KEY=64_hex_chars_for_aes_256
-PORT=3001
-NODE_ENV=development
-```
-
-### 3) Run
-
-Windows shortcut:
-
-```bash
-start.bat
-```
-
-Manual:
-
-```bash
-cd server && npm run dev
-cd client && npm run dev
-```
-
-Open http://localhost:5173
-
----
 
 ## Documentation Portal
 
@@ -152,28 +160,28 @@ Open http://localhost:5173
 | [Deployment](./docs/DEPLOYMENT.md)           | Netlify + Render deployment path             |
 | [Troubleshooting](./docs/TROUBLESHOOTING.md) | Common failures and fixes                    |
 
----
 
-## CI, Docker, and Release
+## Model Roster
 
-GitHub Actions workflow at .github/workflows/ci.yml:
+AtlasMind supports dynamic model switching from the chat UI. The active Groq model lineup is:
 
-- Tests server
-- Builds client
-- Builds and pushes server/client Docker images on main
+| Model | Provider | Role | Speed |
+| ----- | -------- | ---- | ----- |
+| `llama-3.3-70b-versatile` | Meta | Default — balanced MQL generation & schema reasoning | Fast |
+| `moonshotai/kimi-k2-instruct` | Moonshot AI | Frontier agentic reasoning & multi-step pipelines | Ultra |
+| `openai/gpt-oss-120b` | OpenAI Community | Deep multi-stage pipeline precision | Balanced |
+| `llama-3.1-8b-instant` | Meta | Ultra-low latency MQL prototyping | Fastest |
+| `groq/compound` | Groq Labs | Multi-model agentic router with safety validation | Sub-150ms |
+| `whisper-large-v3-turbo` | OpenAI | Voice transcription (audio → text) | — |
 
-Required GitHub secrets:
+### Changelog — August 2026
 
-- DISCORD_WEBHOOK
-- DOCKERHUB_USERNAME
-- DOCKERHUB_TOKEN
+Groq deprecated the following models on **July 17, 2026**:
 
-Manual Docker build examples:
-
-```bash
-docker build -t your-username/atlasmind-server ./server
-docker build -t your-username/atlasmind-client ./client
-```
+| Removed | Replaced By | Reason |
+| ------- | ----------- | ------ |
+| `meta-llama/llama-4-scout-17b-16e-instruct` | `moonshotai/kimi-k2-instruct` | Official Groq deprecation (Jul 17 2026) |
+| `qwen/qwen3-32b` | `llama-3.1-8b-instant` | Official Groq deprecation (Jul 17 2026) |
 
 ---
 

@@ -167,21 +167,12 @@ AtlasMind supports dynamic model switching from the chat UI. The active Groq mod
 
 | Model | Provider | Role | Speed |
 | ----- | -------- | ---- | ----- |
-| `llama-3.3-70b-versatile` | Meta | Default — balanced MQL generation & schema reasoning | Fast |
-| `moonshotai/kimi-k2-instruct` | Moonshot AI | Frontier agentic reasoning & multi-step pipelines | Ultra |
-| `openai/gpt-oss-120b` | OpenAI Community | Deep multi-stage pipeline precision | Balanced |
-| `llama-3.1-8b-instant` | Meta | Ultra-low latency MQL prototyping | Fastest |
+| `openai/gpt-oss-120b` | OpenAI Community | Default — flagship precision MQL generation & schema reasoning | Balanced |
+| `openai/gpt-oss-20b` | OpenAI Community | Lightweight ultra-fast MQL prototyping | Fastest |
 | `groq/compound` | Groq Labs | Multi-model agentic router with safety validation | Sub-150ms |
-| `whisper-large-v3-turbo` | OpenAI | Voice transcription (audio → text) | — |
-
-### Changelog — August 2026
-
-Groq deprecated the following models on **July 17, 2026**:
-
-| Removed | Replaced By | Reason |
-| ------- | ----------- | ------ |
-| `meta-llama/llama-4-scout-17b-16e-instruct` | `moonshotai/kimi-k2-instruct` | Official Groq deprecation (Jul 17 2026) |
-| `qwen/qwen3-32b` | `llama-3.1-8b-instant` | Official Groq deprecation (Jul 17 2026) |
+| `qwen/qwen3.8-27b` | Alibaba Cloud | Frontier coder architecture for complex nested Mongo queries | Fast |
+| `qwen/qwen3.6-27b` | Alibaba Cloud | Structured data reasoning for relational joins and aggregations | Fast |
+| `whisper-large-v3-turbo` | OpenAI | Voice transcription (audio → text) | Realtime |
 
 ---
 

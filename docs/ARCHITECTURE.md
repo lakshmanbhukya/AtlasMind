@@ -17,7 +17,7 @@ flowchart TD
     E --> F[/api/query or /api/voice]
     F --> G[Schema Profiler]
     G --> H[Few-Shot Retriever]
-    H --> I[Groq LLM llama-3.3-70b-versatile]
+    H --> I[Groq LLM openai/gpt-oss-120b]
     I --> J[Safety Guard]
     J --> K[Query Executor]
     end
@@ -64,7 +64,7 @@ Notes:
 
 - Node.js 18+ and Express 4
 - MongoDB Node Driver
-- Groq SDK (llama-3.3-70b-versatile + whisper-large-v3-turbo)
+- Groq SDK (openai/gpt-oss-120b + whisper-large-v3-turbo)
 - JWT cookie auth + encryption for stored connection URIs
 - express-rate-limit for API and auth route throttling
 

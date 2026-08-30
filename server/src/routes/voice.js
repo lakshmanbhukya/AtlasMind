@@ -56,6 +56,7 @@ router.post('/', upload.single('audio'), async (req, res) => {
 
         const { buffer, originalname, size } = req.file;
         const connectionId = req.connectionId;
+        const model = req.body?.model;
 
         console.log(`🎙️ Transcribing audio: ${originalname} (${(size / 1024).toFixed(1)} KB)`);
 
@@ -71,7 +72,7 @@ router.post('/', upload.single('audio'), async (req, res) => {
             });
         }
 
-        console.log(`📝 Transcribed: "${queryText}"`);
+        console.log(`📝 Transcribed: "${queryText}" (Model: ${model || 'default'})`);
 
         // Step 2: Connect to USER DB
         const userConn = await getConnectionById(connectionId);
@@ -90,7 +91,7 @@ router.post('/', upload.single('audio'), async (req, res) => {
         ]);
 
         const similarQueriesCount = fewShotExamples.length;
-        const llmResult = await generateMQL(queryText, schemaContext, fewShotExamples);
+        const llmResult = await generateMQL(queryText, schemaContext, fewShotExamples, model);
 
         // Empty pipeline fallback
         if (llmResult.pipeline.length === 0) {

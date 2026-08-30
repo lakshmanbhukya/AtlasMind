@@ -19,17 +19,21 @@ function getGroqClient() {
     return groqClient;
 }
 
+const DEFAULT_MODEL = 'openai/gpt-oss-120b';
+
 /**
  * Generate an MQL aggregation pipeline from natural language.
  *
  * @param {string} naturalLanguage - The user's query in plain English
  * @param {string} schemaContext - Minified schema string
  * @param {object[]} fewShotExamples - Similar NL→MQL examples
- * @returns {Promise<{ pipeline: object[], collection: string, chartType: string }>}
+ * @param {string} [model='openai/gpt-oss-120b'] - Groq LLM model ID
+ * @returns {Promise<{ pipeline: object[], collection: string, chartType: string, explanation: string|null }>}
  */
-async function generateMQL(naturalLanguage, schemaContext, fewShotExamples, model = 'llama-3.3-70b-versatile') {
+async function generateMQL(naturalLanguage, schemaContext, fewShotExamples, model = DEFAULT_MODEL) {
     const client = getGroqClient();
     const systemPrompt = buildSystemPrompt(schemaContext, fewShotExamples);
+    const targetModel = model || DEFAULT_MODEL;
 
     let chatCompletion;
     try {
@@ -38,21 +42,21 @@ async function generateMQL(naturalLanguage, schemaContext, fewShotExamples, mode
                 { role: 'system', content: systemPrompt },
                 { role: 'user', content: naturalLanguage },
             ],
-            model: model,
+            model: targetModel,
             temperature: 0.1,          // Low temperature for deterministic query generation
             max_tokens: 2048,
             top_p: 1,
             response_format: { type: 'json_object' },
         });
     } catch (err) {
-        if (model !== 'llama-3.3-70b-versatile') {
-            console.warn(`⚠️ Custom model "${model}" execution failed, falling back to "llama-3.3-70b-versatile":`, err.message);
+        if (targetModel !== DEFAULT_MODEL) {
+            console.warn(`⚠️ Custom model "${targetModel}" execution failed, falling back to "${DEFAULT_MODEL}":`, err.message);
             chatCompletion = await client.chat.completions.create({
                 messages: [
                     { role: 'system', content: systemPrompt },
                     { role: 'user', content: naturalLanguage },
                 ],
-                model: 'llama-3.3-70b-versatile',
+                model: DEFAULT_MODEL,
                 temperature: 0.1,
                 max_tokens: 2048,
                 top_p: 1,
@@ -116,18 +120,30 @@ async function generateMQL(naturalLanguage, schemaContext, fewShotExamples, mode
  * @param {string} filename - Original filename (for format detection)
  * @returns {Promise<{ text: string, language?: string, duration?: number }>}
  */
-async function transcribeAudio(audioBuffer, filename) {
+async function transcribeAudio(audioBuffer, filename = 'recording.webm') {
     const client = getGroqClient();
     const { toFile } = require('groq-sdk');
 
     const file = await toFile(audioBuffer, filename);
 
-    const transcription = await client.audio.transcriptions.create({
-        model: 'whisper-large-v3-turbo',
-        file,
-        language: 'en',
-        response_format: 'verbose_json',
-    });
+    let transcription;
+    try {
+        transcription = await client.audio.transcriptions.create({
+            model: 'whisper-large-v3-turbo',
+            file,
+            language: 'en',
+            response_format: 'verbose_json',
+        });
+    } catch (err) {
+        console.warn('⚠️ whisper-large-v3-turbo transcription failed, trying whisper-large-v3:', err.message);
+        const fallbackFile = await toFile(audioBuffer, filename);
+        transcription = await client.audio.transcriptions.create({
+            model: 'whisper-large-v3',
+            file: fallbackFile,
+            language: 'en',
+            response_format: 'verbose_json',
+        });
+    }
 
     return {
         text: transcription.text,
@@ -136,4 +152,4 @@ async function transcribeAudio(audioBuffer, filename) {
     };
 }
 
-module.exports = { generateMQL, transcribeAudio };
+module.exports = { generateMQL, transcribeAudio, DEFAULT_MODEL };

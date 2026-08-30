@@ -159,38 +159,20 @@ function ResultsCard({ msg, onPin }) {
  */
 const AVAILABLE_MODELS = [
   {
-    id: 'llama-3.3-70b-versatile',
-    name: 'Llama 3.3 Versatile',
-    provider: 'Meta',
-    desc: 'Default balanced model. Superior MQL translation and schema reasoning.',
-    badge: '70B Params',
-    badgeColor: 'bg-primary/20 text-primary border border-primary/30',
-    speed: 'Fast'
-  },
-  {
-    id: 'moonshotai/kimi-k2-instruct',
-    name: 'Kimi K2 Instruct',
-    provider: 'Moonshot AI',
-    desc: 'Frontier agentic model excelling at complex reasoning and multi-step MQL generation.',
-    badge: 'Kimi K2',
-    badgeColor: 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30',
-    speed: 'Ultra'
-  },
-  {
     id: 'openai/gpt-oss-120b',
     name: 'GPT OSS 120B',
     provider: 'OpenAI Community',
-    desc: 'Enormous open model with extreme deep multi-stage pipeline precision.',
+    desc: 'Default flagship model with deep multi-stage pipeline precision and schema reasoning.',
     badge: '120B Params',
-    badgeColor: 'bg-purple-500/20 text-purple-400 border border-purple-500/30',
+    badgeColor: 'bg-primary/20 text-primary border border-primary/30',
     speed: 'Balanced'
   },
   {
-    id: 'llama-3.1-8b-instant',
-    name: 'Llama 3.1 Instant',
-    provider: 'Meta',
-    desc: 'Ultra-low latency model for rapid MQL prototyping and lightweight query tasks.',
-    badge: '8B Instant',
+    id: 'openai/gpt-oss-20b',
+    name: 'GPT OSS 20B',
+    provider: 'OpenAI Community',
+    desc: 'Lightweight, ultra-fast model for rapid MQL prototyping and simple aggregation pipelines.',
+    badge: '20B Fast',
     badgeColor: 'bg-amber-500/20 text-amber-400 border border-amber-500/30',
     speed: 'Fastest'
   },
@@ -198,10 +180,28 @@ const AVAILABLE_MODELS = [
     id: 'groq/compound',
     name: 'Groq Compound',
     provider: 'Groq Labs',
-    desc: 'Multi-model agent router compiling safety validation and generation.',
-    badge: 'Hybrid Router',
+    desc: 'Multi-model agentic router combining validation, query generation, and safety checks.',
+    badge: 'Agent Router',
     badgeColor: 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30',
     speed: 'Sub-150ms'
+  },
+  {
+    id: 'qwen/qwen3.8-27b',
+    name: 'Qwen 3.8 27B',
+    provider: 'Alibaba Cloud',
+    desc: 'Frontier coder architecture optimized for complex nested Mongo pipelines and expressions.',
+    badge: '27B Params',
+    badgeColor: 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30',
+    speed: 'Fast'
+  },
+  {
+    id: 'qwen/qwen3.6-27b',
+    name: 'Qwen 3.6 27B',
+    provider: 'Alibaba Cloud',
+    desc: 'High-precision structured data reasoning model for relational joins and aggregations.',
+    badge: '27B Coder',
+    badgeColor: 'bg-purple-500/20 text-purple-400 border border-purple-500/30',
+    speed: 'Fast'
   }
 ];
 
@@ -278,10 +278,24 @@ export default function AtlasChatPanel({ onLastMessage, onNewQuery, onPinAdded, 
 
       setVoiceLoading(true);
       try {
-        const response = await sendVoice(blob);
+        const response = await sendVoice(blob, selectedModel);
         addVoiceResult(response);
       } catch (err) {
         console.error("[Voice] Error:", err.message);
+        const errorMessage = err.response?.data?.error?.message 
+          || err.response?.data?.error 
+          || err.message 
+          || "Failed to process voice query. Please try speaking again.";
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: Date.now() + Math.random(),
+            role: "assistant",
+            content: `🎙️ Voice Query Error: ${errorMessage}`,
+            timestamp: new Date(),
+            isError: true,
+          }
+        ]);
       } finally {
         setVoiceLoading(false);
       }
@@ -562,7 +576,7 @@ export default function AtlasChatPanel({ onLastMessage, onNewQuery, onPinAdded, 
               {/* Accent dot */}
               <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0 shadow-[0_0_6px_rgba(0,237,100,0.7)]" />
               <span className="hidden md:inline text-[12px] font-semibold text-foreground/80 group-hover:text-foreground transition-colors max-w-[110px] truncate">
-                {AVAILABLE_MODELS.find(m => m.id === selectedModel)?.name || "Llama 3.3"}
+                {AVAILABLE_MODELS.find(m => m.id === selectedModel)?.name || "GPT OSS 120B"}
               </span>
               <ChevronDown className={cn("h-3 w-3 text-muted-foreground/50 transition-transform duration-200 shrink-0", modelDropdownOpen && "rotate-180")} />
             </button>

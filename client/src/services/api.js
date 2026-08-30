@@ -56,14 +56,18 @@ export async function approveWriteQuery(approvalToken) {
 /**
  * Send audio blob for speech-to-query.
  * @param {Blob} audioBlob
+ * @param {string} [model]
  * @returns {Promise<object>}
  */
-export async function sendVoice(audioBlob) {
+export async function sendVoice(audioBlob, model) {
     const formData = new FormData();
     formData.append('audio', audioBlob, 'recording.webm');
+    if (model) {
+        formData.append('model', model);
+    }
     const { data } = await api.post('voice', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 30000,
+        headers: { 'Content-Type': undefined },
+        timeout: 45000,
     });
     return data;
 }

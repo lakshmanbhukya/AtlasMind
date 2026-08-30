@@ -10,7 +10,7 @@ export function useChat(selectedQueryId, onQuerySuccess) {
     const [messages, setMessages] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
-    const [selectedModel, setSelectedModel] = useState('llama-3.3-70b-versatile');
+    const [selectedModel, setSelectedModel] = useState('openai/gpt-oss-120b');
     const messagesEndRef = useRef(null);
 
     // Auto-scroll to bottom on new messages

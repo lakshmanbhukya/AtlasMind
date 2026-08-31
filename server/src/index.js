@@ -9,6 +9,7 @@ const { initializeCollection } = require("./models/UserConnection");
 const { initializeCleanupIndexes, startCleanupCron } = require("./services/cleanupService");
 const { requireAuth } = require("./middleware/auth");
 const { generalLimiter, authLimiter } = require("./middleware/rateLimiter");
+const { cleanupPool, getPoolSize } = require("./services/userDbPool");
 
 // Import routes
 const authRoutes = require("./routes/auth");
@@ -99,6 +100,7 @@ app.get("/api/health", (_req, res) => {
     status: "ok",
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
+    userDbPoolSize: getPoolSize(),
   });
 });
 
@@ -144,11 +146,20 @@ async function startServer() {
     await initializeCleanupIndexes();
     startCleanupCron();
 
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
       console.log(`\n🚀 AtlasMind server running on http://localhost:${PORT}`);
       console.log(`   Environment: ${process.env.NODE_ENV || "development"}`);
       console.log(`   Health:      http://localhost:${PORT}/api/health\n`);
     });
+
+    // Graceful shutdown: close user DB pool alongside the central DB connection
+    const shutdown = async () => {
+      console.log("\n🛑 Shutting down gracefully...");
+      await cleanupPool();
+      server.close();
+    };
+    process.on("SIGINT", shutdown);
+    process.on("SIGTERM", shutdown);
   } catch (error) {
     console.error("❌ Failed to start server:", error.message);
     process.exit(1);

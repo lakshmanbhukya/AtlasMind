@@ -102,7 +102,7 @@ flowchart TD
 
     subgraph AI["🤖  AI Pipeline  ·  Groq LPU"]
         direction TB
-        LLM("⚡ LLM · llama-3.3-70b / kimi-k2 / compound")
+        LLM("⚡ LLM · gpt-oss-120b / compound / qwen3.8")
         GUARD("🛡️ Safety Guard · Read-Only Enforcer")
         WHISPER("🎧 Whisper · whisper-large-v3-turbo")
     end

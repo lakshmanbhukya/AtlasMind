@@ -73,6 +73,7 @@ Notes:
 - Service layer: AI, schema, execution, and safety logic live outside routes.
 - Stateless route handlers + shared infrastructure singletons.
 - Guard-first execution: generated pipelines are validated before DB execution.
+- Scheduled Auto-Cleaner: background cron service purging playground query history older than 30 days.
 - Dual data context:
   - User database for analytics queries.
   - AtlasMind metadata database for saved connections, history, and dashboard pins.

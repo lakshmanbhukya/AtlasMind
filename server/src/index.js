@@ -6,6 +6,7 @@ const cookieParser = require("cookie-parser");
 const path = require("path");
 const { connectToDatabase } = require("./db/connection");
 const { initializeCollection } = require("./models/UserConnection");
+const { initializeCleanupIndexes, startCleanupCron } = require("./services/cleanupService");
 const { requireAuth } = require("./middleware/auth");
 const { generalLimiter, authLimiter } = require("./middleware/rateLimiter");
 
@@ -140,6 +141,8 @@ async function startServer() {
   try {
     await connectToDatabase();
     await initializeCollection();
+    await initializeCleanupIndexes();
+    startCleanupCron();
 
     app.listen(PORT, () => {
       console.log(`\n🚀 AtlasMind server running on http://localhost:${PORT}`);

@@ -1,8 +1,6 @@
 const express = require('express');
-const { MongoClient } = require('mongodb');
 const { profileSchema } = require('../services/schemaProfiler');
-const { getConnectionById } = require('../models/UserConnection');
-const { decrypt } = require('../utils/encryption');
+const { getUserDb } = require('../services/userDbPool');
 
 const router = express.Router();
 
@@ -16,21 +14,9 @@ const router = express.Router();
  * Uses req.connectionId (from JWT cookie) to connect to the user's own DB.
  */
 router.get('/', async (req, res) => {
-    let client = null;
     try {
         const connectionId = req.connectionId;
-        const userConn = await getConnectionById(connectionId);
-        if (!userConn) {
-            return res.status(404).json({
-                success: false,
-                error: { message: 'Connection not found' },
-            });
-        }
-
-        const uri = decrypt(userConn.encryptedUri);
-        client = new MongoClient(uri, { serverSelectionTimeoutMS: 5000, maxPoolSize: 2 });
-        await client.connect();
-        const db = client.db(userConn.dbName);
+        const db = await getUserDb(connectionId);
 
         const schema = await profileSchema(db);
 
@@ -47,8 +33,6 @@ router.get('/', async (req, res) => {
                 message: error.message || 'Failed to profile database schema',
             },
         });
-    } finally {
-        if (client) await client.close();
     }
 });
 
@@ -58,21 +42,9 @@ router.get('/', async (req, res) => {
  * Force-refreshes the schema cache for this user's database.
  */
 router.get('/refresh', async (req, res) => {
-    let client = null;
     try {
         const connectionId = req.connectionId;
-        const userConn = await getConnectionById(connectionId);
-        if (!userConn) {
-            return res.status(404).json({
-                success: false,
-                error: { message: 'Connection not found' },
-            });
-        }
-
-        const uri = decrypt(userConn.encryptedUri);
-        client = new MongoClient(uri, { serverSelectionTimeoutMS: 5000, maxPoolSize: 2 });
-        await client.connect();
-        const db = client.db(userConn.dbName);
+        const db = await getUserDb(connectionId);
 
         const schema = await profileSchema(db, { forceRefresh: true });
 
@@ -90,8 +62,6 @@ router.get('/refresh', async (req, res) => {
                 message: error.message || 'Failed to refresh schema',
             },
         });
-    } finally {
-        if (client) await client.close();
     }
 });
 

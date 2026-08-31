@@ -1,14 +1,12 @@
 const express = require('express');
 const multer = require('multer');
-const { MongoClient } = require('mongodb');
 const { transcribeAudio } = require('../services/groqService');
 const { getMinifiedSchema } = require('../services/schemaProfiler');
 const { getSimilarExamples } = require('../services/fewShotRetriever');
 const { generateMQL } = require('../services/groqService');
 const { validatePipeline, validateCollectionName } = require('../services/safetyGuard');
 const { executePipeline, saveQueryHistory } = require('../services/queryExecutor');
-const { getConnectionById } = require('../models/UserConnection');
-const { decrypt } = require('../utils/encryption');
+const { getUserDb } = require('../services/userDbPool');
 
 const router = express.Router();
 
@@ -44,7 +42,6 @@ const upload = multer({
  */
 router.post('/', upload.single('audio'), async (req, res) => {
     const startTime = Date.now();
-    let client = null;
 
     try {
         if (!req.file) {
@@ -74,15 +71,8 @@ router.post('/', upload.single('audio'), async (req, res) => {
 
         console.log(`📝 Transcribed: "${queryText}" (Model: ${model || 'default'})`);
 
-        // Step 2: Connect to USER DB
-        const userConn = await getConnectionById(connectionId);
-        if (!userConn) {
-            return res.status(404).json({ success: false, error: { message: 'Connection not found' } });
-        }
-        const uri = decrypt(userConn.encryptedUri);
-        client = new MongoClient(uri, { serverSelectionTimeoutMS: 5000, maxPoolSize: 2 });
-        await client.connect();
-        const userDb = client.db(userConn.dbName);
+        // Step 2: Get User DB (pooled connection — reused across requests)
+        const userDb = await getUserDb(connectionId);
 
         // Step 3: Profile schema + retrieve examples (in parallel)
         const [schemaContext, fewShotExamples] = await Promise.all([
@@ -192,8 +182,6 @@ router.post('/', upload.single('audio'), async (req, res) => {
             success: false,
             error: { code: 'voice_pipeline_error', message: error.message || 'Failed to process voice query' },
         });
-    } finally {
-        if (client) await client.close();
     }
 });
 

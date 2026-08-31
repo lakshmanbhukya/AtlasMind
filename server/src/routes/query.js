@@ -1,12 +1,10 @@
 const express = require('express');
-const { MongoClient } = require('mongodb');
 const { getMinifiedSchema } = require('../services/schemaProfiler');
 const { getSimilarExamples, addExample } = require('../services/fewShotRetriever');
 const { generateMQL } = require('../services/groqService');
 const { validatePipeline, validateCollectionName } = require('../services/safetyGuard');
 const { executePipeline, saveQueryHistory } = require('../services/queryExecutor');
-const { getConnectionById } = require('../models/UserConnection');
-const { decrypt } = require('../utils/encryption');
+const { getUserDb } = require('../services/userDbPool');
 const { getDb } = require('../db/connection');
 
 const router = express.Router();
@@ -23,7 +21,6 @@ const router = express.Router();
  */
 router.post('/', async (req, res) => {
     const startTime = Date.now();
-    let client = null;
 
     try {
         // 1. Validate request body
@@ -49,18 +46,8 @@ router.post('/', async (req, res) => {
             });
         }
 
-        // 2. Fetch User Connection & Decrypt
-        const userConn = await getConnectionById(connectionId);
-        if (!userConn) {
-            return res.status(404).json({ success: false, error: { message: 'Connection not found or inactive' } });
-        }
-
-        const uri = decrypt(userConn.encryptedUri);
-
-        // 3. Connect to User DB
-        client = new MongoClient(uri, { serverSelectionTimeoutMS: 5000, maxPoolSize: 2 });
-        await client.connect();
-        const userDb = client.db(userConn.dbName);
+        // 2. Get User DB (pooled connection — reused across requests)
+        const userDb = await getUserDb(connectionId);
 
         // 4. Profile schema + retrieve few-shot examples (in parallel)
         // forceRefresh: true avoids stale schema cache from a different DB connection
@@ -249,8 +236,6 @@ router.post('/', async (req, res) => {
                 message: error.message || 'Failed to process query',
             },
         });
-    } finally {
-        if (client) await client.close();
     }
 });
 
@@ -474,7 +459,6 @@ router.delete('/history/:id', async (req, res) => {
  */
 router.post('/approve', async (req, res) => {
     const startTime = Date.now();
-    let client = null;
 
     try {
         const { approvalToken } = req.body;
@@ -505,21 +489,8 @@ router.post('/approve', async (req, res) => {
 
         const { connectionId, collection, pipeline, query } = decoded;
 
-        // Verify active connection credentials
-        const userConn = await getConnectionById(connectionId);
-        if (!userConn) {
-            return res.status(404).json({
-                success: false,
-                error: { code: 'not_found', message: 'Active database session connection not found' },
-            });
-        }
-
-        const uri = decrypt(userConn.encryptedUri);
-
-        // Connect & execute write transaction
-        client = new MongoClient(uri, { serverSelectionTimeoutMS: 5000, maxPoolSize: 2 });
-        await client.connect();
-        const userDb = client.db(userConn.dbName);
+        // Get User DB (pooled connection — reused across requests)
+        const userDb = await getUserDb(connectionId);
 
         // Run mutating aggregation pipeline directly on database collection
         const { results, executionTimeMs } = await executePipeline(
@@ -567,8 +538,6 @@ router.post('/approve', async (req, res) => {
             success: false,
             error: { code: 'execution_error', message: error.message || 'Failed to apply approved write transaction' },
         });
-    } finally {
-        if (client) await client.close();
     }
 });
 

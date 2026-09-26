@@ -82,70 +82,11 @@ You ask a question in plain English. AtlasMind profiles schema context, generate
 
 ## Architecture Snapshot
 
-```mermaid
-flowchart TD
-    subgraph CLIENT["🖥️  Client Layer"]
-        direction TB
-        U("👤 User")
-        UI("⚡ React + Vite UI")
-        VOICE("🎙️ Voice Upload")
-        PIN("📌 Pin to Dashboard")
-    end
+![AtlasMind Architecture](./assets/atlasmind-archify.png)
 
-    subgraph GATEWAY["🔐  API Gateway  ·  Express + JWT"]
-        direction TB
-        AUTH("🔑 Auth · httpOnly Cookie")
-        ROUTE("🔀 Route · /query  /voice  /pin")
-        SCHEMA("🗂️ Schema Profiler · Field & Collection Metadata")
-        FEWSHOT("🧠 Few-Shot Retriever · Cosine Similarity")
-    end
+### Interactive Visual Architecture
 
-    subgraph AI["🤖  AI Pipeline  ·  Groq LPU"]
-        direction TB
-        LLM("⚡ LLM · gpt-oss-120b / compound / qwen3.8")
-        GUARD("🛡️ Safety Guard · Read-Only Enforcer")
-        WHISPER("🎧 Whisper · whisper-large-v3-turbo")
-    end
-
-    subgraph DATA["🗄️  Data Layer  ·  MongoDB"]
-        direction TB
-        AGG("⚙️ Aggregation Executor")
-        RESULT("📊 Charts + Explanation")
-        DASH("🗃️ Dashboard Store")
-    end
-
-    U -- "Text Query" --> UI
-    U -- "Audio File" --> VOICE
-    UI --> AUTH
-    VOICE --> AUTH
-    AUTH --> ROUTE
-
-    ROUTE --> SCHEMA
-    SCHEMA --> FEWSHOT
-    FEWSHOT --> LLM
-
-    VOICE -- "Buffer" --> WHISPER
-    WHISPER -- "Transcript" --> LLM
-
-    LLM --> GUARD
-    GUARD -- "✅ Safe MQL" --> AGG
-    GUARD -- "🚫 Blocked" --> ROUTE
-
-    AGG --> RESULT
-    RESULT --> UI
-    RESULT --> PIN
-    PIN --> DASH
-
-    classDef clientNode  fill:#1e293b,stroke:#6366f1,color:#e2e8f0,rx:8
-    classDef gatewayNode fill:#1e293b,stroke:#0ea5e9,color:#e2e8f0,rx:8
-    classDef aiNode      fill:#1e293b,stroke:#f59e0b,color:#e2e8f0,rx:8
-    classDef dataNode    fill:#1e293b,stroke:#22c55e,color:#e2e8f0,rx:8
-
-    class U,UI,VOICE,PIN clientNode
-    class AUTH,ROUTE,SCHEMA,FEWSHOT gatewayNode
-    class LLM,GUARD,WHISPER aiNode
-    class AGG,RESULT,DASH dataNode
-```
+[https://lakshmanbhukya.github.io/AtlasMind/](https://lakshmanbhukya.github.io/AtlasMind/)
 
 
 ## Documentation Portal

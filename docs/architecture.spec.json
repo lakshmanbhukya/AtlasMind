@@ -1,0 +1,295 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "AtlasMind Runtime Architecture",
+    "output": "index.html",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "query-pipeline",
+        "label": "Query & Safety Pipeline",
+        "focus": ["client-ui", "api-client", "api-gateway", "ambiguity-gate", "groq-ai", "safety-guard", "query-executor", "user-db"],
+        "note": "Follow natural language queries through the Ambiguity Gate, dual-mode Groq LLM generation, AST safety verification, and aggregation execution."
+      },
+      {
+        "id": "ambiguity-resolution",
+        "label": "Ambiguity Resolution Loop",
+        "focus": ["client-ui", "api-client", "api-gateway", "schema-profiler", "ambiguity-gate", "groq-ai"],
+        "note": "Inspect how vague queries trigger schema-grounded ClarificationCard options, stateless single-round loop prevention, and allowlist-validated MQL generation."
+      },
+      {
+        "id": "grounding-context",
+        "label": "Schema & Tenant Grounding",
+        "focus": ["schema-profiler", "few-shot", "ambiguity-gate", "groq-ai"],
+        "note": "Review how per-connection schema caching, tenant-scoped few-shot memory, and the Ambiguity Gate ground LLM prompts."
+      },
+      {
+        "id": "session-and-metadata",
+        "label": "Session & Metadata Store",
+        "focus": ["client-ui", "api-client", "api-gateway", "auth-mw", "app-db"],
+        "note": "Examine session cookie authentication, consolidated query history with clarification state, and public/private dashboard pins."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "client-ui",
+      "type": "frontend",
+      "label": "AtlasMind UI",
+      "sublabel": "React 19 SPA :5173",
+      "tag": "Chat, Clarify & Pins",
+      "brand": "react",
+      "pos": [50, 140],
+      "size": [150, 65]
+    },
+    {
+      "id": "api-client",
+      "type": "frontend",
+      "label": "API Client",
+      "sublabel": "Axios (credentials)",
+      "tag": "httpOnly Session",
+      "pos": [50, 320],
+      "size": [150, 65]
+    },
+    {
+      "id": "auth-mw",
+      "type": "security",
+      "label": "Auth Middleware",
+      "sublabel": "JWT Cookie Verify",
+      "tag": "requireAuth",
+      "pos": [295, 140],
+      "size": [150, 65]
+    },
+    {
+      "id": "api-gateway",
+      "type": "backend",
+      "label": "Express API",
+      "sublabel": "Node.js Server :3001",
+      "tag": "Stateless & Shared",
+      "brand": "node.js",
+      "pos": [295, 320],
+      "size": [150, 65]
+    },
+    {
+      "id": "app-db",
+      "type": "database",
+      "label": "Metadata DB",
+      "sublabel": "AtlasMind Core Store",
+      "tag": "History, Clarify & Pins",
+      "brand": "mongodb",
+      "pos": [295, 500],
+      "size": [150, 65]
+    },
+    {
+      "id": "schema-profiler",
+      "type": "backend",
+      "label": "Schema Profiler",
+      "sublabel": "Per-Connection Sampler",
+      "tag": "Bounded TTL Cache",
+      "pos": [540, 140],
+      "size": [150, 65]
+    },
+    {
+      "id": "ambiguity-gate",
+      "type": "security",
+      "label": "Ambiguity Gate",
+      "sublabel": "Deterministic + LLM",
+      "tag": "Schema Allowlist",
+      "pos": [540, 320],
+      "size": [150, 65]
+    },
+    {
+      "id": "few-shot",
+      "type": "backend",
+      "label": "Few-Shot Matcher",
+      "sublabel": "Tenant-Scoped Memory",
+      "tag": "connectionId Isolated",
+      "pos": [540, 500],
+      "size": [150, 65]
+    },
+    {
+      "id": "groq-ai",
+      "type": "external",
+      "label": "Groq AI Cloud",
+      "sublabel": "Whisper & Llama 3.3",
+      "tag": "Clarify or Generate MQL",
+      "pos": [785, 320],
+      "size": [150, 65]
+    },
+    {
+      "id": "safety-guard",
+      "type": "security",
+      "label": "Safety Guard",
+      "sublabel": "Read-Only Validator",
+      "tag": "AST Stage Filter",
+      "pos": [785, 140],
+      "size": [150, 65]
+    },
+    {
+      "id": "query-executor",
+      "type": "backend",
+      "label": "Query Executor",
+      "sublabel": "userDbPool Manager",
+      "tag": "Aggregation Engine",
+      "pos": [1030, 140],
+      "size": [150, 65]
+    },
+    {
+      "id": "user-db",
+      "type": "database",
+      "label": "User MongoDB",
+      "sublabel": "Analytics Target",
+      "tag": "Target Database",
+      "brand": "mongodb",
+      "pos": [1030, 320],
+      "size": [150, 65]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Client Layer (Browser Runtime)",
+      "wraps": ["client-ui", "api-client"]
+    },
+    {
+      "kind": "region",
+      "label": "API Gateway & Session",
+      "wraps": ["auth-mw", "api-gateway"]
+    },
+    {
+      "kind": "region",
+      "label": "Prompt Grounding & Ambiguity",
+      "wraps": ["schema-profiler", "ambiguity-gate", "few-shot"]
+    },
+    {
+      "kind": "region",
+      "label": "Safety & Query Execution",
+      "wraps": ["safety-guard", "query-executor"]
+    },
+    {
+      "kind": "region",
+      "label": "External AI Cloud",
+      "wraps": ["groq-ai"]
+    },
+    {
+      "kind": "region",
+      "label": "Target Database Tier",
+      "wraps": ["user-db"]
+    },
+    {
+      "kind": "region",
+      "label": "Application Metadata Store",
+      "wraps": ["app-db"]
+    }
+  ],
+  "connections": [
+    {
+      "id": "ui-to-client",
+      "from": "client-ui",
+      "to": "api-client",
+      "label": "query & answers"
+    },
+    {
+      "id": "client-to-gateway",
+      "from": "api-client",
+      "to": "api-gateway",
+      "label": "HTTPS + JWT",
+      "variant": "emphasis"
+    },
+    {
+      "id": "gateway-to-auth",
+      "from": "api-gateway",
+      "to": "auth-mw",
+      "label": "verify JWT",
+      "variant": "security"
+    },
+    {
+      "id": "gateway-to-appdb",
+      "from": "api-gateway",
+      "to": "app-db",
+      "label": "history & pins"
+    },
+    {
+      "id": "gateway-to-ambiguity",
+      "from": "api-gateway",
+      "to": "ambiguity-gate",
+      "label": "ambiguity check",
+      "variant": "security"
+    },
+    {
+      "id": "profiler-to-ambiguity",
+      "from": "schema-profiler",
+      "to": "ambiguity-gate",
+      "label": "schema context"
+    },
+    {
+      "id": "fewshot-to-ambiguity",
+      "from": "few-shot",
+      "to": "ambiguity-gate",
+      "label": "tenant examples"
+    },
+    {
+      "id": "appdb-to-fewshot",
+      "from": "app-db",
+      "to": "few-shot",
+      "label": "scoped memory"
+    },
+    {
+      "id": "ambiguity-to-groq",
+      "from": "ambiguity-gate",
+      "to": "groq-ai",
+      "label": "dual-mode prompt",
+      "variant": "emphasis"
+    },
+    {
+      "id": "groq-to-safety",
+      "from": "groq-ai",
+      "to": "safety-guard",
+      "label": "raw pipeline"
+    },
+    {
+      "id": "safety-to-executor",
+      "from": "safety-guard",
+      "to": "query-executor",
+      "label": "safe MQL",
+      "variant": "emphasis"
+    },
+    {
+      "id": "executor-to-userdb",
+      "from": "query-executor",
+      "to": "user-db",
+      "label": "run aggregate",
+      "variant": "emphasis"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Client & Clarification UI",
+      "items": [
+        "React 19 SPA with Tailwind CSS, Framer Motion, and Recharts",
+        "Interactive ClarificationCard with recommended pre-selection & custom input",
+        "Supports natural language chat, voice WebM, in-place clarification editing & public/private dashboard pins"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Ambiguity Gate & Grounding",
+      "items": [
+        "Hybrid deterministic + LLM Ambiguity Gate with single-round loop prevention",
+        "Strict schema allowlist validation blocks prompt injection & invented fields",
+        "Per-connection Schema Profiler cache (bounded TTL) & tenant-scoped Few-Shot memory"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "AI, Safety & Storage",
+      "items": [
+        "Dual-mode Groq LPU (Whisper STT + Llama 3.3 70B clarify-or-generate MQL)",
+        "Safety Guard AST stage validator + isolated MongoClient connection pools per user",
+        "Consolidated query history with clarification state & live userDb dashboard refresh"
+      ]
+    }
+  ]
+}

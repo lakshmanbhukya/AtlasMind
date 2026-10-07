@@ -1,58 +1,57 @@
-# API Documentation
+# AtlasMind REST API Specification
 
-AtlasMind exposes a cookie-authenticated REST API for database connection management, natural language analytics, schema introspection, voice queries, and dashboard pinning.
+AtlasMind exposes a cookie-authenticated REST API for database connection management, natural language analytics, schema profiling, ambiguity resolution, workspace scoping, cryptographic Human-in-the-Loop write approvals, voice queries, and collaborative dashboards.
 
-Base path: /api
+**Base Path**: `/api`
 
-## Authentication and Session
+---
 
-Session auth uses an httpOnly cookie named am_token. Protected endpoints require this cookie and should be called with credentials enabled on the client.
+## 1. Authentication & Session
 
-### POST /api/connections/connect
+Session authentication uses an `httpOnly` secure cookie named `am_token`. Protected endpoints require this cookie and must be called with credentials enabled on the client (`credentials: 'include'`).
 
-Validates a MongoDB connection string + database name, stores encrypted connection metadata, and issues the am_token cookie.
+### POST `/api/connections/connect`
+Validates a MongoDB connection string + database name, stores encrypted credentials in the AtlasMind metadata database, and issues the `am_token` session cookie.
 
-Request body:
-
+**Request Body**:
 ```json
 {
-  "connectionString": "mongodb+srv://...",
+  "connectionString": "mongodb+srv://user:pass@cluster.mongodb.net",
   "dbName": "sample_analytics",
-  "label": "My Database"
+  "label": "Production Analytics"
 }
 ```
 
-Success response:
-
+**Success Response (HTTP 200)**:
 ```json
 {
   "success": true,
   "dbName": "sample_analytics",
-  "label": "My Database",
+  "label": "Production Analytics",
   "collectionCount": 4,
   "collections": ["orders", "customers", "products", "events"],
   "message": "Connected! Found 4 collections in \"sample_analytics\"."
 }
 ```
 
-### GET /api/auth/me
+### GET `/api/auth/me`
+Validates the current session cookie and returns active connection metadata.
 
-Validates current cookie and returns active connection metadata.
-
+**Success Response (HTTP 200)**:
 ```json
 {
   "success": true,
-  "connectionId": "f8a...",
+  "connectionId": "65f3a9e1d8...",
   "dbName": "sample_analytics",
-  "label": "My Database",
-  "lastConnectedAt": "2026-03-25T09:00:00.000Z"
+  "label": "Production Analytics",
+  "lastConnectedAt": "2026-10-07T12:00:00.000Z"
 }
 ```
 
-### POST /api/auth/logout
+### POST `/api/auth/logout`
+Clears the `am_token` session cookie.
 
-Clears session cookie.
-
+**Success Response (HTTP 200)**:
 ```json
 {
   "success": true,
@@ -60,108 +59,204 @@ Clears session cookie.
 }
 ```
 
-## Health
+---
 
-### GET /api/health
+## 2. Health & Status
 
-Service health + uptime.
+### GET `/api/health`
+Returns gateway status, uptime, and server timestamp. (Public endpoint)
 
+**Success Response (HTTP 200)**:
 ```json
 {
   "success": true,
   "status": "ok",
-  "timestamp": "2026-03-25T09:00:00.000Z",
-  "uptime": 123.45
+  "timestamp": "2026-10-07T12:00:00.000Z",
+  "uptime": 1824.12
 }
 ```
 
-## Query API
+---
 
-All query endpoints below are protected (require am_token cookie).
+## 3. Query Execution, Ambiguity & Scope API
 
-### POST /api/query
+All query endpoints below are protected (require `am_token` cookie).
 
-Runs NL -> MQL generation -> safety validation -> aggregation execution.
+### POST `/api/query`
+The primary query execution endpoint. Implements dual-pass ambiguity detection, collection scoping, AST safety verification, and aggregation execution.
 
-Request body:
-
+#### A. Initial Request (Standard or Ambiguous NL Query)
 ```json
 {
-  "text": "Top 5 customers by total revenue"
+  "text": "get the top sales",
+  "model": "deepseek-r1-distill-llama-70b",
+  "collections": ["orders", "customers"],
+  "workspaceId": "66f4..."
 }
 ```
 
-Response (shape may include aliases for backward compatibility):
-
+#### B. Clarification Response (HTTP 200)
+When the Ambiguity Gate detects underspecified metrics (2+ candidate schema fields):
 ```json
 {
   "success": true,
-  "naturalLanguage": "Top 5 customers by total revenue",
-  "aiMessage": "Groups orders by customer and ranks by revenue.",
-  "explanation": "Groups orders by customer and ranks by revenue.",
+  "needsClarification": true,
+  "naturalLanguage": "get the top sales",
+  "questions": [
+    {
+      "id": "metric",
+      "question": "Which metric best represents what you mean by this query?",
+      "type": "single",
+      "options": [
+        { "value": "sales_amount", "label": "Sales Amount", "recommended": true },
+        { "value": "profit", "label": "Profit" },
+        { "value": "quantity", "label": "Quantity" },
+        { "value": "__other__", "label": "Other (type it)" }
+      ]
+    }
+  ],
+  "scope": ["orders", "customers"]
+}
+```
+*Note: During clarification, no database execution occurs, no query history is saved, and no few-shot example is recorded.*
+
+#### C. Disambiguation Resubmission
+The client submits the user's selected choice from `ClarificationCard`:
+```json
+{
+  "text": "get the top sales",
+  "model": "deepseek-r1-distill-llama-70b",
+  "clarifications": [
+    { "id": "metric", "value": "sales_amount" }
+  ],
+  "bypassAmbiguity": true
+}
+```
+
+#### D. Scope Expansion Required Response (HTTP 200)
+Returned when a query references collections outside the active workspace:
+```json
+{
+  "success": true,
+  "needsClarification": false,
+  "naturalLanguage": "Show orders with customer email",
+  "safetyStatus": "scope-insufficient",
+  "suggestedCollections": ["customers"],
+  "scope": ["orders"],
+  "explanation": "This query requires the 'customers' collection which is outside your active workspace.",
+  "pipeline": [],
+  "results": []
+}
+```
+
+#### E. Mutating Write Interception Response (HTTP 200)
+Returned when a query specifies a database write, deletion, or modification:
+```json
+{
+  "success": true,
+  "naturalLanguage": "Delete inactive customers",
+  "aiMessage": "⚠️ Database Write Intercepted: This action will modify your collection \"customers\". Review and approve to execute.",
+  "safetyStatus": "approval-required",
+  "safetyBlocked": false,
+  "approvalToken": "eyJhbGciOiJIUzI1NiIsIn...",
+  "collection": "customers",
+  "pipeline": [{ "$match": { "status": "inactive" } }],
+  "results": []
+}
+```
+
+#### F. Final Execution Response (HTTP 200)
+Returned when a query is unambiguous or has been successfully clarified:
+```json
+{
+  "success": true,
+  "needsClarification": false,
+  "naturalLanguage": "get the top sales",
+  "explanation": "Aggregates orders grouped by customer and sorted by sales_amount in descending order.",
   "collection": "orders",
   "pipeline": [
-    { "$group": { "_id": "$customerId", "revenue": { "$sum": "$amount" } } },
-    { "$sort": { "revenue": -1 } },
-    { "$limit": 5 }
-  ],
-  "mql": [
-    { "$group": { "_id": "$customerId", "revenue": { "$sum": "$amount" } } },
-    { "$sort": { "revenue": -1 } },
-    { "$limit": 5 }
+    { "$group": { "_id": "$customerId", "total_sales": { "$sum": "$sales_amount" } } },
+    { "$sort": { "total_sales": -1 } },
+    { "$limit": 10 }
   ],
   "chartType": "bar",
+  "clarifications": [
+    { "id": "metric", "value": "sales_amount" }
+  ],
+  "results": [
+    { "_id": "CUST-104", "total_sales": 84200 },
+    { "_id": "CUST-089", "total_sales": 71500 }
+  ],
+  "executionTimeMs": 24,
+  "confidenceScore": 92,
   "safetyStatus": "read-only",
   "safetyBlocked": false,
-  "results": [],
-  "result": [],
-  "executionTimeMs": 38,
-  "confidenceScore": 85,
-  "similarQueriesCount": 2,
-  "schemaContext": "Database: ...",
   "meta": {
-    "resultCount": 0,
-    "executionTimeMs": 38,
-    "totalTimeMs": 176,
-    "examplesUsed": 2,
-    "similarQueriesCount": 2,
-    "confidenceScore": 85
+    "resultCount": 2,
+    "executionTimeMs": 24,
+    "totalTimeMs": 210,
+    "examplesUsed": 1
   }
 }
 ```
 
-### POST /api/query/export
+---
 
-Returns a JSON export payload for query results.
+## 4. Cryptographic Write Approval API
 
-Request body:
+### POST `/api/query/approve`
+Safely executes an intercepted mutating query using the signed `approvalToken` issued during write interception.
 
+**Request Body**:
 ```json
 {
-  "query": "Top customers",
-  "collection": "orders",
-  "pipeline": [
-    { "$group": { "_id": "$customerId", "total": { "$sum": "$amount" } } }
-  ],
-  "results": [{ "_id": "C1", "total": 1200 }]
+  "approvalToken": "eyJhbGciOiJIUzI1NiIsIn..."
 }
 ```
 
-### GET /api/query/history
+**Success Response (HTTP 200)**:
+```json
+{
+  "success": true,
+  "naturalLanguage": "Delete inactive customers",
+  "action": "execute-approved-write",
+  "collection": "customers",
+  "acknowledged": true,
+  "deletedCount": 14,
+  "executionTimeMs": 18
+}
+```
 
-Returns recent query history for current connection.
+**Error Response (Expired or Tampered Token - HTTP 401)**:
+```json
+{
+  "success": false,
+  "error": {
+    "code": "expired_token",
+    "message": "Approval draft has expired or is invalid. Please resend query."
+  }
+}
+```
 
+---
+
+## 5. Query History Management
+
+### GET `/api/query/history`
+Returns recent query execution history for the active connection.
+
+**Success Response (HTTP 200)**:
 ```json
 {
   "success": true,
   "data": [
     {
-      "id": "65f...",
-      "query": "Top customers",
-      "time": "Just now",
+      "id": "6703...",
+      "query": "get the top sales",
+      "time": "5 minutes ago",
       "collection": "orders",
       "resultCount": 10,
-      "schemaContext": "Database: ...",
+      "clarifications": [{ "id": "metric", "value": "sales_amount" }],
       "active": true
     }
   ],
@@ -169,84 +264,168 @@ Returns recent query history for current connection.
 }
 ```
 
-## Schema API
+### PATCH `/api/query/history/:id`
+Renames a saved query history item.
 
-Protected endpoints.
-
-### GET /api/schema
-
-Returns profiled schema for the connected user database.
-
-### GET /api/schema/refresh
-
-Force-refreshes schema cache and returns latest schema.
-
-## Voice API
-
-Protected endpoint.
-
-### POST /api/voice
-
-Accepts multipart/form-data with field audio and performs:
-
-1. Speech transcription
-2. NL -> MQL generation
-3. Safety validation
-4. Query execution
-
-Supported audio formats: mp3, wav, webm, ogg, flac, m4a, and mp4 audio.
-
-Returns the same core fields as POST /api/query plus transcript/text/language metadata.
-
-## Dashboard API
-
-Protected endpoints.
-
-### GET /api/dashboard
-
-Returns pinned dashboard items.
-
-### POST /api/dashboard/pin
-
-Pins query output as a dashboard widget.
-
-Request body:
-
+**Request Body**:
 ```json
 {
-  "query": "Top customers",
-  "pipeline": [
-    { "$group": { "_id": "$customerId", "total": { "$sum": "$amount" } } }
-  ],
-  "collection": "orders",
-  "chartType": "bar",
-  "name": "Top Customers",
-  "results": [{ "_id": "C1", "total": 1200 }]
+  "name": "Q3 Top Revenue Orders"
 }
 ```
 
-### DELETE /api/dashboard/:id
-
-Deletes a pinned widget.
-
-### POST /api/dashboard/:id/refresh
-
-Re-runs a pinned query and returns updated payload.
-
-## Error Format
-
-Most failures use this envelope:
-
+**Success Response (HTTP 200)**:
 ```json
 {
-  "success": false,
-  "error": {
-    "code": "validation_error",
-    "message": "..."
+  "success": true,
+  "message": "History item renamed successfully"
+}
+```
+
+### DELETE `/api/query/history/:id`
+Deletes a specific query history entry.
+
+**Success Response (HTTP 200)**:
+```json
+{
+  "success": true,
+  "message": "History item deleted successfully"
+}
+```
+
+---
+
+## 6. Voice Transcription & Multimodal API
+
+### POST `/api/voice`
+Accepts `multipart/form-data` audio recordings and performs Whisper Large v3 Turbo transcription followed by the unified ambiguity and query pipeline.
+
+**Form Fields**:
+- `audio`: Audio file blob (`audio/webm`, `audio/mp3`, `audio/wav`, `audio/m4a`).
+- `model` (optional): LLM model ID.
+- `bypassAmbiguity` (optional): `"true"` to bypass clarification.
+- `clarifications` (optional): JSON string of validated clarification answers.
+- `collections` (optional): JSON array of scoped collection names.
+
+**Ambiguity Response**:
+If the transcribed speech is ambiguous, returns `{ success: true, needsClarification: true, transcript: "...", questions: [...] }`.
+
+---
+
+## 7. Schema Introspection API
+
+### GET `/api/schema`
+Returns the cached minified schema profile for the current database connection.
+
+### GET `/api/schema/refresh`
+Invalidates the per-connection schema cache and executes a fresh sampling pass.
+
+---
+
+## 8. Workspaces & Scope API
+
+### GET `/api/workspaces`
+Lists all workspaces configured for the active connection.
+
+### POST `/api/workspaces`
+Creates a new workspace with a specific collection whitelist.
+
+**Request Body**:
+```json
+{
+  "name": "E-Commerce Orders",
+  "description": "Order processing and inventory collections",
+  "collections": ["orders", "products", "line_items"]
+}
+```
+
+### PUT `/api/workspaces/:id`
+Updates workspace details or collection whitelist.
+
+### DELETE `/api/workspaces/:id`
+Removes a workspace.
+
+### POST `/api/scope/suggest`
+Analyzes all database collections using semantic LLM clustering and suggests optimal workspace scopes.
+
+**Success Response (HTTP 200)**:
+```json
+{
+  "success": true,
+  "suggestions": [
+    {
+      "name": "Sales & Billing",
+      "collections": ["invoices", "orders", "payments"],
+      "confidence": 0.94
+    },
+    {
+      "name": "User Engagement",
+      "collections": ["sessions", "events", "users"],
+      "confidence": 0.88
+    }
+  ]
+}
+```
+
+---
+
+## 9. Dashboard API & Public Sharing
+
+### GET `/api/dashboard`
+Returns all pinned dashboard widgets for the current authenticated user.
+
+### POST `/api/dashboard/pin`
+Pins a query and its chart visualization to the dashboard.
+
+### POST `/api/dashboard/:id/refresh`
+Re-runs the pinned MQL aggregation pipeline against the user's live database pool and stores refreshed results.
+
+### DELETE `/api/dashboard/:id`
+Deletes a dashboard pin.
+
+### GET `/api/dashboard/shared/:id` *(Public Endpoint - No Auth Required)*
+Fetches a read-only, sanitized dashboard widget for public sharing. Excludes internal credentials and connection URIs.
+
+**Success Response (HTTP 200)**:
+```json
+{
+  "success": true,
+  "data": {
+    "name": "Top Customers by Revenue",
+    "query": "Top 5 customers by revenue",
+    "chartType": "bar",
+    "results": [
+      { "_id": "C1", "rev": 84200 },
+      { "_id": "C2", "rev": 71500 }
+    ],
+    "lastRefreshedAt": "2026-10-07T14:30:00.000Z"
   }
 }
 ```
 
 ---
 
-[Back to README](../README.md)
+## 10. Standard Error Format
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "validation_error",
+    "message": "Clarification value 'hacked_field' is not a valid schema field"
+  }
+}
+```
+
+Common Error Codes:
+- `unauthorized`: Missing or invalid `am_token` cookie.
+- `validation_error`: Invalid parameters or prompt-injection attempt.
+- `expired_token`: HITL write approval token expired.
+- `safety_violation`: Unsafe stage (`$out`, `$merge`) detected.
+- `scope_violation`: Attempted cross-collection query outside active workspace.
+- `database_error`: MongoDB driver execution failure.
+- `groq_rate_limit`: Upstream LLM rate limit exceeded.
+
+---
+
+*For architectural flows and subsystem designs, see [Architecture Guide](./ARCHITECTURE.md).*

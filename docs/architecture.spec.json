@@ -38,7 +38,7 @@
       "type": "frontend",
       "label": "AtlasMind UI",
       "sublabel": "React 19 SPA :5173",
-      "tag": "Chat, Clarify & Pins",
+      "tag": "Chat, Scope & Clarify",
       "brand": "react",
       "pos": [50, 140],
       "size": [150, 65]
@@ -66,7 +66,7 @@
       "type": "backend",
       "label": "Express API",
       "sublabel": "Node.js Server :3001",
-      "tag": "Stateless & Shared",
+      "tag": "Stateless, Scope & Shared",
       "brand": "node.js",
       "pos": [295, 320],
       "size": [150, 65]
@@ -76,7 +76,7 @@
       "type": "database",
       "label": "Metadata DB",
       "sublabel": "AtlasMind Core Store",
-      "tag": "History, Clarify & Pins",
+      "tag": "Sessions, History & Pins",
       "brand": "mongodb",
       "pos": [295, 500],
       "size": [150, 65]

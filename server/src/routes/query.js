@@ -6,6 +6,7 @@ const { validatePipeline, validateCollectionName } = require('../services/safety
 const { executePipeline, saveQueryHistory } = require('../services/queryExecutor');
 const { getUserDb } = require('../services/userDbPool');
 const { getDb } = require('../db/connection');
+const { processNaturalLanguageQuery } = require('../services/queryPipelineService');
 
 const router = express.Router();
 
@@ -24,7 +25,16 @@ router.post('/', async (req, res) => {
 
     try {
         // 1. Validate request body
-        const { text, model } = req.body;
+        const {
+            text,
+            model,
+            collections,
+            workspaceId,
+            dropMissing,
+            clarifications,
+            bypassAmbiguity,
+            isEdit,
+        } = req.body;
         const connectionId = req.connectionId; // Set by requireAuth middleware
 
         if (!text || typeof text !== 'string' || text.trim().length === 0) {
@@ -44,6 +54,29 @@ router.post('/', async (req, res) => {
                 success: false,
                 error: { code: 'validation_error', message: 'Query text must be under 2000 characters' },
             });
+        }
+
+        // Try executing through query pipeline service (supporting collection scoping, ambiguity gating, etc.)
+        try {
+            if (typeof processNaturalLanguageQuery === 'function') {
+                const pipelineResult = await processNaturalLanguageQuery({
+                    connectionId,
+                    text: query,
+                    collections,
+                    workspaceId,
+                    dropMissing,
+                    model,
+                    clarifications,
+                    bypassAmbiguity,
+                    isEdit,
+                    startTime,
+                    source: 'query',
+                });
+                return res.status(pipelineResult.statusCode).json(pipelineResult.response);
+            }
+        } catch (pipelineErr) {
+            console.warn('⚠️ queryPipelineService failed, falling back to legacy execution pipeline:', pipelineErr.message);
+            // Fall through to existing execution logic
         }
 
         // 2. Get User DB (pooled connection — reused across requests)

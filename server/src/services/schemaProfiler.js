@@ -167,20 +167,21 @@ async function profileSchema(dbOrOptions, options = {}) {
  * Build a minified schema string suitable for LLM prompts.
  * Includes nested array sub-fields so the LLM can generate $unwind + $group correctly.
  * @param {import('mongodb').Db} db
- * @returns {Promise<string>}
+/**
+ * Format an already-profiled schema object into the minified text format used for LLM context.
+ * @param {object} schema - Result of profileSchema()
+ * @returns {string}
  */
-async function getMinifiedSchema(db, options = {}) {
-    const schema = await profileSchema(db, options);
+function formatMinifiedSchema(schema) {
+    if (!schema) return '';
+    const lines = [`Database: ${schema.database || ''}`];
 
-
-    const lines = [`Database: ${schema.database}`];
-
-    for (const col of schema.collections) {
-        lines.push(`\nCollection: ${col.name} (${col.documentCount} docs)`);
+    for (const col of schema.collections || []) {
+        lines.push(`\nCollection: ${col.name} (${col.documentCount || 0} docs)`);
         lines.push('Fields:');
 
-        const topLevel = col.fields.filter((f) => !f.isArrayItem);
-        const nested   = col.fields.filter((f) => f.isArrayItem);
+        const topLevel = (col.fields || []).filter((f) => !f.isArrayItem);
+        const nested   = (col.fields || []).filter((f) => f.isArrayItem);
 
         for (const field of topLevel) {
             const sampleStr = typeof field.sample === 'object'
@@ -204,6 +205,19 @@ async function getMinifiedSchema(db, options = {}) {
 }
 
 /**
+ * Minify the database schema into a compact, LLM-friendly string format.
+ * Caches results per database for 5 minutes.
+ *
+ * @param {import('mongodb').Db} db
+ * @param {object} [options]
+ * @returns {Promise<string>}
+ */
+async function getMinifiedSchema(db, options = {}) {
+    const schema = await profileSchema(db, options);
+    return formatMinifiedSchema(schema);
+}
+
+/**
  * Invalidate the schema cache (e.g., after seeding).
  * @param {string} [dbName] - If undefined, clears all.
  */
@@ -215,4 +229,4 @@ function invalidateSchemaCache(dbName) {
     }
 }
 
-module.exports = { profileSchema, getMinifiedSchema, invalidateSchemaCache };
+module.exports = { profileSchema, formatMinifiedSchema, getMinifiedSchema, invalidateSchemaCache };

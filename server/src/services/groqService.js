@@ -14,7 +14,10 @@ function getGroqClient() {
         if (!apiKey) {
             throw new Error('GROQ_API_KEY environment variable is not set');
         }
-        groqClient = new Groq({ apiKey });
+        groqClient = new Groq({
+            apiKey,
+            fetch: typeof globalThis.fetch === 'function' ? globalThis.fetch : undefined,
+        });
     }
     return groqClient;
 }

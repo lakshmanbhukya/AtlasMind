@@ -1,8 +1,7 @@
-
-
-#Ignore vscode AI rules
-.github\instructions\codacy.instructions.md
-
 atlas-mind/
 .agents
 .kombai
+scratch/
+evaluation/
+docs/AMBIGUITY_RESEARCH_EVALUATION.md
+

@@ -1,3 +1,4 @@
+require('../utils/dnsConfig');
 const { MongoClient } = require('mongodb');
 
 /** @type {MongoClient|null} */

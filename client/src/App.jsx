@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useAuth } from './hooks/useAuth';
 import { useSchema } from './hooks/useSchema';
+import { useWorkspaces } from './hooks/useWorkspaces';
 import AtlasTopNav from './components/AtlasTopNav';
 import AtlasLeftSidebar from './components/AtlasLeftSidebar';
 import AtlasChatPanel from './components/AtlasChatPanel';
@@ -37,6 +38,31 @@ function useMediaQuery(query) {
  */
 export default function App() {
   const { isAuthenticated, connectionMeta, isLoading, logout, refetch } = useAuth();
+  const { workspaces, createWorkspace, updateWorkspace, deleteWorkspace } = useWorkspaces();
+  const { schema } = useSchema();
+
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState(null);
+  const [scopeMode, setScopeMode] = useState('all');
+  const [selectedCollections, setSelectedCollections] = useState([]);
+
+  const handleSelectWorkspace = useCallback((id, collections) => {
+    setActiveWorkspaceId(id);
+    if (id) {
+      setScopeMode('selected');
+      setSelectedCollections(collections || []);
+    } else {
+      setScopeMode('all');
+      setSelectedCollections([]);
+    }
+  }, []);
+
+  const handleSetCollections = useCallback((cols) => {
+    setSelectedCollections(cols);
+  }, []);
+
+  const handleRemoveCollection = useCallback((colName) => {
+    setSelectedCollections((prev) => prev.filter((c) => c !== colName));
+  }, []);
 
   const [lastMessage,  setLastMessage]  = useState(null);
   const [chatKey,      setChatKey]      = useState(0);
@@ -143,6 +169,18 @@ export default function App() {
         onLogout={logout}
         activeView={activeView}
         onViewChange={setActiveView}
+        workspaces={workspaces}
+        activeWorkspaceId={activeWorkspaceId}
+        onSelectWorkspace={handleSelectWorkspace}
+        scopeMode={scopeMode}
+        onChangeScopeMode={setScopeMode}
+        selectedCollections={selectedCollections}
+        onSetCollections={handleSetCollections}
+        onRemoveCollection={handleRemoveCollection}
+        schema={schema}
+        onCreateWorkspace={createWorkspace}
+        onUpdateWorkspace={updateWorkspace}
+        onDeleteWorkspace={deleteWorkspace}
       />
 
       <div className="flex flex-1 overflow-hidden relative grid-bg-dashboard">
@@ -188,6 +226,12 @@ export default function App() {
                 onPinAdded={loadPins}
                 highlightedMessageId={highlightedMessageId}
                 onQuerySuccess={loadHistory}
+                activeWorkspaceId={activeWorkspaceId}
+                scopeMode={scopeMode}
+                selectedCollections={selectedCollections}
+                onSetCollections={handleSetCollections}
+                onChangeScopeMode={setScopeMode}
+                onSelectWorkspace={handleSelectWorkspace}
               />
             </ErrorBoundary>
           ) : (

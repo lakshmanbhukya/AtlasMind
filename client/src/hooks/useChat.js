@@ -32,23 +32,47 @@ export function useChat(selectedQueryId, onQuerySuccess) {
 
     /**
      * Normalize a backend query response into the standard message metadata shape.
+     * Preserves needsClarification, questions, and scopeInsufficient for UI cards.
      */
-    const normalizeResponse = useCallback((response) => ({
-        content: response.aiMessage || response.explanation || response.naturalLanguage || '',
-        pipeline: response.pipeline || response.mql || [],
-        collection: response.collection || '',
-        chartType: response.chartType || 'table',
-        results: response.results || response.result || [],
-        safetyStatus: response.safetyStatus || (response.safetyBlocked ? 'approval-required' : 'read-only'),
-        safetyBlocked: response.safetyBlocked || response.safetyStatus === 'approval-required' || false,
-        approvalToken: response.approvalToken || null,
-        executionTimeMs: response.executionTimeMs || response.meta?.executionTimeMs || null,
-        confidenceScore: response.confidenceScore || response.meta?.confidenceScore || null,
-        similarQueriesCount: response.similarQueriesCount || response.meta?.similarQueriesCount || null,
-        transcript: response.transcript || response.text || null,
-        naturalLanguage: response.naturalLanguage || '',
-        schemaContext: response.schemaContext || '',
-    }), []);
+    const normalizeResponse = useCallback((response) => {
+        const isScopeInsufficient = Boolean(
+            response.scopeInsufficient ||
+            response.safetyStatus === 'scope-insufficient'
+        );
+        const needsClarification = Boolean(response.needsClarification);
+
+        let defaultContent = '';
+        if (needsClarification) {
+            defaultContent = 'Please clarify a few details before executing this query:';
+        } else if (isScopeInsufficient) {
+            defaultContent = response.aiMessage || response.explanation || 'This query requires collections outside your current scope.';
+        }
+
+        return {
+            content: response.content || response.aiMessage || response.explanation || defaultContent || response.naturalLanguage || '',
+            pipeline: response.pipeline || response.mql || [],
+            collection: response.collection || '',
+            chartType: response.chartType || 'table',
+            results: response.results || response.result || [],
+            safetyStatus: response.safetyStatus || (response.safetyBlocked ? 'approval-required' : isScopeInsufficient ? 'scope-insufficient' : 'read-only'),
+            safetyBlocked: response.safetyBlocked || response.safetyStatus === 'approval-required' || false,
+            approvalToken: response.approvalToken || null,
+            executionTimeMs: response.executionTimeMs || response.meta?.executionTimeMs || null,
+            confidenceScore: response.confidenceScore || response.meta?.confidenceScore || null,
+            similarQueriesCount: response.similarQueriesCount || response.meta?.similarQueriesCount || null,
+            transcript: response.transcript || response.text || null,
+            naturalLanguage: response.naturalLanguage || '',
+            schemaContext: response.schemaContext || '',
+            // Scope & Ambiguity Fields
+            needsClarification,
+            questions: response.questions || [],
+            scopeInsufficient: isScopeInsufficient,
+            suggestedCollections: response.suggestedCollections || [],
+            scope: response.scope || response.meta?.scope || [],
+            scopeMode: response.scopeMode || null,
+            clarifications: response.clarifications || [],
+        };
+    }, []);
 
     // Session-based conversational state reconstruction
     useEffect(() => {
@@ -97,20 +121,38 @@ export function useChat(selectedQueryId, onQuerySuccess) {
     }, [selectedQueryId]);
 
     const sendMessage = useCallback(
-        async (text) => {
-            if (!text.trim() || isLoading) return;
+        async (text, options = {}) => {
+            if (!text || (typeof text === 'string' && !text.trim()) || isLoading) return;
+
+            const queryText = typeof text === 'string' ? text.trim() : (text.text || '');
+            const mergedOptions = typeof text === 'object' && text !== null ? { ...text, ...options } : options;
 
             setError(null);
-            addMessage('user', text);
+            if (!mergedOptions.skipUserMessage && queryText) {
+                addMessage('user', queryText);
+            }
             setIsLoading(true);
 
             try {
-                const response = await sendQuery(text, selectedModel);
+                const queryPayload = {
+                    text: queryText,
+                    model: mergedOptions.model || selectedModel,
+                    ...(mergedOptions.collections !== undefined ? { collections: mergedOptions.collections } : {}),
+                    ...(mergedOptions.scopeMode !== undefined ? { scopeMode: mergedOptions.scopeMode } : {}),
+                    ...(mergedOptions.bypassAmbiguity !== undefined ? { bypassAmbiguity: mergedOptions.bypassAmbiguity } : {}),
+                    ...(mergedOptions.clarifications !== undefined ? { clarifications: mergedOptions.clarifications } : {}),
+                    ...(mergedOptions.workspaceId !== undefined ? { workspaceId: mergedOptions.workspaceId } : {}),
+                    ...(mergedOptions.dropMissing !== undefined ? { dropMissing: mergedOptions.dropMissing } : {}),
+                    ...(mergedOptions.isEdit !== undefined ? { isEdit: mergedOptions.isEdit } : {}),
+                };
+
+                const response = await sendQuery(queryPayload);
                 const normalized = normalizeResponse(response);
                 addMessage('assistant', normalized.content, normalized);
                 if (onQuerySuccess) {
                     onQuerySuccess();
                 }
+                return normalized;
             } catch (err) {
                 const errorMessage = err.response?.data?.error?.message || err.message || 'Failed to process your query. Please try again.';
                 setError(errorMessage);
@@ -183,6 +225,40 @@ export function useChat(selectedQueryId, onQuerySuccess) {
         setError(null);
     }, []);
 
+    // Clarification & Scope Action Helpers
+    const submitClarifications = useCallback(
+        (clarifications, originalQuery, options = {}) => {
+            return sendMessage(originalQuery, {
+                ...options,
+                clarifications,
+                skipUserMessage: options.skipUserMessage ?? false,
+            });
+        },
+        [sendMessage]
+    );
+
+    const bypassAmbiguity = useCallback(
+        (originalQuery, options = {}) => {
+            return sendMessage(originalQuery, {
+                ...options,
+                bypassAmbiguity: true,
+                skipUserMessage: options.skipUserMessage ?? false,
+            });
+        },
+        [sendMessage]
+    );
+
+    const rerunWithScope = useCallback(
+        (collections, originalQuery, options = {}) => {
+            return sendMessage(originalQuery, {
+                ...options,
+                collections,
+                skipUserMessage: options.skipUserMessage ?? false,
+            });
+        },
+        [sendMessage]
+    );
+
     return {
         messages,
         isLoading,
@@ -195,5 +271,9 @@ export function useChat(selectedQueryId, onQuerySuccess) {
         clearChat,
         setMessages,
         messagesEndRef,
+        // Clarification & Scope Action Helpers
+        submitClarifications,
+        bypassAmbiguity,
+        rerunWithScope,
     };
 }

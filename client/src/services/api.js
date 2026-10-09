@@ -34,12 +34,33 @@ api.interceptors.response.use(
 
 /**
  * Send a natural language query → MQL → execute → visualize.
- * @param {string} text
- * @param {string} [model]
+ * Supports both positional parameters (text, model, options) and an options object.
+ * Options can include { collections, scopeMode, bypassAmbiguity, clarifications, workspaceId, dropMissing, isEdit }.
+ * @param {string|object} textOrPayload
+ * @param {string|object} [modelOrOptions]
+ * @param {object} [extraOptions]
  * @returns {Promise<object>} { aiMessage, pipeline, results, chartType, ... }
  */
-export async function sendQuery(text, model) {
-    const { data } = await api.post('query', { text, model });
+export async function sendQuery(textOrPayload, modelOrOptions, extraOptions = {}) {
+    let payload = {};
+
+    if (typeof textOrPayload === 'object' && textOrPayload !== null) {
+        payload = { ...textOrPayload };
+    } else {
+        payload.text = textOrPayload;
+        if (typeof modelOrOptions === 'object' && modelOrOptions !== null) {
+            payload = { ...payload, ...modelOrOptions };
+        } else {
+            if (modelOrOptions !== undefined) {
+                payload.model = modelOrOptions;
+            }
+            if (typeof extraOptions === 'object' && extraOptions !== null) {
+                payload = { ...payload, ...extraOptions };
+            }
+        }
+    }
+
+    const { data } = await api.post('query', payload);
     return data;
 }
 
@@ -150,6 +171,60 @@ export async function refreshDashboardPin(pinId) {
 export async function fetchSharedDashboardPin(pinId) {
     const { data } = await api.get(`dashboard/shared/${pinId}`);
     return data;
+}
+
+// ─── Workspace API ──────────────────────────────────────────────────────────
+
+/**
+ * Fetch all saved workspaces for the active connection.
+ * @returns {Promise<Array>}
+ */
+export async function fetchWorkspaces() {
+    const { data } = await api.get('workspaces');
+    return data.data || data;
+}
+
+/**
+ * Create a new workspace.
+ * @param {{ name: string, collections: string[] }} workspaceData
+ * @returns {Promise<object>}
+ */
+export async function createWorkspace(workspaceData) {
+    const { data } = await api.post('workspaces', workspaceData);
+    return data.data || data;
+}
+
+/**
+ * Update an existing workspace by ID.
+ * @param {string} id
+ * @param {{ name?: string, collections?: string[] }} updateData
+ * @returns {Promise<object>}
+ */
+export async function updateWorkspace(id, updateData) {
+    const { data } = await api.patch(`workspaces/${id}`, updateData);
+    return data.data || data;
+}
+
+/**
+ * Delete a workspace by ID.
+ * @param {string} id
+ * @returns {Promise<object>}
+ */
+export async function deleteWorkspace(id) {
+    const { data } = await api.delete(`workspaces/${id}`);
+    return data.data || data;
+}
+
+// ─── Scope API ──────────────────────────────────────────────────────────────
+
+/**
+ * Suggest collections relevant to a natural language question.
+ * @param {string} question
+ * @returns {Promise<object>}
+ */
+export async function suggestScope(question) {
+    const { data } = await api.post('scope/suggest', { question });
+    return data.data || data;
 }
 
 // ─── Export API ─────────────────────────────────────────────────────────────

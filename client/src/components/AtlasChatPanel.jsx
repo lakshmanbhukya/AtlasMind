@@ -9,6 +9,8 @@ import { sendVoice, pinToDashboard } from "../services/api";
 import ChartRenderer from "./ChartRenderer";
 import { MagicCard } from "./ui/magic-card";
 import { ShimmerButton } from "./ui/shimmer-button";
+import ClarificationCard from "./ClarificationCard";
+import ScopeInsufficientCard from "./ScopeInsufficientCard";
 
 /**
  * CollapsibleCodeBlock — toggleable MQL pipeline code block.
@@ -205,7 +207,19 @@ const AVAILABLE_MODELS = [
   }
 ];
 
-export default function AtlasChatPanel({ onLastMessage, onNewQuery, onPinAdded, highlightedMessageId, onQuerySuccess }) {
+export default function AtlasChatPanel({ 
+  onLastMessage, 
+  onNewQuery, 
+  onPinAdded, 
+  highlightedMessageId, 
+  onQuerySuccess,
+  activeWorkspaceId = null,
+  scopeMode = 'all',
+  selectedCollections = [],
+  onSetCollections,
+  onChangeScopeMode,
+  onSelectWorkspace,
+}) {
   const { 
     messages, 
     isLoading, 
@@ -257,9 +271,71 @@ export default function AtlasChatPanel({ onLastMessage, onNewQuery, onPinAdded, 
     }
   }, [messages, onLastMessage]);
 
+  // Clarification Card Handlers
+  const handleClarificationSubmit = useCallback(async (msg, clarifications) => {
+    const scopeOptions = {};
+    if (scopeMode === 'selected' && selectedCollections?.length > 0) {
+      scopeOptions.collections = selectedCollections;
+    }
+    if (activeWorkspaceId) {
+      scopeOptions.workspaceId = activeWorkspaceId;
+    }
+    await sendMessage(msg.naturalLanguage || msg.content, {
+      ...scopeOptions,
+      clarifications,
+    });
+  }, [sendMessage, scopeMode, selectedCollections, activeWorkspaceId]);
+
+  const handleClarificationBypass = useCallback(async (msg) => {
+    const scopeOptions = {};
+    if (scopeMode === 'selected' && selectedCollections?.length > 0) {
+      scopeOptions.collections = selectedCollections;
+    }
+    if (activeWorkspaceId) {
+      scopeOptions.workspaceId = activeWorkspaceId;
+    }
+    await sendMessage(msg.naturalLanguage || msg.content, {
+      ...scopeOptions,
+      bypassAmbiguity: true,
+    });
+  }, [sendMessage, scopeMode, selectedCollections, activeWorkspaceId]);
+
+  // Scope Insufficient Card Handlers
+  const handleScopeAddAndRerun = useCallback(async (msg, colsToAdd) => {
+    const current = Array.isArray(selectedCollections) ? selectedCollections : [];
+    const updated = Array.from(new Set([...current, ...(colsToAdd || [])]));
+    if (onSetCollections) {
+      onSetCollections(updated);
+    }
+    if (onChangeScopeMode && scopeMode !== 'selected') {
+      onChangeScopeMode('selected');
+    }
+    await sendMessage(msg.naturalLanguage || msg.content, {
+      collections: updated,
+      isScopeRerun: true,
+    });
+  }, [sendMessage, selectedCollections, onSetCollections, onChangeScopeMode, scopeMode]);
+
+  const handleScopeRunAll = useCallback(async (msg) => {
+    if (onChangeScopeMode) {
+      onChangeScopeMode('all');
+    }
+    await sendMessage(msg.naturalLanguage || msg.content, {
+      collections: [],
+      isScopeRerun: true,
+    });
+  }, [sendMessage, onChangeScopeMode]);
+
   const handleSend = () => {
     if (!input.trim() || isLoading || voiceLoading) return;
-    sendMessage(input.trim());
+    const scopeOptions = {};
+    if (scopeMode === 'selected' && selectedCollections?.length > 0) {
+      scopeOptions.collections = selectedCollections;
+    }
+    if (activeWorkspaceId) {
+      scopeOptions.workspaceId = activeWorkspaceId;
+    }
+    sendMessage(input.trim(), scopeOptions);
     setInput("");
   };
 
@@ -359,7 +435,16 @@ export default function AtlasChatPanel({ onLastMessage, onNewQuery, onPinAdded, 
                 <button
                   key={s}
                   className="chat-suggestion px-5 py-2.5 rounded-2xl bg-white/5 border border-white/10 text-sm font-medium hover:bg-primary/10 hover:border-primary/40 hover:text-primary transition-all duration-300"
-                  onClick={() => sendMessage(s)}
+                  onClick={() => {
+                    const scopeOptions = {};
+                    if (scopeMode === 'selected' && selectedCollections?.length > 0) {
+                      scopeOptions.collections = selectedCollections;
+                    }
+                    if (activeWorkspaceId) {
+                      scopeOptions.workspaceId = activeWorkspaceId;
+                    }
+                    sendMessage(s, scopeOptions);
+                  }}
                 >
                   {s}
                 </button>
@@ -399,131 +484,151 @@ export default function AtlasChatPanel({ onLastMessage, onNewQuery, onPinAdded, 
                     <div className="h-8 w-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center shrink-0 mt-0.5 shadow-sm backdrop-blur-md">
                       <Bot className="h-4 w-4 text-primary" />
                     </div>
-                    <div className="atlas-glass rounded-[20px] rounded-tl-[4px] px-5 py-4 flex-1 shadow-sm border border-white/5">
-                      <p className="text-[15px] text-foreground/90 leading-relaxed">{msg.content}</p>
 
-                      {/* Safety badge */}
-                      {safetyBadge && (
-                        <div className="mt-2.5">
-                          {safetyBadge === "read-only" ? (
-                            <Badge className="bg-success/15 text-success border-success/30 hover:bg-success/20 gap-1 text-[11px]">
-                              <Shield className="h-3 w-3" />
-                              Read-Only Verified
-                            </Badge>
-                          ) : (
-                            <Badge className="bg-warning/15 text-warning border-warning/30 hover:bg-warning/20 gap-1 text-[11px]">
-                              <AlertTriangle className="h-3 w-3" />
-                              Approval Required
-                            </Badge>
-                          )}
-                        </div>
-                      )}
+                    {msg.needsClarification ? (
+                      <ClarificationCard
+                        naturalLanguage={msg.naturalLanguage || msg.content}
+                        questions={msg.questions || []}
+                        onSubmit={(clarifications) => handleClarificationSubmit(msg, clarifications)}
+                        onBypass={() => handleClarificationBypass(msg)}
+                        isLoading={isLoading}
+                      />
+                    ) : (msg.scopeInsufficient || msg.safetyStatus === 'scope-insufficient') ? (
+                      <ScopeInsufficientCard
+                        naturalLanguage={msg.naturalLanguage || msg.content}
+                        suggestedCollections={msg.suggestedCollections || []}
+                        currentScope={msg.scope || selectedCollections || []}
+                        onAddAndRerun={(colsToAdd) => handleScopeAddAndRerun(msg, colsToAdd)}
+                        onRunAll={() => handleScopeRunAll(msg)}
+                        isLoading={isLoading}
+                      />
+                    ) : (
+                      <div className="atlas-glass rounded-[20px] rounded-tl-[4px] px-5 py-4 flex-1 shadow-sm border border-white/5">
+                        <p className="text-[15px] text-foreground/90 leading-relaxed">{msg.content}</p>
 
-                      {/* AI Code Blocks (Context and MQL) */}
-                      {(msg.schemaContext || msg.pipeline?.length > 0) && (
-                        <div className="mt-3 flex flex-col">
-                          {/* 1. Context (if available) - Before MQL */}
-                          {msg.schemaContext && (
-                            <CollapsibleCodeBlock 
-                              code={msg.schemaContext} 
-                              label="View Context" 
-                            />
-                          )}
+                        {/* Safety badge */}
+                        {safetyBadge && (
+                          <div className="mt-2.5">
+                            {safetyBadge === "read-only" ? (
+                              <Badge className="bg-success/15 text-success border-success/30 hover:bg-success/20 gap-1 text-[11px]">
+                                <Shield className="h-3 w-3" />
+                                Read-Only Verified
+                              </Badge>
+                            ) : (
+                              <Badge className="bg-warning/15 text-warning border-warning/30 hover:bg-warning/20 gap-1 text-[11px]">
+                                <AlertTriangle className="h-3 w-3" />
+                                Approval Required
+                              </Badge>
+                            )}
+                          </div>
+                        )}
 
-                          {/* 2. Generated MQL (if available) */}
-                          {msg.pipeline?.length > 0 && (
-                            <CollapsibleCodeBlock 
-                              code={msg.pipeline} 
-                              label="View Generated MQL" 
-                            />
-                          )}
-                        </div>
-                      )}
+                        {/* AI Code Blocks (Context and MQL) */}
+                        {(msg.schemaContext || msg.pipeline?.length > 0) && (
+                          <div className="mt-3 flex flex-col">
+                            {/* 1. Context (if available) - Before MQL */}
+                            {msg.schemaContext && (
+                              <CollapsibleCodeBlock 
+                                code={msg.schemaContext} 
+                                label="View Context" 
+                              />
+                            )}
 
-                      {/* Staged Write HITL Intercept Panel */}
-                      {msg.safetyStatus === 'approval-required' && msg.approvalToken && (
-                        <div className="mt-4 max-w-xl animate-atlas-fade-in relative z-25">
-                          <MagicCard
-                            className="p-5 flex flex-col gap-4 border border-amber-500/30 bg-neutral-950/60"
-                            gradientColor="#f59e0b"
-                            gradientOpacity={0.25}
-                          >
-                            <div className="flex items-start gap-3">
-                              <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-500 mt-0.5">
-                                <AlertTriangle className="h-5 w-5 animate-pulse" />
+                            {/* 2. Generated MQL (if available) */}
+                            {msg.pipeline?.length > 0 && (
+                              <CollapsibleCodeBlock 
+                                code={msg.pipeline} 
+                                label="View Generated MQL" 
+                              />
+                            )}
+                          </div>
+                        )}
+
+                        {/* Staged Write HITL Intercept Panel */}
+                        {msg.safetyStatus === 'approval-required' && msg.approvalToken && (
+                          <div className="mt-4 max-w-xl animate-atlas-fade-in relative z-25">
+                            <MagicCard
+                              className="p-5 flex flex-col gap-4 border border-amber-500/30 bg-neutral-950/60"
+                              gradientColor="#f59e0b"
+                              gradientOpacity={0.25}
+                            >
+                              <div className="flex items-start gap-3">
+                                <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-500 mt-0.5">
+                                  <AlertTriangle className="h-5 w-5 animate-pulse" />
+                                </div>
+                                <div>
+                                  <h4 className="text-sm font-bold text-foreground tracking-tight">Supervisor Authorization Required</h4>
+                                  <p className="text-[12px] text-muted-foreground/90 mt-1 leading-relaxed">
+                                    This request involves executing a mutating database write operation on the <span className="font-mono text-[#00ed64] font-bold">"{msg.collection}"</span> collection. Under session safety rules, this action has been safely staged in draft form.
+                                  </p>
+                                </div>
                               </div>
-                              <div>
-                                <h4 className="text-sm font-bold text-foreground tracking-tight">Supervisor Authorization Required</h4>
-                                <p className="text-[12px] text-muted-foreground/90 mt-1 leading-relaxed">
-                                  This request involves executing a mutating database write operation on the <span className="font-mono text-[#00ed64] font-bold">"{msg.collection}"</span> collection. Under session safety rules, this action has been safely staged in draft form.
-                                </p>
+
+                              <div className="rounded-xl border border-white/5 bg-black/60 p-3.5 font-mono text-[11px] text-[#00ed64]/90 overflow-x-auto max-h-[160px]">
+                                <code>{JSON.stringify(msg.pipeline, null, 2)}</code>
                               </div>
-                            </div>
 
-                            <div className="rounded-xl border border-white/5 bg-black/60 p-3.5 font-mono text-[11px] text-[#00ed64]/90 overflow-x-auto max-h-[160px]">
-                              <code>{JSON.stringify(msg.pipeline, null, 2)}</code>
-                            </div>
+                              <div className="flex items-center gap-3 mt-1.5">
+                                <ShimmerButton
+                                  onClick={() => approveWrite(msg.id, msg.approvalToken)}
+                                  disabled={isLoading}
+                                  shimmerColor="#00ed64"
+                                  background="#042f1a"
+                                  borderRadius="12px"
+                                  className="px-5 py-2 text-[12px] h-9.5 font-bold shadow-[0_4px_25px_rgba(0,237,100,0.2)] flex items-center gap-2"
+                                >
+                                  {isLoading ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <Check className="h-3.5 w-3.5 stroke-[3px]" />
+                                  )}
+                                  Authorize & Commit Changes
+                                </ShimmerButton>
 
-                            <div className="flex items-center gap-3 mt-1.5">
-                              <ShimmerButton
-                                onClick={() => approveWrite(msg.id, msg.approvalToken)}
-                                disabled={isLoading}
-                                shimmerColor="#00ed64"
-                                background="#042f1a"
-                                borderRadius="12px"
-                                className="px-5 py-2 text-[12px] h-9.5 font-bold shadow-[0_4px_25px_rgba(0,237,100,0.2)] flex items-center gap-2"
-                              >
-                                {isLoading ? (
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                ) : (
-                                  <Check className="h-3.5 w-3.5 stroke-[3px]" />
-                                )}
-                                Authorize & Commit Changes
-                              </ShimmerButton>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => {
+                                    // Discard token and restore to read-only clean slate
+                                    setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, approvalToken: null, content: '❌ Mutating database draft operation discarded.' } : m));
+                                  }}
+                                  disabled={isLoading}
+                                  className="text-xs text-muted-foreground hover:text-foreground hover:bg-white/5 h-9.5 rounded-xl px-4"
+                                >
+                                  Discard Draft
+                                </Button>
+                              </div>
+                            </MagicCard>
+                          </div>
+                        )}
 
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => {
-                                  // Discard token and restore to read-only clean slate
-                                  setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, approvalToken: null, content: '❌ Mutating database draft operation discarded.' } : m));
-                                }}
-                                disabled={isLoading}
-                                className="text-xs text-muted-foreground hover:text-foreground hover:bg-white/5 h-9.5 rounded-xl px-4"
-                              >
-                                Discard Draft
-                              </Button>
-                            </div>
-                          </MagicCard>
-                        </div>
-                      )}
-
-                      {/* Metadata row */}
-                      {(msg.executionTimeMs || msg.confidenceScore || msg.similarQueriesCount) && (
-                        <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-muted-foreground border-t border-border/30 pt-2">
-                          {msg.executionTimeMs != null && (
-                            <span title="Query execution time" className="flex items-center gap-1">
-                              <Zap className="h-3 w-3 text-primary/70" fill="currentColor" /> {msg.executionTimeMs}ms
-                            </span>
-                          )}
-                          {msg.confidenceScore != null && (
-                            <span title="AI confidence score" className="flex items-center gap-1">
-                              <Target className="h-3 w-3 text-primary/70" /> {msg.confidenceScore}% confidence
-                            </span>
-                          )}
-                          {msg.similarQueriesCount != null && (
-                            <span title="Similar examples used for few-shot prompting" className="flex items-center gap-1">
-                              <Search className="h-3 w-3 text-primary/70" /> {msg.similarQueriesCount} similar examples
-                            </span>
-                          )}
-                          {msg.results?.length > 0 && (
-                            <span title="Number of results returned" className="flex items-center gap-1">
-                              <BarChart3 className="h-3 w-3 text-primary/70" /> {msg.results.length} results
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </div>
+                        {/* Metadata row */}
+                        {(msg.executionTimeMs || msg.confidenceScore || msg.similarQueriesCount) && (
+                          <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-muted-foreground border-t border-border/30 pt-2">
+                            {msg.executionTimeMs != null && (
+                              <span title="Query execution time" className="flex items-center gap-1">
+                                <Zap className="h-3 w-3 text-primary/70" fill="currentColor" /> {msg.executionTimeMs}ms
+                              </span>
+                            )}
+                            {msg.confidenceScore != null && (
+                              <span title="AI confidence score" className="flex items-center gap-1">
+                                <Target className="h-3 w-3 text-primary/70" /> {msg.confidenceScore}% confidence
+                              </span>
+                            )}
+                            {msg.similarQueriesCount != null && (
+                              <span title="Similar examples used for few-shot prompting" className="flex items-center gap-1">
+                                <Search className="h-3 w-3 text-primary/70" /> {msg.similarQueriesCount} similar examples
+                              </span>
+                            )}
+                            {msg.results?.length > 0 && (
+                              <span title="Number of results returned" className="flex items-center gap-1">
+                                <BarChart3 className="h-3 w-3 text-primary/70" /> {msg.results.length} results
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Results / Chart — rendered BELOW the bubble, full width of the message group */}

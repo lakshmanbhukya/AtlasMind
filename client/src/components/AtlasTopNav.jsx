@@ -1,23 +1,74 @@
+import { useState } from "react";
 import { Settings, Brain, Menu, LogOut, MessageSquare, LayoutDashboard } from "lucide-react";
 import { Avatar, AvatarFallback } from "./ui/avatar";
 import { Button } from "./ui/button";
 import { Tooltip } from "./ui/tooltip";
+import ScopeWorkspaceSelector from "./ScopeWorkspaceSelector";
+import { useWorkspaces } from "../hooks/useWorkspaces";
+import { useSchema } from "../hooks/useSchema";
 
 /**
- * AtlasTopNav — Top navigation bar.
+ * AtlasTopNav — Top navigation bar with ScopeWorkspaceSelector integration.
  */
 export default function AtlasTopNav({ 
   onMenuToggle, 
   showMenu, 
   connectionMeta, 
   onLogout,
-  activeView,
-  onViewChange
+  activeView = 'chat',
+  onViewChange,
+  workspaces: propsWorkspaces,
+  activeWorkspaceId: propsActiveWorkspaceId,
+  onSelectWorkspace: propsOnSelectWorkspace,
+  scopeMode: propsScopeMode,
+  onChangeScopeMode: propsOnChangeScopeMode,
+  selectedCollections: propsSelectedCollections,
+  onSetCollections: propsOnSetCollections,
+  onRemoveCollection: propsOnRemoveCollection,
+  schema: propsSchema,
+  onCreateWorkspace: propsOnCreateWorkspace,
+  onUpdateWorkspace: propsOnUpdateWorkspace,
+  onDeleteWorkspace: propsOnDeleteWorkspace,
 }) {
   const dbLabel = connectionMeta?.dbName || connectionMeta?.label || 'Atlas Connected';
 
+  // Fallback hooks if not passed from parent
+  const workspacesHook = useWorkspaces();
+  const schemaHook = useSchema();
+
+  const workspaces = propsWorkspaces ?? workspacesHook.workspaces;
+  const schema = propsSchema ?? schemaHook.schema;
+  const onCreateWorkspace = propsOnCreateWorkspace ?? workspacesHook.createWorkspace;
+  const onUpdateWorkspace = propsOnUpdateWorkspace ?? workspacesHook.updateWorkspace;
+  const onDeleteWorkspace = propsOnDeleteWorkspace ?? workspacesHook.deleteWorkspace;
+
+  // Local state fallbacks if not controlled by parent
+  const [localActiveWorkspaceId, setLocalActiveWorkspaceId] = useState(null);
+  const [localScopeMode, setLocalScopeMode] = useState('all');
+  const [localSelectedCollections, setLocalSelectedCollections] = useState([]);
+
+  const activeWorkspaceId = propsActiveWorkspaceId !== undefined ? propsActiveWorkspaceId : localActiveWorkspaceId;
+  const scopeMode = propsScopeMode !== undefined ? propsScopeMode : localScopeMode;
+  const selectedCollections = propsSelectedCollections !== undefined ? propsSelectedCollections : localSelectedCollections;
+
+  const onSelectWorkspace = propsOnSelectWorkspace ?? ((id, cols) => {
+    setLocalActiveWorkspaceId(id);
+    if (id) {
+      setLocalScopeMode('selected');
+      setLocalSelectedCollections(cols || []);
+    } else {
+      setLocalScopeMode('all');
+      setLocalSelectedCollections([]);
+    }
+  });
+
+  const onChangeScopeMode = propsOnChangeScopeMode ?? setLocalScopeMode;
+  const onSetCollections = propsOnSetCollections ?? setLocalSelectedCollections;
+  const onRemoveCollection = propsOnRemoveCollection ?? ((col) => setLocalSelectedCollections((prev) => prev.filter((c) => c !== col)));
+
   return (
-    <header className="h-14 border-b border-white/5 bg-background/80 backdrop-blur-xl flex items-center  justify-between px-6 z-50 shrink-0 shadow-[0_2px_20px_rgba(0,0,0,0.25)]">
+    <header className="min-h-14 border-b border-white/5 bg-background/80 backdrop-blur-xl flex flex-col justify-center px-6 z-50 shrink-0 shadow-[0_2px_20px_rgba(0,0,0,0.25)] transition-all">
+      <div className="flex items-center justify-between w-full py-2">
       {/* Logo + Mobile menu toggle */}
       <div className="flex items-center gap-3">
         {showMenu && (
@@ -41,33 +92,53 @@ export default function AtlasTopNav({
         </div>
       </div>
 
-      {/* Center Segmented View Switcher */}
-      {onViewChange && (
-        <div className="flex items-center p-0.5 bg-white/[0.04] border border-white/5 rounded-xl">
-          <button
-            onClick={() => onViewChange('chat')}
-            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all duration-200 ${
-              activeView === 'chat'
-                ? "bg-white/[0.08] text-foreground shadow-[0_2px_8px_rgba(0,0,0,0.3)]"
-                : "text-muted-foreground hover:text-foreground hover:bg-white/[0.02]"
-            }`}
-          >
-            <MessageSquare className={`h-3.5 w-3.5 transition-colors ${activeView === 'chat' ? "text-primary" : "text-muted-foreground"}`} />
-            <span>Chat Panel</span>
-          </button>
-          <button
-            onClick={() => onViewChange('dashboard')}
-            className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all duration-200 ${
-              activeView === 'dashboard'
-                ? "bg-white/[0.08] text-foreground shadow-[0_2px_8px_rgba(0,0,0,0.3)]"
-                : "text-muted-foreground hover:text-foreground hover:bg-white/[0.02]"
-            }`}
-          >
-            <LayoutDashboard className={`h-3.5 w-3.5 transition-colors ${activeView === 'dashboard' ? "text-primary" : "text-muted-foreground"}`} />
-            <span>Dashboard</span>
-          </button>
+      {/* Center Segmented View Switcher & Workspace Scope Selector */}
+      <div className="flex items-center gap-4">
+        {onViewChange && (
+          <div className="flex items-center p-0.5 bg-white/[0.04] border border-white/5 rounded-xl shrink-0">
+            <button
+              onClick={() => onViewChange('chat')}
+              className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all duration-200 ${
+                activeView === 'chat'
+                  ? "bg-white/[0.08] text-foreground shadow-[0_2px_8px_rgba(0,0,0,0.3)]"
+                  : "text-muted-foreground hover:text-foreground hover:bg-white/[0.02]"
+              }`}
+            >
+              <MessageSquare className={`h-3.5 w-3.5 transition-colors ${activeView === 'chat' ? "text-primary" : "text-muted-foreground"}`} />
+              <span>Chat Panel</span>
+            </button>
+            <button
+              onClick={() => onViewChange('dashboard')}
+              className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all duration-200 ${
+                activeView === 'dashboard'
+                  ? "bg-white/[0.08] text-foreground shadow-[0_2px_8px_rgba(0,0,0,0.3)]"
+                  : "text-muted-foreground hover:text-foreground hover:bg-white/[0.02]"
+              }`}
+            >
+              <LayoutDashboard className={`h-3.5 w-3.5 transition-colors ${activeView === 'dashboard' ? "text-primary" : "text-muted-foreground"}`} />
+              <span>Dashboard</span>
+            </button>
+          </div>
+        )}
+
+        {/* Scope Workspace Selector */}
+        <div className="hidden md:block">
+          <ScopeWorkspaceSelector
+            workspaces={workspaces}
+            activeWorkspaceId={activeWorkspaceId}
+            onSelectWorkspace={onSelectWorkspace}
+            scopeMode={scopeMode}
+            onChangeScopeMode={onChangeScopeMode}
+            selectedCollections={selectedCollections}
+            onSetCollections={onSetCollections}
+            onRemoveCollection={onRemoveCollection}
+            schema={schema}
+            onCreateWorkspace={onCreateWorkspace}
+            onUpdateWorkspace={onUpdateWorkspace}
+            onDeleteWorkspace={onDeleteWorkspace}
+          />
         </div>
-      )}
+      </div>
 
       {/* Right controls */}
       <div className="flex items-center gap-2">
@@ -111,6 +182,25 @@ export default function AtlasTopNav({
           </Avatar>
         </Tooltip>
       </div>
-    </header>
+    </div>
+
+    {/* Scope Workspace Selector for smaller screens */}
+    <div className="block md:hidden w-full pb-1">
+      <ScopeWorkspaceSelector
+        workspaces={workspaces}
+        activeWorkspaceId={activeWorkspaceId}
+        onSelectWorkspace={onSelectWorkspace}
+        scopeMode={scopeMode}
+        onChangeScopeMode={onChangeScopeMode}
+        selectedCollections={selectedCollections}
+        onSetCollections={onSetCollections}
+        onRemoveCollection={onRemoveCollection}
+        schema={schema}
+        onCreateWorkspace={onCreateWorkspace}
+        onUpdateWorkspace={onUpdateWorkspace}
+        onDeleteWorkspace={onDeleteWorkspace}
+      />
+    </div>
+  </header>
   );
 }

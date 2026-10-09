@@ -1,4 +1,5 @@
 require("dotenv").config();
+require("./utils/dnsConfig");
 
 const express = require("express");
 const cors = require("cors");
@@ -6,6 +7,7 @@ const cookieParser = require("cookie-parser");
 const path = require("path");
 const { connectToDatabase } = require("./db/connection");
 const { initializeCollection } = require("./models/UserConnection");
+const { initializeCollection: initializeWorkspaceCollection } = require("./models/Workspace");
 const { initializeCleanupIndexes, startCleanupCron } = require("./services/cleanupService");
 const { requireAuth } = require("./middleware/auth");
 const { generalLimiter, authLimiter } = require("./middleware/rateLimiter");
@@ -18,6 +20,9 @@ const voiceRoutes = require("./routes/voice");
 const schemaRoutes = require("./routes/schema");
 const dashboardRoutes = require("./routes/dashboard");
 const connectionsRoutes = require("./routes/connections");
+const workspaceRoutes = require("./routes/workspaces");
+const scopeSuggestRoutes = require("./routes/scopeSuggest");
+const sharedDashboardRoutes = require("./routes/sharedDashboard");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -92,6 +97,7 @@ app.use("/api/", generalLimiter);
 // Apply stricter rate limits to auth-related public routes
 app.use("/api/auth", authLimiter, authRoutes); // GET /api/auth/me, POST /api/auth/logout
 app.use("/api/connections", authLimiter, connectionsRoutes); // POST /api/connections/connect
+app.use("/api/dashboard/shared", sharedDashboardRoutes);
 
 // Health check
 app.get("/api/health", (_req, res) => {
@@ -111,6 +117,8 @@ app.use("/api/query", requireAuth, queryRoutes);
 app.use("/api/voice", requireAuth, voiceRoutes);
 app.use("/api/schema", requireAuth, schemaRoutes);
 app.use("/api/dashboard", requireAuth, dashboardRoutes);
+app.use("/api/workspaces", requireAuth, workspaceRoutes);
+app.use("/api/scope", requireAuth, scopeSuggestRoutes);
 
 // ---------------------------------------------------------------------------
 // Error handlers
@@ -143,6 +151,7 @@ async function startServer() {
   try {
     await connectToDatabase();
     await initializeCollection();
+    await initializeWorkspaceCollection();
     await initializeCleanupIndexes();
     startCleanupCron();
 

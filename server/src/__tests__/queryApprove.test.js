@@ -140,6 +140,21 @@ describe('B3: POST /api/query/approve security guards', () => {
         expect(executePipeline).not.toHaveBeenCalled();
     });
 
+    test('re-validates pipeline and rejects hard-denied code execution operators ($where, $function) with 422', async () => {
+        const token = createTestToken({
+            pipeline: [{ $match: { $where: 'sleep(1000)' } }],
+        });
+
+        const res = await request(app)
+            .post('/api/query/approve')
+            .send({ approvalToken: token });
+
+        expect(res.status).toBe(422);
+        expect(res.body.success).toBe(false);
+        expect(res.body.error.code).toBe('safety_violation');
+        expect(executePipeline).not.toHaveBeenCalled();
+    });
+
     test('rejects token without jti with 400 invalid_token', async () => {
         const token = createTestToken({ jti: undefined });
 

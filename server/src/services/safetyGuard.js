@@ -32,7 +32,41 @@ const BLOCKED_OPERATORS = [
     '$dropCollection',
 ];
 
+// Operators that allow arbitrary code execution in MongoDB.
+// These are strictly forbidden and NEVER approvable (no isWrite flag).
+const HARD_DENY_OPERATORS = new Set([
+    '$function',
+    '$accumulator',
+    '$where',
+]);
+
 const MAX_RESULT_LIMIT = 1000;
+
+/**
+ * Recursively check for hard-denied code execution operators.
+ * @param {*} obj
+ * @returns {string|null}
+ */
+function findHardDenyOperator(obj) {
+    if (obj === null || obj === undefined) return null;
+    if (typeof obj !== 'object') return null;
+
+    if (Array.isArray(obj)) {
+        for (let i = 0; i < obj.length; i++) {
+            const found = findHardDenyOperator(obj[i]);
+            if (found) return found;
+        }
+        return null;
+    }
+
+    for (const [key, value] of Object.entries(obj)) {
+        if (HARD_DENY_OPERATORS.has(key)) return key;
+        const nested = findHardDenyOperator(value);
+        if (nested) return nested;
+    }
+
+    return null;
+}
 
 /**
  * Recursively check an object for blocked operators.
@@ -54,13 +88,66 @@ function findBlockedOperator(obj) {
 }
 
 /**
+ * Recursively find collections referenced in pipeline stages.
+ * @param {Array} stages
+ * @returns {string[]}
+ */
+function findReferencedCollections(stages) {
+    if (!Array.isArray(stages)) return [];
+    const referenced = [];
+
+    for (const stage of stages) {
+        if (!stage || typeof stage !== 'object') continue;
+
+        if (stage.$lookup) {
+            if (typeof stage.$lookup.from === 'string') {
+                referenced.push(stage.$lookup.from);
+            }
+            if (Array.isArray(stage.$lookup.pipeline)) {
+                referenced.push(...findReferencedCollections(stage.$lookup.pipeline));
+            }
+        }
+
+        if (stage.$unionWith) {
+            if (typeof stage.$unionWith === 'string') {
+                referenced.push(stage.$unionWith);
+            } else if (typeof stage.$unionWith === 'object' && stage.$unionWith !== null) {
+                if (typeof stage.$unionWith.coll === 'string') {
+                    referenced.push(stage.$unionWith.coll);
+                }
+                if (Array.isArray(stage.$unionWith.pipeline)) {
+                    referenced.push(...findReferencedCollections(stage.$unionWith.pipeline));
+                }
+            }
+        }
+
+        if (stage.$graphLookup) {
+            if (typeof stage.$graphLookup.from === 'string') {
+                referenced.push(stage.$graphLookup.from);
+            }
+        }
+
+        if (stage.$facet && typeof stage.$facet === 'object') {
+            for (const facetPipeline of Object.values(stage.$facet)) {
+                if (Array.isArray(facetPipeline)) {
+                    referenced.push(...findReferencedCollections(facetPipeline));
+                }
+            }
+        }
+    }
+
+    return referenced;
+}
+
+/**
  * Validate an aggregation pipeline for safety.
  *
  * @param {object[]} pipeline - The MongoDB aggregation pipeline
- * @returns {{ safe: boolean, reason?: string, pipeline: object[] }}
+ * @param {object} [options={}] - Validation options (allowedCollections, targetCollection)
+ * @returns {{ safe: boolean, reason?: string, pipeline: object[], code?: string, violatingCollections?: string[] }}
  *   Returns the (potentially modified) pipeline with a $limit injected if needed.
  */
-function validatePipeline(pipeline) {
+function validatePipeline(pipeline, options = {}) {
     if (!Array.isArray(pipeline)) {
         return { safe: false, reason: 'Pipeline must be an array', pipeline: [] };
     }
@@ -71,6 +158,46 @@ function validatePipeline(pipeline) {
 
     if (pipeline.length > 20) {
         return { safe: false, reason: 'Pipeline has too many stages (max 20)', pipeline };
+    }
+
+    // Check for hard-denied code execution operators ($function, $accumulator, $where)
+    // NOTE: Returns safe: false WITHOUT isWrite: true, so this cannot be staged or approved.
+    const hardDenyOp = findHardDenyOperator(pipeline);
+    if (hardDenyOp) {
+        return {
+            safe: false,
+            code: 'hard_blocked_operator',
+            reason: `Arbitrary code execution operator "${hardDenyOp}" is strictly forbidden.`,
+            pipeline,
+        };
+    }
+
+    const { allowedCollections, targetCollection } = options;
+    if (allowedCollections !== undefined && allowedCollections !== null) {
+        const allowedSet = allowedCollections instanceof Set ? allowedCollections : new Set(allowedCollections);
+
+        if (targetCollection && !allowedSet.has(targetCollection)) {
+            return {
+                safe: false,
+                code: 'scope_violation',
+                violatingCollections: [targetCollection],
+                reason: `Target collection "${targetCollection}" is outside the allowed scope`,
+                pipeline,
+            };
+        }
+
+        const referenced = findReferencedCollections(pipeline);
+        const violating = referenced.filter((c) => !allowedSet.has(c));
+        if (violating.length > 0) {
+            const firstViolator = violating[0];
+            return {
+                safe: false,
+                code: 'scope_violation',
+                violatingCollections: Array.from(new Set(violating)),
+                reason: `Collection "${firstViolator}" is outside the allowed scope`,
+                pipeline,
+            };
+        }
     }
 
     // Check each stage for blocked operations

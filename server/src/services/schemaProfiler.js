@@ -208,6 +208,15 @@ async function profileSchema(dbOrOptions, options = {}) {
     const sampleSize = actualOptions.sampleSize || 5;
     const now = Date.now();
     const dbName = db.databaseName;
+
+    if (process.env.EVAL_MODE === '1' && process.env.EVAL_SCHEMA_SNAPSHOT) {
+        const snapAll = JSON.parse(require('fs').readFileSync(process.env.EVAL_SCHEMA_SNAPSHOT, 'utf8'));
+        const snap = snapAll[dbName];
+        if (!snap) throw new Error(`no schema snapshot for ${dbName}`);
+        const want = actualOptions.collections ? new Set(actualOptions.collections) : null;
+        return want ? { ...snap, collections: snap.collections.filter((c) => want.has(c.name)) } : snap;
+    }
+
     const cacheKey = `${actualOptions.connectionId || 'default'}:${dbName}:sz${sampleSize}`;
 
     let cachedOrFresh = null;

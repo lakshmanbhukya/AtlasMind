@@ -1,4 +1,5 @@
-const { getDb } = require('../db/connection');
+const connection = require('../db/connection');
+const { normalizeBson } = require('../utils/normalizeBson');
 
 /**
  * Execute a validated aggregation pipeline against a collection.
@@ -26,7 +27,8 @@ async function executePipeline(db, collectionName, pipeline, options = {}) {
         allowDiskUse,
     });
 
-    const results = await cursor.toArray();
+    const rawResults = await cursor.toArray();
+    const results = rawResults.map(normalizeBson);
     const executionTimeMs = Date.now() - startTime;
 
     return { results, executionTimeMs };
@@ -45,7 +47,7 @@ async function executePipeline(db, collectionName, pipeline, options = {}) {
  */
 async function saveQueryHistory(entry) {
     try {
-        const db = getDb();
+        const db = connection.getDb();
         // Extract results if present, and slice to first 100 rows for storage safety
         let resultsSnapshot = undefined;
         if (entry.results && Array.isArray(entry.results)) {
@@ -55,6 +57,15 @@ async function saveQueryHistory(entry) {
         const entryToSave = { ...entry };
         if (resultsSnapshot !== undefined) {
             entryToSave.results = resultsSnapshot;
+        }
+
+        if (entry.isEdit === true && entry.connectionId && entry.naturalLanguage) {
+            await db.collection('query_history').findOneAndUpdate(
+                { connectionId: entry.connectionId, naturalLanguage: entry.naturalLanguage },
+                { $set: { ...entryToSave, updatedAt: new Date() } },
+                { sort: { timestamp: -1 } }
+            );
+            return;
         }
 
         await db.collection('query_history').insertOne({

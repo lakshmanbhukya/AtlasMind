@@ -457,8 +457,10 @@ async function processNaturalLanguageQuery({
             // Mutating write intercepted for human approval
             if (pipelineCheck.isWrite) {
                 const jwt = require('jsonwebtoken');
+                const crypto = require('crypto');
                 const approvalToken = jwt.sign(
                     {
+                        jti: crypto.randomUUID(),
                         connectionId,
                         collection: llmResult.collection,
                         pipeline: llmResult.pipeline,

@@ -71,6 +71,7 @@ router.post('/', async (req, res) => {
                     isEdit,
                     startTime,
                     source: 'query',
+                    evalOptions: req.body.evalOptions,
                 });
                 return res.status(pipelineResult.statusCode).json(pipelineResult.response);
             }
@@ -147,9 +148,11 @@ router.post('/', async (req, res) => {
             // Check if this is a mutating write action that can be staged for Human-in-the-Loop approval
             if (pipelineCheck.isWrite) {
                 const jwt = require('jsonwebtoken');
+                const crypto = require('crypto');
                 // Generate secure 10-minute token with draft operation payload
                 const approvalToken = jwt.sign(
                     {
+                        jti: crypto.randomUUID(),
                         connectionId,
                         collection: llmResult.collection,
                         pipeline: llmResult.pipeline,
@@ -520,7 +523,70 @@ router.post('/approve', async (req, res) => {
             });
         }
 
-        const { connectionId, collection, pipeline, query } = decoded;
+        const { connectionId, collection, pipeline, query, jti, scope } = decoded;
+
+        // B3.1: Ownership verification
+        if (connectionId !== req.connectionId) {
+            return res.status(403).json({
+                success: false,
+                error: { code: 'forbidden', message: 'Access denied: token connectionId does not match current session' },
+            });
+        }
+
+        // B3.2: Re-run validateCollectionName and validatePipeline
+        const collectionCheck = validateCollectionName(collection);
+        if (!collectionCheck.safe) {
+            return res.status(422).json({
+                success: false,
+                error: { code: 'safety_violation', message: collectionCheck.reason },
+            });
+        }
+
+        const pipelineCheck = validatePipeline(pipeline, {
+            allowedCollections: scope || null,
+            targetCollection: collection,
+        });
+
+        if (!pipelineCheck.safe && !pipelineCheck.isWrite) {
+            return res.status(422).json({
+                success: false,
+                error: { code: 'safety_violation', message: pipelineCheck.reason },
+            });
+        }
+
+        // B3.3: Atomic single-use jti via unique index in central DB
+        if (!jti) {
+            return res.status(400).json({
+                success: false,
+                error: { code: 'invalid_token', message: 'Token missing unique identifier (jti)' },
+            });
+        }
+
+        const centralDb = getDb();
+        const approvalTokens = centralDb.collection('approval_tokens');
+        try {
+            await approvalTokens.createIndex({ jti: 1 }, { unique: true });
+            await approvalTokens.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+        } catch (_) {
+            // Index already exists
+        }
+
+        try {
+            await approvalTokens.insertOne({
+                jti,
+                connectionId,
+                usedAt: new Date(),
+                expiresAt: decoded.exp ? new Date(decoded.exp * 1000) : new Date(Date.now() + 10 * 60 * 1000),
+            });
+        } catch (err) {
+            if (err.code === 11000) {
+                return res.status(409).json({
+                    success: false,
+                    error: { code: 'token_already_used', message: 'Approval token has already been used' },
+                });
+            }
+            throw err;
+        }
 
         // Get User DB (pooled connection — reused across requests)
         const userDb = await getUserDb(connectionId);
@@ -529,7 +595,7 @@ router.post('/approve', async (req, res) => {
         const { results, executionTimeMs } = await executePipeline(
             userDb,
             collection,
-            pipeline
+            pipelineCheck.pipeline || pipeline
         );
 
         // Log transaction to central query history

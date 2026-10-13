@@ -1,18 +1,15 @@
 const crypto = require('crypto');
 
 // Ensure key is exactly 32 bytes (256 bits) for aes-256-cbc.
-// It can be provided as a 64-character hex string in the environment.
-const rawKey = process.env.ENCRYPTION_KEY || '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
-let KEY;
-try {
-  KEY = Buffer.from(rawKey, 'hex');
-  if (KEY.length !== 32) {
-    throw new Error('Invalid key length');
-  }
-} catch (e) {
-  // Fallback to a hash of the raw string to ensure exactly 32 bytes
-  KEY = crypto.createHash('sha256').update(rawKey).digest();
+// It MUST be provided as a 64-character hexadecimal string in process.env.ENCRYPTION_KEY.
+const HEX_64_REGEX = /^[0-9a-fA-F]{64}$/;
+const rawKey = process.env.ENCRYPTION_KEY;
+
+if (!rawKey || typeof rawKey !== 'string' || !HEX_64_REGEX.test(rawKey)) {
+    throw new Error('ENCRYPTION_KEY environment variable is required and must be a 64-character hexadecimal string');
 }
+
+const KEY = Buffer.from(rawKey, 'hex');
 
 const IV_LENGTH = 16;
 const ALGO = 'aes-256-cbc';

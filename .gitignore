@@ -4,4 +4,5 @@ atlas-mind/
 scratch/
 evaluation/
 docs/AMBIGUITY_RESEARCH_EVALUATION.md
-
+eval2/models.json
+eval2/state/

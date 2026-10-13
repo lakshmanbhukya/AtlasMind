@@ -12,8 +12,9 @@
  *  6. Pass enriched query to LLM with isClarificationPass:true.
  */
 
+const { isMetricCandidate } = require('./schemaProfiler');
+
 const AMBIGUITY_MODE = process.env.AMBIGUITY_MODE || 'hybrid';
-const EXECUTION_VERIFY = process.env.EXECUTION_VERIFY || 'on';
 
 // ---------------------------------------------------------------------------
 // Term Sets
@@ -24,19 +25,38 @@ const EXECUTION_VERIFY = process.env.EXECUTION_VERIFY || 'on';
  * @type {Set<string>}
  */
 const VAGUE_TERMS = new Set([
-    'top', 'best', 'highest', 'lowest', 'largest', 'smallest', 'recent',
-    'latest', 'most', 'least', 'popular', 'performance', 'sales', 'revenue',
+    'top', 'best', 'highest', 'lowest', 'largest', 'smallest',
+    'most', 'least', 'popular', 'performance', 'sales', 'revenue',
     'growth', 'worst', 'biggest',
 ]);
 
+// EVAL_MODE: allow override via EVAL_VAGUE_TERMS env var (comma-separated)
+if (process.env.EVAL_MODE === '1' && process.env.EVAL_VAGUE_TERMS) {
+    const overrideTerms = process.env.EVAL_VAGUE_TERMS.split(',').map((t) => t.trim()).filter(Boolean);
+    VAGUE_TERMS.clear();
+    for (const t of overrideTerms) {
+        VAGUE_TERMS.add(t);
+    }
+}
+
 /**
- * Write-intent terms — skip the ambiguity gate entirely for these.
+ * Write-intent patterns — skip the ambiguity gate entirely for these.
  * The safety guard handles write intent downstream.
- * @type {string[]}
+ * Uses word-boundary regular expressions so substring matches
+ * (e.g. "dataset", "company addresses", "created accounts", "stock exchange", "dropout")
+ * do not falsely trigger write intent, while real write operations do.
+ * @type {RegExp[]}
  */
-const WRITE_INTENT_TERMS = [
-    'delete', 'remove', 'drop', 'truncate', 'update', 'modify', 'change',
-    'insert', 'add', 'create', 'replace', 'upsert', 'set ',
+const WRITE_INTENT_PATTERNS = [
+    /\b(?:delete|remove|truncate|modify|insert|replace|upsert)\b/i,
+    /\bdrop\b/i,
+    /\bupdate\b/i,
+    /\b(?:add|create)\s+(?:new|an?|the)?\s*\w+/i,
+    /^(?:add|create)\b/i,
+    /\bchange\s+(?:the|an?|all)?\s*\w+\s*(?:to|=)/i,
+    /\bset\s+[\w.]+\s*=/i,
+    /\bset\s+[\w.]+\s*(?:to|=)\b/i,
+    /\$set\b/i,
 ];
 
 /**
@@ -134,8 +154,7 @@ function resetAmbiguityMetrics() {
  */
 function hasWriteIntent(queryText) {
     if (!queryText || typeof queryText !== 'string') return false;
-    const lower = queryText.toLowerCase();
-    return WRITE_INTENT_TERMS.some((term) => lower.includes(term));
+    return WRITE_INTENT_PATTERNS.some((pattern) => pattern.test(queryText));
 }
 
 /**
@@ -169,6 +188,8 @@ function extractNumericFields(schemaObject) {
 
     for (const col of schemaObject.collections) {
         for (const field of col.fields || []) {
+            if (!isMetricCandidate(field.name)) continue;
+
             const isNumeric =
                 ['number', 'decimal', 'int', 'double', 'float'].includes(field.type) ||
                 typeof field.sample === 'number';
@@ -189,6 +210,8 @@ function extractNumericFields(schemaObject) {
 /**
  * Check if the user query already explicitly specifies one of the exact schema fields
  * (e.g., "top 10 orders by sales_amount" or "sum of order_total").
+ * Whole-token matching is applied for compound names (camelCase, snake_case, dot-path).
+ * Plain names require "by <field>".
  *
  * @param {string} lowerQuery
  * @param {Array<{ field: string, label: string }>} numericFields
@@ -201,12 +224,24 @@ function queryAlreadyNamesSpecificField(lowerQuery, numericFields) {
 
     for (const nf of numericFields) {
         const rawField = nf.field.toLowerCase();
-        // If the exact snake_case / camelCase field identifier is in the query (e.g. "sales_amount")
-        if (rawField.includes('_') && lowerQuery.includes(rawField)) {
-            return true;
-        }
-        // Or if the query explicitly says "by <field label>" / "by <field>"
+        const originalField = nf.field;
         const labelLower = nf.label.toLowerCase();
+
+        // Check if the field is compound (snake_case, dot-path, or camelCase)
+        const isCompound =
+            originalField.includes('_') ||
+            originalField.includes('.') ||
+            (/[a-z]/.test(originalField) && /[A-Z]/.test(originalField));
+
+        if (isCompound) {
+            const escaped = rawField.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const tokenRe = new RegExp(`(?<![a-z0-9_])${escaped}(?![a-z0-9_])`);
+            if (tokenRe.test(lowerQuery)) {
+                return true;
+            }
+        }
+
+        // "by <field>" / "by <label>" applies to all fields
         if (
             lowerQuery.includes(`by ${rawField}`) ||
             lowerQuery.includes(`by ${labelLower}`)
@@ -223,6 +258,85 @@ function queryAlreadyNamesSpecificField(lowerQuery, numericFields) {
 // ---------------------------------------------------------------------------
 
 /**
+ * Analyze query ambiguity and return both result and diagnostics.
+ *
+ * @param {string} queryText
+ * @param {object} schemaObject
+ * @returns {{ result: object|null, diagnostics: { matchedTerms: string[], numericCandidateCount: number, explicitBindingFound: boolean, reason: 'no_vague_term'|'lt2_numeric'|'explicit_binding'|'write_intent'|'asked' } }}
+ */
+function analyzeAmbiguity(queryText, schemaObject) {
+    const diagnostics = {
+        matchedTerms: [],
+        numericCandidateCount: 0,
+        explicitBindingFound: false,
+        reason: 'no_vague_term',
+    };
+
+    if (AMBIGUITY_MODE === 'off' || AMBIGUITY_MODE === 'llm') {
+        return { result: null, diagnostics };
+    }
+
+    if (!queryText || typeof queryText !== 'string') {
+        return { result: null, diagnostics };
+    }
+    const lower = queryText.toLowerCase();
+
+    if (hasWriteIntent(lower)) {
+        diagnostics.reason = 'write_intent';
+        return { result: null, diagnostics };
+    }
+
+    const numericFields = extractNumericFields(schemaObject);
+    diagnostics.numericCandidateCount = numericFields.length;
+
+    if (numericFields.length < 2) {
+        diagnostics.reason = 'lt2_numeric';
+        return { result: null, diagnostics };
+    }
+
+    const words = lower.replace(/[^a-z0-9_]/g, ' ').split(/\s+/).filter(Boolean);
+    const matchedTerms = words.filter((word) => VAGUE_TERMS.has(word));
+    diagnostics.matchedTerms = matchedTerms;
+
+    if (matchedTerms.length === 0) {
+        diagnostics.reason = 'no_vague_term';
+        return { result: null, diagnostics };
+    }
+
+    if (queryAlreadyNamesSpecificField(lower, numericFields)) {
+        diagnostics.explicitBindingFound = true;
+        diagnostics.reason = 'explicit_binding';
+        return { result: null, diagnostics };
+    }
+
+    diagnostics.reason = 'asked';
+
+    const topFields = numericFields.slice(0, 4);
+    const options = topFields.map((f, i) => ({
+        value: f.field,
+        label: f.label,
+        collection: f.collection,
+        ...(i === 0 ? { recommended: true } : {}),
+    }));
+    options.push({ value: '__other__', label: 'Other (type it)' });
+
+    const result = {
+        needsClarification: true,
+        questions: [
+            {
+                id: 'metric',
+                question: 'Which metric best represents what you mean by this query?',
+                type: 'single',
+                options,
+            },
+        ],
+        diagnostics,
+    };
+
+    return { result, diagnostics };
+}
+
+/**
  * Deterministic ambiguity check: does this query + schema produce ambiguity?
  * Returns a clarification payload when ambiguous, or null when the query is clear.
  *
@@ -233,54 +347,8 @@ function queryAlreadyNamesSpecificField(lowerQuery, numericFields) {
  * @returns {object|null} - Clarification payload or null
  */
 function checkDeterministicAmbiguity(queryText, schemaObject) {
-    if (AMBIGUITY_MODE === 'off' || AMBIGUITY_MODE === 'llm') return null;
-    
-    if (!queryText || typeof queryText !== 'string') return null;
-    const lower = queryText.toLowerCase();
-
-    // Skip write-intent queries immediately
-    if (hasWriteIntent(lower)) return null;
-
-    // Extract all numeric field candidates from the schema
-    const numericFields = extractNumericFields(schemaObject);
-
-    // Ambiguity only applies when there are 2+ numeric field candidates
-    if (numericFields.length < 2) return null;
-
-    // Check if any vague term is present in the query (as a whole word)
-    const words = lower.replace(/[^a-z0-9_]/g, ' ').split(/\s+/).filter(Boolean);
-    const hasVagueTerm = words.some((word) => VAGUE_TERMS.has(word));
-    if (!hasVagueTerm) return null;
-
-    // If the user already explicitly specified the exact field or qualifier, do not ask
-    if (queryAlreadyNamesSpecificField(lower, numericFields)) {
-        return null;
-    }
-
-    // Cap at top 4 candidates (sorted as-is from schema order)
-    const topFields = numericFields.slice(0, 4);
-
-    const options = topFields.map((f, i) => ({
-        value: f.field,
-        label: f.label,
-        collection: f.collection,
-        ...(i === 0 ? { recommended: true } : {}),
-    }));
-
-    // Always include an escape hatch for the user
-    options.push({ value: '__other__', label: 'Other (type it)' });
-
-    return {
-        needsClarification: true,
-        questions: [
-            {
-                id: 'metric',
-                question: 'Which metric best represents what you mean by this query?',
-                type: 'single',
-                options,
-            },
-        ],
-    };
+    const analysis = analyzeAmbiguity(queryText, schemaObject);
+    return analysis.result;
 }
 
 /**
@@ -364,17 +432,25 @@ function validateModelClarification(questions, schemaObject = null) {
 }
 
 /**
- * Validate incoming clarification answers against the live schema.
+ * Validate incoming clarification answers against the live schema and offered options.
  * Rejects prompt-injection attempts by requiring all values (including custom "Other" text)
- * to resolve to real schema field names.
+ * to resolve to real schema field names, and rejects values not in offered options when provided.
  *
  * @param {Array<{ id: string, value: string, customText?: string }>} clarifications
  * @param {object} schemaObject - The raw profileSchema() result
+ * @param {Array<object>|object} [offeredQuestions=null] - Optional list of offered questions/options
  * @returns {{ valid: boolean, sanitized: Array, errors: string[] }}
  */
-function validateClarifications(clarifications, schemaObject) {
+function validateClarifications(clarifications, schemaObject, offeredQuestions = null) {
     if (!Array.isArray(clarifications) || clarifications.length === 0) {
         return { valid: false, sanitized: [], errors: ['clarifications must be a non-empty array'] };
+    }
+
+    let questionsList = null;
+    if (offeredQuestions) {
+        questionsList = Array.isArray(offeredQuestions)
+            ? offeredQuestions
+            : (Array.isArray(offeredQuestions.questions) ? offeredQuestions.questions : null);
     }
 
     // Build lookup maps of known schema field names and their human labels
@@ -424,6 +500,29 @@ function validateClarifications(clarifications, schemaObject) {
             }
             sanitized.push({ id: cleanId, value: resolvedCustom });
             continue;
+        }
+
+        // When offered options are provided, reject values that were not offered
+        if (questionsList) {
+            const targetQ = questionsList.find((q) => q && q.id === cleanId);
+            if (targetQ && Array.isArray(targetQ.options)) {
+                const offeredValues = new Set(
+                    targetQ.options
+                        .map((opt) => opt && opt.value)
+                        .filter((v) => v && v !== '__other__')
+                );
+                const offeredLabels = new Set(
+                    targetQ.options
+                        .map((opt) => opt && opt.label && opt.label.toLowerCase())
+                        .filter(Boolean)
+                );
+                const matchesValue = offeredValues.has(rawValue);
+                const matchesLabel = offeredLabels.has(rawValue.toLowerCase());
+                if (!matchesValue && !matchesLabel) {
+                    errors.push(`Clarification value "${rawValue}" was not among the offered options for question "${cleanId}"`);
+                    continue;
+                }
+            }
         }
 
         // Strict allowlist: value MUST match an exact schema field name or its human-readable label
@@ -477,6 +576,7 @@ function buildEnrichedQuery(originalQuery, sanitizedClarifications) {
 module.exports = {
     hasWriteIntent,
     checkDeterministicAmbiguity,
+    analyzeAmbiguity,
     validateModelClarification,
     validateClarifications,
     buildEnrichedQuery,

@@ -7,6 +7,7 @@ const { getUserDb } = require('./userDbPool');
 const {
     hasWriteIntent,
     checkDeterministicAmbiguity,
+    analyzeAmbiguity,
     validateClarifications,
     buildEnrichedQuery,
     recordAmbiguityMetric,
@@ -130,8 +131,48 @@ async function processNaturalLanguageQuery({
     isEdit,
     startTime = Date.now(),
     source = 'query',
+    evalOptions = {},
 }) {
     const query = text.trim();
+
+    const isEvalMode = process.env.EVAL_MODE === '1';
+    const evalOpts = isEvalMode ? (evalOptions || {}) : {};
+
+    const hrNow = () => process.hrtime.bigint();
+    const toMs = (startNs) => Number(process.hrtime.bigint() - startNs) / 1e6;
+    const totalStartNs = hrNow();
+
+    let gateMs = 0;
+    let schemaMs = 0;
+    let fewShotMs = 0;
+    let llmMs = 0;
+    let validateMs = 0;
+    let dbMs = 0;
+    let gateInfo = { reason: null, matchedTerms: [] };
+    let safetyInfo = { code: null, reason: null };
+    let currentLlmResult = null;
+
+    const wrapResponse = (statusCode, payload) => {
+        if (isEvalMode) {
+            payload.diagnostics = {
+                timings: {
+                    gateMs,
+                    schemaMs,
+                    fewShotMs,
+                    llmMs,
+                    validateMs,
+                    dbMs,
+                    totalMs: toMs(totalStartNs),
+                },
+                usage: currentLlmResult?.usage || null,
+                model: currentLlmResult?.model || evalOpts.model || model || null,
+                retries: currentLlmResult?.retries || 0,
+                gate: gateInfo,
+                safety: safetyInfo,
+            };
+        }
+        return { statusCode, response: payload };
+    };
 
     // 1. Get User DB from pool
     const userDb = await getUserDb(connectionId);
@@ -151,31 +192,46 @@ async function processNaturalLanguageQuery({
         dropMissing: Boolean(dropMissing || workspaceId),
     });
     if (!scopeCheck.valid) {
-        return {
-            statusCode: scopeCheck.error.status,
-            response: {
-                success: false,
-                error: {
-                    code: scopeCheck.error.code,
-                    message: scopeCheck.error.message,
-                },
+        return wrapResponse(scopeCheck.error.status, {
+            success: false,
+            error: {
+                code: scopeCheck.error.code,
+                message: scopeCheck.error.message,
             },
-        };
+        });
     }
 
-    const { effectiveScope } = scopeCheck;
-    const isRestrictedScope = Array.isArray(collections) && collections.length > 0;
+    let { effectiveScope } = scopeCheck;
+    let isRestrictedScope = Array.isArray(collections) && collections.length > 0;
+
+    // evalOptions.disableScope: override scoping to all user collections
+    if (evalOpts.disableScope) {
+        effectiveScope = scopeCheck.allUserCollections;
+        isRestrictedScope = false;
+    }
 
     // 3. Profile schema + retrieve few-shot examples (scoped by connectionId and collections)
-    const [rawSchema, fewShotExamples] = await Promise.all([
-        profileSchema(userDb, {
-            forceRefresh: false,
-            connectionId,
-            collections: effectiveScope,
-        }),
-        getSimilarExamples(query, 3, connectionId, isRestrictedScope ? effectiveScope : null),
-    ]);
-    const schemaContext = formatMinifiedSchema(rawSchema);
+    const fewShotLimit = evalOpts.fewShotLimit !== undefined ? evalOpts.fewShotLimit : 3;
+
+    const tSchemaStart = hrNow();
+    const rawSchema = await profileSchema(userDb, {
+        forceRefresh: false,
+        connectionId,
+        collections: effectiveScope,
+    });
+    schemaMs = toMs(tSchemaStart);
+
+    const tFewShotStart = hrNow();
+    const fewShotExamples = await getSimilarExamples(
+        query,
+        fewShotLimit,
+        connectionId,
+        isRestrictedScope ? effectiveScope : null
+    );
+    fewShotMs = toMs(tFewShotStart);
+
+    // evalOptions.disableSchemaContext: blank out schema context
+    const schemaContext = evalOpts.disableSchemaContext ? '' : formatMinifiedSchema(rawSchema);
 
     const similarQueriesCount = fewShotExamples.length;
     recordAmbiguityMetric('query_evaluated', { connectionId, source });
@@ -189,16 +245,13 @@ async function processNaturalLanguageQuery({
     if (clarifications !== undefined && clarifications !== null) {
         const valResult = validateClarifications(clarifications, rawSchema);
         if (!valResult.valid) {
-            return {
-                statusCode: 400,
-                response: {
-                    success: false,
-                    error: {
-                        code: 'validation_error',
-                        message: 'Invalid clarification value provided.',
-                    },
+            return wrapResponse(400, {
+                success: false,
+                error: {
+                    code: 'validation_error',
+                    message: 'Invalid clarification value provided.',
                 },
-            };
+            });
         }
         sanitizedClarifications = valResult.sanitized;
         queryForGeneration = buildEnrichedQuery(query, sanitizedClarifications);
@@ -210,21 +263,26 @@ async function processNaturalLanguageQuery({
         }
     } else if (bypassAmbiguity === true) {
         recordAmbiguityMetric('ambiguity_bypassed', { connectionId, source });
-    } else if (!isWriteQuery) {
+    } else if (!isWriteQuery && !evalOpts.disableGate) {
         try {
-            const deterministicCheck = checkDeterministicAmbiguity(query, rawSchema);
-            if (deterministicCheck && deterministicCheck.needsClarification) {
+            const tGateStart = hrNow();
+            const ambiguityAnalysis = analyzeAmbiguity(query, rawSchema);
+            gateMs = toMs(tGateStart);
+
+            gateInfo = {
+                reason: ambiguityAnalysis.diagnostics.reason,
+                matchedTerms: ambiguityAnalysis.diagnostics.matchedTerms,
+            };
+
+            if (ambiguityAnalysis.result && ambiguityAnalysis.result.needsClarification) {
                 recordAmbiguityMetric('ambiguity_asked', { connectionId, source });
-                return {
-                    statusCode: 200,
-                    response: {
-                        success: true,
-                        needsClarification: true,
-                        naturalLanguage: query,
-                        questions: deterministicCheck.questions,
-                        scope: effectiveScope,
-                    },
-                };
+                return wrapResponse(200, {
+                    success: true,
+                    needsClarification: true,
+                    naturalLanguage: query,
+                    questions: ambiguityAnalysis.result.questions,
+                    scope: effectiveScope,
+                });
             }
         } catch (ambErr) {
             console.warn(`⚠️ Deterministic ambiguity gate error (${source}, failing open):`, ambErr.message);
@@ -232,31 +290,35 @@ async function processNaturalLanguageQuery({
     }
 
     // 5. Generate MQL via Groq LLM
+    const targetModel = evalOpts.model || model;
+    const llmGenOptions = {
+        isClarificationPass,
+        rawSchema,
+        scopedCollections: isRestrictedScope ? effectiveScope : [],
+        ...(evalOpts.temperature !== undefined ? { temperature: evalOpts.temperature } : {}),
+    };
+
+    const tLlmStart = hrNow();
     const llmResult = await generateMQL(
         queryForGeneration,
         schemaContext,
         fewShotExamples,
-        model,
-        {
-            isClarificationPass,
-            rawSchema,
-            scopedCollections: isRestrictedScope ? effectiveScope : [],
-        }
+        targetModel,
+        llmGenOptions
     );
+    llmMs = llmResult.timings?.llmMs !== undefined ? llmResult.timings.llmMs : toMs(tLlmStart);
+    currentLlmResult = llmResult;
 
-    // If LLM determines query needs clarification
+    // If LLM indicates clarification is needed
     if (llmResult.needsClarification === true && !isClarificationPass) {
         recordAmbiguityMetric('ambiguity_asked', { connectionId, source });
-        return {
-            statusCode: 200,
-            response: {
-                success: true,
-                needsClarification: true,
-                naturalLanguage: query,
-                questions: llmResult.questions,
-                scope: effectiveScope,
-            },
-        };
+        return wrapResponse(200, {
+            success: true,
+            needsClarification: true,
+            naturalLanguage: query,
+            questions: llmResult.questions,
+            scope: effectiveScope,
+        });
     }
 
     if (!sanitizedClarifications && !bypassAmbiguity) {
@@ -265,79 +327,82 @@ async function processNaturalLanguageQuery({
 
     // 6. Check for LLM-signaled missing collections (scope-insufficient)
     if (Array.isArray(llmResult.missingCollections) && llmResult.missingCollections.length > 0) {
-        return {
-            statusCode: 200,
-            response: {
-                success: true,
-                needsClarification: false,
-                naturalLanguage: query,
-                aiMessage: llmResult.explanation || `This query requires collection(s) outside your active scope: ${llmResult.missingCollections.join(', ')}.`,
-                explanation: llmResult.explanation || `This query requires collection(s) outside your active scope: ${llmResult.missingCollections.join(', ')}.`,
-                pipeline: [],
-                mql: [],
-                collection: '',
-                chartType: 'table',
-                safetyStatus: 'scope-insufficient',
-                safetyBlocked: false,
-                suggestedCollections: llmResult.missingCollections,
+        return wrapResponse(200, {
+            success: true,
+            needsClarification: false,
+            naturalLanguage: query,
+            aiMessage: llmResult.explanation || `This query requires collection(s) outside your active scope: ${llmResult.missingCollections.join(', ')}.`,
+            explanation: llmResult.explanation || `This query requires collection(s) outside your active scope: ${llmResult.missingCollections.join(', ')}.`,
+            pipeline: [],
+            mql: [],
+            collection: '',
+            chartType: 'table',
+            safetyStatus: 'scope-insufficient',
+            safetyBlocked: false,
+            suggestedCollections: llmResult.missingCollections,
+            scope: effectiveScope,
+            results: [],
+            result: [],
+            meta: {
+                resultCount: 0,
+                executionTimeMs: 0,
+                totalTimeMs: Date.now() - startTime,
+                examplesUsed: similarQueriesCount,
+                similarQueriesCount,
+                confidenceScore: 0,
                 scope: effectiveScope,
-                results: [],
-                result: [],
-                meta: {
-                    resultCount: 0,
-                    executionTimeMs: 0,
-                    totalTimeMs: Date.now() - startTime,
-                    examplesUsed: similarQueriesCount,
-                    similarQueriesCount,
-                    confidenceScore: 0,
-                    scope: effectiveScope,
-                },
-                schemaContext,
             },
-        };
+            schemaContext,
+        });
     }
 
     // 7. Handle AI fallback (no pipeline generated)
     if (!llmResult.pipeline || llmResult.pipeline.length === 0) {
-        return {
-            statusCode: 200,
-            response: {
-                success: true,
-                needsClarification: false,
-                naturalLanguage: query,
-                aiMessage: llmResult.explanation || "I couldn't generate a query for that request.",
-                pipeline: [],
-                mql: [],
-                collection: '',
-                chartType: 'table',
-                explanation: llmResult.explanation || "I couldn't generate a query for that request.",
-                safetyStatus: 'read-only',
-                results: [],
-                result: [],
-                scope: effectiveScope,
-                meta: {
-                    resultCount: 0,
-                    executionTimeMs: 0,
-                    totalTimeMs: Date.now() - startTime,
-                    examplesUsed: similarQueriesCount,
-                    similarQueriesCount,
-                    confidenceScore: 0,
-                    scope: effectiveScope,
-                },
-                schemaContext,
+        return wrapResponse(200, {
+            success: true,
+            needsClarification: false,
+            naturalLanguage: query,
+            aiMessage: llmResult.explanation || "I couldn't generate a query for that request.",
+            pipeline: [],
+            mql: [],
+            collection: '',
+            chartType: 'table',
+            explanation: llmResult.explanation || "I couldn't generate a query for that request.",
+            safetyStatus: 'read-only',
+            results: [],
+            result: [],
+            scope: effectiveScope,
+            meta: {
+                resultCount: 0,
                 executionTimeMs: 0,
-                confidenceScore: 0,
+                totalTimeMs: Date.now() - startTime,
+                examplesUsed: similarQueriesCount,
                 similarQueriesCount,
+                confidenceScore: 0,
+                scope: effectiveScope,
             },
-        };
+            schemaContext,
+            executionTimeMs: 0,
+            confidenceScore: 0,
+            similarQueriesCount,
+        });
     }
 
     // 8. Safety validation & Scope enforcement
-    const collectionCheck = validateCollectionName(llmResult.collection);
-    if (!collectionCheck.safe) {
-        return {
-            statusCode: 422,
-            response: {
+    // WARNING: evalOptions.disableSafetyGuard runs unvalidated LLM pipelines on the real DB.
+    // Evaluate with a read-only Mongo user when this flag is enabled.
+    let pipelineCheck;
+
+    if (evalOpts.disableSafetyGuard) {
+        pipelineCheck = { safe: true, pipeline: llmResult.pipeline };
+        safetyInfo = { code: null, reason: null };
+    } else {
+        const tValStart = hrNow();
+        const collectionCheck = validateCollectionName(llmResult.collection);
+        if (!collectionCheck.safe) {
+            validateMs = toMs(tValStart);
+            safetyInfo = { code: 'safety_violation', reason: collectionCheck.reason };
+            return wrapResponse(422, {
                 success: false,
                 error: { code: 'safety_violation', message: collectionCheck.reason },
                 naturalLanguage: query,
@@ -348,21 +413,20 @@ async function processNaturalLanguageQuery({
                 similarQueriesCount,
                 schemaContext,
                 scope: effectiveScope,
-            },
-        };
-    }
+            });
+        }
 
-    const pipelineCheck = validatePipeline(llmResult.pipeline, {
-        allowedCollections: isRestrictedScope ? effectiveScope : null,
-        targetCollection: llmResult.collection,
-    });
+        pipelineCheck = validatePipeline(llmResult.pipeline, {
+            allowedCollections: isRestrictedScope ? effectiveScope : null,
+            targetCollection: llmResult.collection,
+        });
+        validateMs = toMs(tValStart);
+        safetyInfo = { code: pipelineCheck.code || null, reason: pipelineCheck.reason || null };
 
-    if (!pipelineCheck.safe) {
-        // Missing collection / scope violation fallback
-        if (pipelineCheck.code === 'scope_violation') {
-            return {
-                statusCode: 200,
-                response: {
+        if (!pipelineCheck.safe) {
+            // Missing collection / scope violation fallback
+            if (pipelineCheck.code === 'scope_violation') {
+                return wrapResponse(200, {
                     success: true,
                     needsClarification: false,
                     naturalLanguage: query,
@@ -387,29 +451,26 @@ async function processNaturalLanguageQuery({
                         scope: effectiveScope,
                     },
                     schemaContext,
-                },
-            };
-        }
+                });
+            }
 
-        // Mutating write intercepted for human approval
-        if (pipelineCheck.isWrite) {
-            const jwt = require('jsonwebtoken');
-            const approvalToken = jwt.sign(
-                {
-                    connectionId,
-                    collection: llmResult.collection,
-                    pipeline: llmResult.pipeline,
-                    query,
-                    scope: effectiveScope,
-                    type: 'write-approval',
-                },
-                process.env.JWT_SECRET,
-                { expiresIn: '10m' }
-            );
+            // Mutating write intercepted for human approval
+            if (pipelineCheck.isWrite) {
+                const jwt = require('jsonwebtoken');
+                const approvalToken = jwt.sign(
+                    {
+                        connectionId,
+                        collection: llmResult.collection,
+                        pipeline: llmResult.pipeline,
+                        query,
+                        scope: effectiveScope,
+                        type: 'write-approval',
+                    },
+                    process.env.JWT_SECRET,
+                    { expiresIn: '10m' }
+                );
 
-            return {
-                statusCode: 200,
-                response: {
+                return wrapResponse(200, {
                     success: true,
                     naturalLanguage: query,
                     aiMessage: `⚠️ Database Write Intercepted: This action will modify your collection "${llmResult.collection}". To execute this change, review and approve it.`,
@@ -432,13 +493,10 @@ async function processNaturalLanguageQuery({
                         confidenceScore: 100,
                         scope: effectiveScope,
                     },
-                },
-            };
-        }
+                });
+            }
 
-        return {
-            statusCode: 422,
-            response: {
+            return wrapResponse(422, {
                 success: false,
                 error: { code: 'safety_violation', message: pipelineCheck.reason },
                 naturalLanguage: query,
@@ -451,16 +509,18 @@ async function processNaturalLanguageQuery({
                 similarQueriesCount,
                 schemaContext,
                 scope: effectiveScope,
-            },
-        };
+            });
+        }
     }
 
     // 9. Execute aggregation against USER DB
+    const tDbStart = hrNow();
     const { results, executionTimeMs } = await executePipeline(
         userDb,
         llmResult.collection,
         pipelineCheck.pipeline
     );
+    dbMs = toMs(tDbStart);
 
     // 10. Confidence score
     const CONFIDENCE_MAP = { 0: 60, 1: 75, 2: 85, 3: 92 };
@@ -488,48 +548,48 @@ async function processNaturalLanguageQuery({
         source,
     });
 
-    addExample({
-        naturalLanguage: query,
-        mqlPipeline: pipelineCheck.pipeline,
-        collection: llmResult.collection,
-        connectionId,
-    });
+    // Add example only when result is non-empty and memory writing is not disabled
+    if (results && results.length > 0 && !evalOpts.disableMemoryWrite) {
+        addExample({
+            naturalLanguage: query,
+            mqlPipeline: pipelineCheck.pipeline,
+            collection: llmResult.collection,
+            connectionId,
+        });
+    }
 
     const totalTimeMs = Date.now() - startTime;
 
-    return {
-        statusCode: 200,
-        response: {
-            success: true,
-            needsClarification: false,
-            naturalLanguage: query,
-            clarifications: sanitizedClarifications || null,
-            aiMessage: llmResult.explanation || `Generated pipeline for "${llmResult.collection}" collection.`,
-            explanation: llmResult.explanation,
-            pipeline: pipelineCheck.pipeline,
-            mql: pipelineCheck.pipeline,
-            collection: llmResult.collection,
-            chartType: llmResult.chartType,
-            safetyStatus: 'read-only',
-            safetyBlocked: false,
-            results,
-            result: results,
+    return wrapResponse(200, {
+        success: true,
+        needsClarification: false,
+        naturalLanguage: query,
+        clarifications: sanitizedClarifications || null,
+        aiMessage: llmResult.explanation || `Generated pipeline for "${llmResult.collection}" collection.`,
+        explanation: llmResult.explanation,
+        pipeline: pipelineCheck.pipeline,
+        mql: pipelineCheck.pipeline,
+        collection: llmResult.collection,
+        chartType: llmResult.chartType,
+        safetyStatus: 'read-only',
+        safetyBlocked: false,
+        results,
+        result: results,
+        executionTimeMs,
+        confidenceScore,
+        similarQueriesCount,
+        schemaContext,
+        scope: effectiveScope,
+        meta: {
+            resultCount: results.length,
             executionTimeMs,
-            confidenceScore,
+            totalTimeMs,
+            examplesUsed: similarQueriesCount,
             similarQueriesCount,
-            schemaContext,
+            confidenceScore,
             scope: effectiveScope,
-            meta: {
-                resultCount: results.length,
-                executionTimeMs,
-                totalTimeMs,
-                examplesUsed: similarQueriesCount,
-                similarQueriesCount,
-                confidenceScore,
-                scope: effectiveScope,
-            },
         },
-    };
+    });
 }
 
 module.exports = {

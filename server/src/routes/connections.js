@@ -4,6 +4,7 @@ const router = express.Router();
 const { encrypt, hashString } = require('../utils/encryption');
 const { upsertConnection } = require('../models/UserConnection');
 const { signToken } = require('../utils/jwt');
+const { requireAuth } = require('../middleware/auth');
 
 const COOKIE_NAME = 'am_token';
 const COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -142,7 +143,14 @@ router.post('/connect', async (req, res) => {
 /**
  * GET /api/connections/:connectionId
  */
-router.get('/:connectionId', async (req, res) => {
+router.get('/:connectionId', requireAuth, async (req, res) => {
+    if (req.connectionId !== req.params.connectionId) {
+        return res.status(403).json({
+            success: false,
+            error: { code: 'forbidden', message: 'Access denied: connectionId mismatch' },
+        });
+    }
+
     try {
         const { getConnectionById } = require('../models/UserConnection');
         const conn = await getConnectionById(req.params.connectionId);

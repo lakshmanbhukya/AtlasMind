@@ -8,6 +8,28 @@
  * read-only reshaping stages, not write operations.
  */
 
+// Analytical stages permitted for read-only aggregation execution
+const ALLOWED_STAGES = new Set([
+    '$match',
+    '$group',
+    '$sort',
+    '$limit',
+    '$skip',
+    '$project',
+    '$unwind',
+    '$addFields',
+    '$count',
+    '$lookup',
+    '$facet',
+    '$bucket',
+    '$bucketAuto',
+    '$sortByCount',
+    '$replaceRoot',
+    '$replaceWith',
+    '$unionWith',
+    '$graphLookup',
+]);
+
 // Stages that can write or mutate data
 const BLOCKED_STAGES = new Set([
     '$out',
@@ -214,6 +236,13 @@ function validatePipeline(pipeline, options = {}) {
                     isWrite: true,
                 };
             }
+            if (!ALLOWED_STAGES.has(key)) {
+                return {
+                    safe: false,
+                    reason: `Unrecognized or restricted pipeline stage "${key}" at position ${i}. Only standard analytical stages are permitted.`,
+                    pipeline,
+                };
+            }
         }
 
         // Deep-check for blocked operators inside stage values
@@ -262,4 +291,4 @@ function validateCollectionName(collectionName) {
     return { safe: true };
 }
 
-module.exports = { validatePipeline, validateCollectionName, MAX_RESULT_LIMIT };
+module.exports = { validatePipeline, validateCollectionName, MAX_RESULT_LIMIT, ALLOWED_STAGES, BLOCKED_STAGES };

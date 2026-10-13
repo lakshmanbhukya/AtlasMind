@@ -192,7 +192,7 @@ describe('A4: queryPipelineService with evalOptions and diagnostics', () => {
             expect(mockGenerateMQL).toHaveBeenCalled();
         });
 
-        test('evalOptions.disableSchemaContext blanks out schema context sent to generateMQL', async () => {
+        test('evalOptions.disableSchemaContext sends field names only without types/samples', async () => {
             await processNaturalLanguageQuery({
                 connectionId: 'conn-1',
                 text: 'get high value orders',
@@ -201,11 +201,27 @@ describe('A4: queryPipelineService with evalOptions and diagnostics', () => {
 
             expect(mockGenerateMQL).toHaveBeenCalledWith(
                 'get high value orders',
-                '', // blank schemaContext
+                expect.stringMatching(/Collection: orders[\s\S]*Fields: order_id, amount, units/),
                 expect.any(Array),
                 undefined,
                 expect.any(Object)
             );
+        });
+
+        test('diagnostics.gate.reason is populated when gate is disabled or write query', async () => {
+            const resDisabled = await processNaturalLanguageQuery({
+                connectionId: 'conn-1',
+                text: 'get high value orders',
+                evalOptions: { disableGate: true },
+            });
+            expect(resDisabled.response.diagnostics.gate.reason).toBe('gate_disabled');
+
+            const resWrite = await processNaturalLanguageQuery({
+                connectionId: 'conn-1',
+                text: 'delete all orders',
+                evalOptions: {},
+            });
+            expect(resWrite.response.diagnostics.gate.reason).toBe('write_intent');
         });
 
         test('evalOptions.fewShotLimit controls example limit', async () => {

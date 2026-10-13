@@ -157,6 +157,7 @@ router.post('/', async (req, res) => {
                         collection: llmResult.collection,
                         pipeline: llmResult.pipeline,
                         query,
+                        scope: (Array.isArray(collections) && collections.length > 0) ? collections : null,
                         type: 'write-approval',
                     },
                     process.env.JWT_SECRET,
@@ -487,6 +488,17 @@ router.delete('/history/:id', async (req, res) => {
     }
 });
 
+let approvalIndexesInitialized = false;
+async function ensureApprovalIndexes(db) {
+    if (approvalIndexesInitialized) return;
+    try {
+        const approvalTokens = db.collection('approval_tokens');
+        await approvalTokens.createIndex({ jti: 1 }, { unique: true });
+        await approvalTokens.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+        approvalIndexesInitialized = true;
+    } catch (_) {}
+}
+
 /**
  * POST /api/query/approve
  *
@@ -563,13 +575,8 @@ router.post('/approve', async (req, res) => {
         }
 
         const centralDb = getDb();
+        await ensureApprovalIndexes(centralDb);
         const approvalTokens = centralDb.collection('approval_tokens');
-        try {
-            await approvalTokens.createIndex({ jti: 1 }, { unique: true });
-            await approvalTokens.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
-        } catch (_) {
-            // Index already exists
-        }
 
         try {
             await approvalTokens.insertOne({

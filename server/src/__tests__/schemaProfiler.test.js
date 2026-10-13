@@ -1,6 +1,6 @@
 'use strict';
 
-const { isMetricCandidate, profileSchema, invalidateSchemaCache } = require('../services/schemaProfiler');
+const { isMetricCandidate, profileSchema, invalidateSchemaCache, formatFieldNamesOnly } = require('../services/schemaProfiler');
 
 describe('A1: schemaProfiler', () => {
     // ── isMetricCandidate ────────────────────────────────────────────────────
@@ -205,6 +205,66 @@ describe('A1: schemaProfiler', () => {
             expect(fieldMap.large.type).toBe('number');
             expect(fieldMap.rate.type).toBe('number');
             expect(fieldMap.amt.type).toBe('decimal');
+        });
+
+        test('handles null and undefined field values safely without throwing', async () => {
+            const mockDoc = {
+                _id: 'oid5',
+                notes: null,
+                missingVal: undefined,
+            };
+            const mockDb = {
+                databaseName: 'test_null_db',
+                listCollections: () => ({ toArray: async () => [{ name: 'items' }] }),
+                collection: () => ({
+                    estimatedDocumentCount: async () => 1,
+                    aggregate: () => ({ toArray: async () => [mockDoc] }),
+                }),
+            };
+
+            const schema = await profileSchema(mockDb, { forceRefresh: true });
+            const fieldMap = Object.fromEntries(schema.collections[0].fields.map((f) => [f.name, f]));
+            expect(fieldMap.notes.type).toBe('null');
+        });
+    });
+
+    // ── formatFieldNamesOnly — ablation context format ───────────────────────
+    describe('formatFieldNamesOnly', () => {
+        test('formats collection and field names only without types, samples, or relationship hints', () => {
+            const schema = {
+                database: 'retail_db',
+                collections: [
+                    {
+                        name: 'orders',
+                        fields: [
+                            { name: 'order_id', type: 'string', sample: 'ord-1' },
+                            { name: 'amount', type: 'number', sample: 100 },
+                        ],
+                    },
+                    {
+                        name: 'customers',
+                        fields: [
+                            { name: 'customer_id', type: 'string', sample: 'cust-1' },
+                            { name: 'name', type: 'string', sample: 'Alice' },
+                        ],
+                    },
+                ],
+            };
+
+            const formatted = formatFieldNamesOnly(schema);
+            expect(formatted).toContain('Database: retail_db');
+            expect(formatted).toContain('Collection: orders');
+            expect(formatted).toContain('Fields: order_id, amount');
+            expect(formatted).toContain('Collection: customers');
+            expect(formatted).toContain('Fields: customer_id, name');
+            expect(formatted).not.toContain('sample:');
+            expect(formatted).not.toContain('(number)');
+            expect(formatted).not.toContain('Likely relationships');
+        });
+
+        test('returns empty string on null or undefined input', () => {
+            expect(formatFieldNamesOnly(null)).toBe('');
+            expect(formatFieldNamesOnly(undefined)).toBe('');
         });
     });
 });

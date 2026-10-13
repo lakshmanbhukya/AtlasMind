@@ -21,23 +21,22 @@ const AMBIGUITY_MODE = process.env.AMBIGUITY_MODE || 'hybrid';
 // ---------------------------------------------------------------------------
 
 /**
- * Vague terms that MAY indicate ambiguity when multiple metrics exist in schema.
+ * Default vague terms that MAY indicate ambiguity when multiple metrics exist in schema.
  * @type {Set<string>}
  */
-const VAGUE_TERMS = new Set([
+const DEFAULT_VAGUE_TERMS = new Set([
     'top', 'best', 'highest', 'lowest', 'largest', 'smallest',
     'most', 'least', 'popular', 'performance', 'sales', 'revenue',
     'growth', 'worst', 'biggest',
 ]);
 
-// EVAL_MODE: allow override via EVAL_VAGUE_TERMS env var (comma-separated)
-if (process.env.EVAL_MODE === '1' && process.env.EVAL_VAGUE_TERMS) {
-    const overrideTerms = process.env.EVAL_VAGUE_TERMS.split(',').map((t) => t.trim()).filter(Boolean);
-    VAGUE_TERMS.clear();
-    for (const t of overrideTerms) {
-        VAGUE_TERMS.add(t);
-    }
-}
+/**
+ * Active vague terms set. In EVAL_MODE, can be overridden via EVAL_VAGUE_TERMS env var.
+ * @type {Set<string>}
+ */
+const VAGUE_TERMS = (process.env.EVAL_MODE === '1' && process.env.EVAL_VAGUE_TERMS)
+    ? new Set(process.env.EVAL_VAGUE_TERMS.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean))
+    : new Set(DEFAULT_VAGUE_TERMS);
 
 /**
  * Write-intent patterns — skip the ambiguity gate entirely for these.
@@ -583,6 +582,7 @@ module.exports = {
     recordAmbiguityMetric,
     getAmbiguityMetrics,
     resetAmbiguityMetrics,
+    DEFAULT_VAGUE_TERMS,
     VAGUE_TERMS,
     // Exposed for testing
     extractNumericFields,

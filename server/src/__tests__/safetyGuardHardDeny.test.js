@@ -132,4 +132,21 @@ describe('B4: safetyGuard hard-deny code execution operators ($function, $accumu
         expect(res.safe).toBe(true);
         expect(res.pipeline).toBeDefined();
     });
+
+    test('rejects unrecognized/restricted pipeline stages ($collStats, $indexStats, $currentOp) without isWrite', () => {
+        const restrictedStages = [
+            { $collStats: { latencyStats: { histograms: true } } },
+            { $indexStats: {} },
+            { $currentOp: { allUsers: true } },
+        ];
+
+        for (const stage of restrictedStages) {
+            const key = Object.keys(stage)[0];
+            const res = validatePipeline([stage]);
+            expect(res.safe).toBe(false);
+            expect(res.isWrite).toBeFalsy();
+            expect(res.reason).toContain(key);
+            expect(res.reason).toContain('Only standard analytical stages are permitted');
+        }
+    });
 });

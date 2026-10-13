@@ -61,10 +61,10 @@ describe('A3: groqService & quotaLimiter', () => {
             expect(est).toBe(Math.ceil(14 / 3.5) + 100); // 4 + 100 = 104
         });
 
-        test('recordActualUsage throws QuotaExhaustedError when TPD hits 95%', () => {
+        test('recordActualUsage throws QuotaExhaustedError when TPD hits 90%', () => {
             const tightLimits = { rpm: 10, tpm: 10000, tpd: 1000 };
             expect(() => {
-                recordActualUsage('test/tpd-model', 500, 960, tightLimits);
+                recordActualUsage('test/tpd-model', 500, 910, tightLimits);
             }).toThrow(QuotaExhaustedError);
         });
     });

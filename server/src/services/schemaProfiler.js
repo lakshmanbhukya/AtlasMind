@@ -58,16 +58,19 @@ function inferType(value) {
 }
 
 /**
- * Flatten a plain sub-document into dot-path keys (max depth 3).
+ * Flatten a plain sub-document into dot-path keys (max depth 3 segments, e.g. "a.b.c").
  * Skips arrays, Date objects, and BSON typed objects.
  *
- * @param {string} parentKey
- * @param {*} subDoc
+ * @param {string} parentKey - e.g. "a"
+ * @param {*} subDoc - nested object value
  * @param {Map<string,object>} fieldMap
- * @param {number} depth - current depth (start at 1)
+ * @param {number} subLevel - nesting level relative to parent (1 for "a.b", 2 for "a.b.c")
  */
-function flattenSubDoc(parentKey, subDoc, fieldMap, depth) {
-    if (depth > 2) return;
+function flattenSubDoc(parentKey, subDoc, fieldMap, subLevel) {
+    // subLevel 1 yields 2-segment keys ("a.b")
+    // subLevel 2 yields 3-segment keys ("a.b.c")
+    // subLevel 3 would yield 4-segment keys ("a.b.c.d") and is halted
+    if (subLevel > 2) return;
     if (!subDoc || typeof subDoc !== 'object') return;
     if (Array.isArray(subDoc) || subDoc instanceof Date) return;
     if (subDoc._bsontype) return;
@@ -85,7 +88,7 @@ function flattenSubDoc(parentKey, subDoc, fieldMap, depth) {
             });
         }
         if (type === 'object') {
-            flattenSubDoc(dotKey, v, fieldMap, depth + 1);
+            flattenSubDoc(dotKey, v, fieldMap, subLevel + 1);
         }
     }
 }
@@ -355,6 +358,26 @@ function formatMinifiedSchema(schema) {
 }
 
 /**
+ * Format an already-profiled schema object into a stripped text format
+ * containing collection names and field names only (no types, samples, or hints).
+ * Used for schema context ablation studies in EVAL_MODE.
+ * @param {object} schema - Result of profileSchema()
+ * @returns {string}
+ */
+function formatFieldNamesOnly(schema) {
+    if (!schema) return '';
+    const lines = [`Database: ${schema.database || ''}`];
+
+    for (const col of schema.collections || []) {
+        lines.push(`\nCollection: ${col.name}`);
+        const fieldNames = (col.fields || []).map((f) => f.name).join(', ');
+        lines.push(`Fields: ${fieldNames}`);
+    }
+
+    return lines.join('\n');
+}
+
+/**
  * Minify the database schema into a compact, LLM-friendly string format.
  * Caches results per database for 5 minutes.
  *
@@ -383,4 +406,12 @@ function invalidateSchemaCache(dbName) {
     }
 }
 
-module.exports = { profileSchema, formatMinifiedSchema, getMinifiedSchema, invalidateSchemaCache, inferRelationships, isMetricCandidate };
+module.exports = {
+    profileSchema,
+    formatMinifiedSchema,
+    formatFieldNamesOnly,
+    getMinifiedSchema,
+    invalidateSchemaCache,
+    inferRelationships,
+    isMetricCandidate,
+};

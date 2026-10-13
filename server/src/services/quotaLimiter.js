@@ -171,17 +171,17 @@ async function consumeQuota(modelId, estimatedTokens, limits) {
         }
     }
 
-    // Check rolling 24h TPD limit (at 95% threshold)
+    // Check rolling 24h TPD limit (at 90% threshold)
     if (limits.tpd) {
         const currentTpd = getRollingTpdUsed(modelId);
-        if (currentTpd + estimatedTokens >= limits.tpd * 0.95) {
+        if (currentTpd + estimatedTokens >= limits.tpd * 0.90) {
             const state = loadUsageState();
             const entry = state[modelId];
             const remainingMinutes = entry?.windowStart
                 ? Math.ceil((ROLLING_WINDOW_MS - (Date.now() - entry.windowStart)) / 60000)
                 : 1440;
             throw new QuotaExhaustedError(
-                `TPD threshold 95% reached for model "${modelId}" (${currentTpd}/${limits.tpd} tokens). Resume in ~${remainingMinutes} minutes.`,
+                `TPD threshold 90% reached for model "${modelId}" (${currentTpd}/${limits.tpd} tokens). Resume in ~${remainingMinutes} minutes.`,
                 modelId
             );
         }
@@ -217,10 +217,10 @@ function recordActualUsage(modelId, estimatedTokens, actualTokens, limits) {
     state[modelId] = entry;
     saveUsageState(state);
 
-    if (limits?.tpd && entry.tokensUsed >= limits.tpd * 0.95) {
+    if (limits?.tpd && entry.tokensUsed >= limits.tpd * 0.90) {
         const remainingMinutes = Math.ceil((ROLLING_WINDOW_MS - (now - entry.windowStart)) / 60000);
         throw new QuotaExhaustedError(
-            `TPD reached 95% limit for model "${modelId}" (${entry.tokensUsed}/${limits.tpd} tokens). Resume in ~${remainingMinutes} minutes.`,
+            `TPD reached 90% limit for model "${modelId}" (${entry.tokensUsed}/${limits.tpd} tokens). Resume in ~${remainingMinutes} minutes.`,
             modelId
         );
     }

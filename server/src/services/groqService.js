@@ -127,7 +127,7 @@ async function generateMQL(naturalLanguage, schemaContext, fewShotExamples, mode
                         { role: 'user', content: naturalLanguage },
                     ],
                     model: DEFAULT_MODEL,
-                    temperature: 0.1,
+                    temperature: options.temperature !== undefined ? options.temperature : 0.1,
                     max_tokens: 2048,
                     top_p: 1,
                     response_format: { type: 'json_object' },

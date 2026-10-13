@@ -5,6 +5,7 @@ const {
     checkDeterministicAmbiguity,
     validateClarifications,
     extractNumericFields,
+    DEFAULT_VAGUE_TERMS,
     VAGUE_TERMS,
 } = require('../services/ambiguityGate');
 
@@ -84,6 +85,28 @@ describe('A2: ambiguityGate diagnostics and refinements', () => {
         test('VAGUE_TERMS does not contain "recent" or "latest"', () => {
             expect(VAGUE_TERMS.has('recent')).toBe(false);
             expect(VAGUE_TERMS.has('latest')).toBe(false);
+        });
+
+        test('DEFAULT_VAGUE_TERMS contains exact 15 non-temporal terms as a Set', () => {
+            expect(DEFAULT_VAGUE_TERMS).toBeInstanceOf(Set);
+            expect(DEFAULT_VAGUE_TERMS.size).toBe(15);
+            expect(DEFAULT_VAGUE_TERMS.has('top')).toBe(true);
+            expect(DEFAULT_VAGUE_TERMS.has('best')).toBe(true);
+            expect(DEFAULT_VAGUE_TERMS.has('highest')).toBe(true);
+            expect(DEFAULT_VAGUE_TERMS.has('lowest')).toBe(true);
+            expect(DEFAULT_VAGUE_TERMS.has('largest')).toBe(true);
+            expect(DEFAULT_VAGUE_TERMS.has('smallest')).toBe(true);
+            expect(DEFAULT_VAGUE_TERMS.has('most')).toBe(true);
+            expect(DEFAULT_VAGUE_TERMS.has('least')).toBe(true);
+            expect(DEFAULT_VAGUE_TERMS.has('popular')).toBe(true);
+            expect(DEFAULT_VAGUE_TERMS.has('performance')).toBe(true);
+            expect(DEFAULT_VAGUE_TERMS.has('sales')).toBe(true);
+            expect(DEFAULT_VAGUE_TERMS.has('revenue')).toBe(true);
+            expect(DEFAULT_VAGUE_TERMS.has('growth')).toBe(true);
+            expect(DEFAULT_VAGUE_TERMS.has('worst')).toBe(true);
+            expect(DEFAULT_VAGUE_TERMS.has('biggest')).toBe(true);
+            expect(DEFAULT_VAGUE_TERMS.has('recent')).toBe(false);
+            expect(DEFAULT_VAGUE_TERMS.has('latest')).toBe(false);
         });
 
         test('queries with only "recent" or "latest" do not trigger ambiguity', () => {

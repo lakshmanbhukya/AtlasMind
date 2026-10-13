@@ -1,4 +1,4 @@
-const { formatMinifiedSchema, profileSchema } = require('./schemaProfiler');
+const { formatMinifiedSchema, formatFieldNamesOnly, profileSchema } = require('./schemaProfiler');
 const { getSimilarExamples, addExample } = require('./fewShotRetriever');
 const { generateMQL } = require('./groqService');
 const { validatePipeline, validateCollectionName } = require('./safetyGuard');
@@ -230,8 +230,10 @@ async function processNaturalLanguageQuery({
     );
     fewShotMs = toMs(tFewShotStart);
 
-    // evalOptions.disableSchemaContext: blank out schema context
-    const schemaContext = evalOpts.disableSchemaContext ? '' : formatMinifiedSchema(rawSchema);
+    // evalOptions.disableSchemaContext: field names only without types, samples, or relationship hints
+    const schemaContext = evalOpts.disableSchemaContext
+        ? formatFieldNamesOnly(rawSchema)
+        : formatMinifiedSchema(rawSchema);
 
     const similarQueriesCount = fewShotExamples.length;
     recordAmbiguityMetric('query_evaluated', { connectionId, source });
@@ -256,6 +258,7 @@ async function processNaturalLanguageQuery({
         sanitizedClarifications = valResult.sanitized;
         queryForGeneration = buildEnrichedQuery(query, sanitizedClarifications);
         isClarificationPass = true;
+        gateInfo = { reason: 'clarified', matchedTerms: [] };
         if (isEdit) {
             recordAmbiguityMetric('clarification_edit', { connectionId, source });
         } else {
@@ -263,7 +266,12 @@ async function processNaturalLanguageQuery({
         }
     } else if (bypassAmbiguity === true) {
         recordAmbiguityMetric('ambiguity_bypassed', { connectionId, source });
-    } else if (!isWriteQuery && !evalOpts.disableGate) {
+        gateInfo = { reason: 'bypassed', matchedTerms: [] };
+    } else if (isWriteQuery) {
+        gateInfo = { reason: 'write_intent', matchedTerms: [] };
+    } else if (evalOpts.disableGate) {
+        gateInfo = { reason: 'gate_disabled', matchedTerms: [] };
+    } else {
         try {
             const tGateStart = hrNow();
             const ambiguityAnalysis = analyzeAmbiguity(query, rawSchema);

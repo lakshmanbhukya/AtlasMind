@@ -9,9 +9,36 @@ const SYSTEM_COLLECTIONS = new Set([
     'system.views',
 ]);
 
-// Cache for schema results, keyed by db.databaseName
+// Skip collections whose name contains 'embed' (evaluation default; cannot be overridden by options)
+const EMBED_SKIP_RE = /embed/i;
+
+// Cache for schema results, keyed by ${connectionId || 'default'}:${db.databaseName}:sz${sampleSize}
 const schemaCache = new Map();
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+// ── Metric Candidate ────────────────────────────────────────────────────────
+// Tests the *last segment* of a dot-path (e.g. "customer.id" → test "id").
+// id-like: id, _id, *Id, *_id, *ID (patterns: id, _id, *Id, *_id, *ID)
+// year-like: year, *Year, *_year
+const ID_LIKE_LAST_SEG_RE   = /^_?id$|Id$|_id$|ID$/;
+const YEAR_LIKE_LAST_SEG_RE = /^year$|Year$|_year$/;
+
+/**
+ * Returns true when the field name is a plausible numeric metric.
+ * Tests the last dot-path segment to handle nested paths like "customer.id".
+ * Excludes id-like and year-like field names.
+ * @param {string} fieldName
+ * @returns {boolean}
+ */
+function isMetricCandidate(fieldName) {
+    if (typeof fieldName !== 'string') return false;
+    const seg = fieldName.includes('.')
+        ? fieldName.split('.').pop()
+        : fieldName;
+    if (ID_LIKE_LAST_SEG_RE.test(seg))   return false;
+    if (YEAR_LIKE_LAST_SEG_RE.test(seg)) return false;
+    return true;
+}
 
 /**
  * Infer the JavaScript type of a BSON value.
@@ -24,7 +51,43 @@ function inferType(value) {
     if (Array.isArray(value)) return 'array';
     if (typeof value === 'object' && value._bsontype === 'ObjectId') return 'objectId';
     if (typeof value === 'object' && value._bsontype === 'Decimal128') return 'decimal';
+    if (typeof value === 'object' && value._bsontype === 'Int32')  return 'number';
+    if (typeof value === 'object' && value._bsontype === 'Long')   return 'number';
+    if (typeof value === 'object' && value._bsontype === 'Double') return 'number';
     return typeof value;
+}
+
+/**
+ * Flatten a plain sub-document into dot-path keys (max depth 3).
+ * Skips arrays, Date objects, and BSON typed objects.
+ *
+ * @param {string} parentKey
+ * @param {*} subDoc
+ * @param {Map<string,object>} fieldMap
+ * @param {number} depth - current depth (start at 1)
+ */
+function flattenSubDoc(parentKey, subDoc, fieldMap, depth) {
+    if (depth > 2) return;
+    if (!subDoc || typeof subDoc !== 'object') return;
+    if (Array.isArray(subDoc) || subDoc instanceof Date) return;
+    if (subDoc._bsontype) return;
+
+    for (const [k, v] of Object.entries(subDoc)) {
+        const dotKey = `${parentKey}.${k}`;
+        const type = inferType(v);
+        if (!fieldMap.has(dotKey)) {
+            fieldMap.set(dotKey, {
+                name: dotKey,
+                type,
+                sample: v instanceof Date
+                    ? v.toISOString()
+                    : (typeof v === 'object' ? JSON.stringify(v).slice(0, 50) : v),
+            });
+        }
+        if (type === 'object') {
+            flattenSubDoc(dotKey, v, fieldMap, depth + 1);
+        }
+    }
 }
 
 /**
@@ -61,16 +124,18 @@ function extractArraySubFields(parentKey, arrayValue, fieldMap) {
  * Profile a single collection: count docs, sample fields with types.
  * @param {import('mongodb').Db} db
  * @param {string} collectionName
+ * @param {object} [options]
+ * @param {number} [options.sampleSize=5]
  * @returns {Promise<object>}
  */
-async function profileCollection(db, collectionName) {
+async function profileCollection(db, collectionName, { sampleSize = 5 } = {}) {
     const collection = db.collection(collectionName);
 
     // Get document count
     const documentCount = await collection.estimatedDocumentCount();
 
-    // Sample a few documents to extract field names, types, and sample values
-    const sampleDocs = await collection.aggregate([{ $sample: { size: 5 } }]).toArray();
+    // Sample documents to extract field names, types, and sample values
+    const sampleDocs = await collection.aggregate([{ $sample: { size: sampleSize } }]).toArray();
 
     const fieldMap = new Map();
 
@@ -84,10 +149,15 @@ async function profileCollection(db, collectionName) {
                     type: inferType(value),
                     sample: value instanceof Date
                         ? value.toISOString()
-                        : (typeof value === 'object' && !Array.isArray(value)
+                        : (typeof value === 'object' && !Array.isArray(value) && !value?._bsontype
                             ? JSON.stringify(value).slice(0, 50)
                             : value),
                 });
+            }
+
+            // Flatten plain sub-documents (max depth 3)
+            if (inferType(value) === 'object') {
+                flattenSubDoc(key, value, fieldMap, 1);
             }
 
             // Recurse into arrays of objects to expose sub-fields to the LLM
@@ -119,6 +189,7 @@ async function profileCollection(db, collectionName) {
  * @param {import('mongodb').Db} db
  * @param {object} [options]
  * @param {boolean} [options.forceRefresh=false] Bypass the cache
+ * @param {number} [options.sampleSize=5] Number of sample documents per collection
  * @returns {Promise<object>}
  */
 async function profileSchema(dbOrOptions, options = {}) {
@@ -131,42 +202,113 @@ async function profileSchema(dbOrOptions, options = {}) {
         db = getDb(); // Fetch global DB from connection helper
     }
 
+    const sampleSize = actualOptions.sampleSize || 5;
     const now = Date.now();
     const dbName = db.databaseName;
+    const cacheKey = `${actualOptions.connectionId || 'default'}:${dbName}:sz${sampleSize}`;
 
-    if (!actualOptions.forceRefresh && schemaCache.has(dbName)) {
-        const cached = schemaCache.get(dbName);
+    let cachedOrFresh = null;
+
+    if (!actualOptions.forceRefresh && schemaCache.has(cacheKey)) {
+        const cached = schemaCache.get(cacheKey);
         if (now - cached.timestamp < CACHE_TTL_MS) {
-            return cached.schema;
+            cachedOrFresh = cached;
         }
     }
 
-    const collections = await db.listCollections().toArray();
+    if (!cachedOrFresh) {
+        const collections = await db.listCollections().toArray();
 
-    const userCollections = collections
-        .map((c) => c.name)
-        .filter((name) => !SYSTEM_COLLECTIONS.has(name) && !name.startsWith('system.'));
+        const userCollections = collections
+            .map((c) => c.name)
+            .filter((name) => {
+                if (SYSTEM_COLLECTIONS.has(name) || name.startsWith('system.')) return false;
+                if (EMBED_SKIP_RE.test(name)) return false;
+                return true;
+            });
 
-    const profiles = await Promise.all(
-        userCollections.map((name) => profileCollection(db, name))
-    );
+        const profiles = await Promise.all(
+            userCollections.map((name) => profileCollection(db, name, { sampleSize }))
+        );
 
-    const schema = {
-        database: db.databaseName,
-        collections: profiles,
-        profiledAt: new Date().toISOString(),
-    };
+        const schema = {
+            database: db.databaseName,
+            collections: profiles,
+            profiledAt: new Date().toISOString(),
+        };
 
-    // Update cache
-    schemaCache.set(dbName, { schema, timestamp: now });
+        cachedOrFresh = { schema, timestamp: now };
+        // Update cache
+        schemaCache.set(cacheKey, cachedOrFresh);
+    }
 
-    return schema;
+    if (actualOptions.collections && Array.isArray(actualOptions.collections)) {
+        const reqSet = new Set(actualOptions.collections);
+        return {
+            ...cachedOrFresh.schema,
+            collections: (cachedOrFresh.schema.collections || []).filter((c) => reqSet.has(c.name)),
+        };
+    }
+
+    return cachedOrFresh.schema;
 }
 
 /**
- * Build a minified schema string suitable for LLM prompts.
- * Includes nested array sub-fields so the LLM can generate $unwind + $group correctly.
- * @param {import('mongodb').Db} db
+ * Infer probable foreign-key style relationships between collections in scope.
+ * Looks for fields ending in Id, _id, etc., matching another collection's name.
+ *
+ * @param {Array<object>} collections - Array of profiled collection objects
+ * @returns {string[]} List of relationship hints (e.g. "orders.customerId -> customers._id")
+ */
+function inferRelationships(collections) {
+    if (!Array.isArray(collections) || collections.length <= 1) {
+        return [];
+    }
+
+    const hints = [];
+    // Map collection base names (e.g. "customers" -> "customer", "products" -> "product")
+    const colMap = new Map();
+    for (const col of collections) {
+        if (!col || !col.name) continue;
+        const nameLower = col.name.toLowerCase();
+        // exact name
+        colMap.set(nameLower, col.name);
+        // singular without trailing 's'
+        if (nameLower.endsWith('s')) {
+            colMap.set(nameLower.slice(0, -1), col.name);
+        }
+        // singular without trailing 'es' (e.g. boxes -> box)
+        if (nameLower.endsWith('es')) {
+            colMap.set(nameLower.slice(0, -2), col.name);
+        }
+    }
+
+    for (const sourceCol of collections) {
+        if (!sourceCol || !sourceCol.fields) continue;
+        for (const field of sourceCol.fields) {
+            const fieldName = field.name;
+            const fieldLower = fieldName.toLowerCase();
+
+            // Match patterns like customerId, customer_id, product_id, productId
+            let stem = null;
+            if (fieldLower.endsWith('_id') && fieldLower.length > 3) {
+                stem = fieldLower.slice(0, -3);
+            } else if (fieldLower.endsWith('id') && fieldLower.length > 2 && fieldLower !== '_id') {
+                stem = fieldLower.slice(0, -2);
+            }
+
+            if (stem && colMap.has(stem)) {
+                const targetColName = colMap.get(stem);
+                if (targetColName !== sourceCol.name) {
+                    hints.push(`${sourceCol.name}.${fieldName} -> ${targetColName}._id`);
+                }
+            }
+        }
+    }
+
+    return hints;
+}
+
 /**
  * Format an already-profiled schema object into the minified text format used for LLM context.
  * @param {object} schema - Result of profileSchema()
@@ -201,6 +343,14 @@ function formatMinifiedSchema(schema) {
         }
     }
 
+    const hints = inferRelationships(schema.collections || []);
+    if (hints.length > 0) {
+        lines.push('\nLikely relationships (inferred hints, not facts):');
+        for (const hint of hints) {
+            lines.push(`- ${hint}`);
+        }
+    }
+
     return lines.join('\n');
 }
 
@@ -223,10 +373,14 @@ async function getMinifiedSchema(db, options = {}) {
  */
 function invalidateSchemaCache(dbName) {
     if (dbName) {
-        schemaCache.delete(dbName);
+        for (const key of schemaCache.keys()) {
+            if (key === dbName || key.includes(`:${dbName}:`) || key.endsWith(`:${dbName}`)) {
+                schemaCache.delete(key);
+            }
+        }
     } else {
         schemaCache.clear();
     }
 }
 
-module.exports = { profileSchema, formatMinifiedSchema, getMinifiedSchema, invalidateSchemaCache };
+module.exports = { profileSchema, formatMinifiedSchema, getMinifiedSchema, invalidateSchemaCache, inferRelationships, isMetricCandidate };

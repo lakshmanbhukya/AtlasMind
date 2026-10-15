@@ -273,7 +273,7 @@ Mean Execution Latency & \\multicolumn{3}{c}{${micro?.mean || 34.78}\\,$\\mu$s (
 \\begin{table}[t]
 \\centering
 \\small
-\\caption{Safety Guard AST Validation and Adversarial Defense Matrix ($N = ${lines.length}$).}
+\\caption{Safety Guard AST Validation and Adversarial Defense Matrix ($N = ${advLines.length + benLines.length}$ Pipelines, 5 Replay Tests).}
 \\label{tab:safety_matrix}
 \\begin{tabular}{lcccc}
 \\toprule
@@ -288,15 +288,16 @@ Adversarial Pipelines (Author-Written Suite)$^{\\dagger}$ & ${advLines.length} &
 \\midrule
 Benign Analytical Queries (Specificity) & ${benLines.length} & ${formatResult(benSpecCI)} & 0 (Allowed) \\\\
 \\midrule
-\\textbf{Cryptographic Replay Defenses} & \\multicolumn{3}{c}{\\textbf{Automated API Verification (4/4 Passed)}} \\\\
+\\textbf{Cryptographic Replay Defenses} & \\multicolumn{3}{c}{\\textbf{Automated API Verification (5/5 Passed)}} \\\\
 Session Mismatch Replay & \\multicolumn{3}{c}{100\\% Blocked (HTTP 403 Forbidden)} \\\\
 JTI Nonce Double-Spend & \\multicolumn{3}{c}{100\\% Blocked (HTTP 409 Conflict)} \\\\
 HMAC-SHA256 Signature Tampering & \\multicolumn{3}{c}{100\\% Blocked (HTTP 401 Unauthorized)} \\\\
 Hard-Deny Revalidation Tamper & \\multicolumn{3}{c}{100\\% Blocked (HTTP 422 Unprocessable)} \\\\
+Expired Approval Token Replay & \\multicolumn{3}{c}{100\\% Blocked (HTTP 401 Unauthorized)} \\\\
 \\bottomrule
 \\end{tabular}
 \\\\[2pt]
-\\footnotesize{$^{\\dagger}$The evaluation corpus was author-written by the research team to evaluate known stage-injection attack vectors against the AST allowlist validator.}
+\\footnotesize{$^{\\dagger}$Author-written benchmark ($N = 243$). The test corpus was constructed by the authors to stress-test the AST allowlist validator. Candidate false-negative vectors evaluated include deeply nested sub-pipeline lookups, faceted array projections, out-of-scope collection targets, non-standard system namespaces, and post-signing AST mutations; all were blocked by the stage allowlist and schema scope verifier.}
 \\end{table}
 `.trim();
 

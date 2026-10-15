@@ -74,6 +74,91 @@ function computeRecordOutcome({
   };
 }
 
+/**
+ * Item A3: Oracle Resolution Function
+ * - Primary:
+ *   - Clear query (humanAmbiguous: false): bypass (bypassAmbiguity: true); extraInteractions = 2
+ *   - Ambiguous query (humanAmbiguous: true): user selects gold option only if among offered options (strict); extraInteractions = 1
+ *   - If gold not offered: record intendedMetricNotOffered = true, user bypasses; extraInteractions = 2
+ * - Secondary (flag):
+ *   - lenient_other: if gold not offered, user enters gold via __other__; extraInteractions = 1
+ *   - wrong_pick: on clear query, user picks offeredOptions[0]; extraInteractions = 1
+ */
+function resolveOracleAction({ item, firstData, oracleMode = 'primary' }) {
+  if (!firstData.needsClarification || !Array.isArray(firstData.questions) || firstData.questions.length === 0) {
+    return {
+      asked: false,
+      clarificationAnswer: null,
+      bypassAmbiguity: false,
+      intendedMetricNotOffered: false,
+      oracleUsed: 'none',
+      extraInteractions: 0,
+    };
+  }
+
+  const qObj = firstData.questions[0];
+  const offeredOptions = (qObj.options || []).map((o) => o.value);
+  const targetGold = item.goldCandidate;
+  const isOffered = targetGold ? offeredOptions.includes(targetGold) : false;
+
+  if (!item.humanAmbiguous) {
+    // Clear query
+    if (oracleMode === 'wrong_pick') {
+      return {
+        asked: true,
+        clarificationAnswer: { id: qObj.id, value: offeredOptions[0] },
+        bypassAmbiguity: false,
+        intendedMetricNotOffered: false,
+        oracleUsed: 'wrong_pick',
+        extraInteractions: 1,
+      };
+    }
+    // Primary: user clicks bypass
+    return {
+      asked: true,
+      clarificationAnswer: null,
+      bypassAmbiguity: true,
+      intendedMetricNotOffered: false,
+      oracleUsed: 'bypass',
+      extraInteractions: 2,
+    };
+  }
+
+  // Ambiguous query
+  if (isOffered) {
+    return {
+      asked: true,
+      clarificationAnswer: { id: qObj.id, value: targetGold },
+      bypassAmbiguity: false,
+      intendedMetricNotOffered: false,
+      oracleUsed: 'strict_offered',
+      extraInteractions: 1,
+    };
+  }
+
+  // Gold not offered
+  if (oracleMode === 'lenient_other') {
+    return {
+      asked: true,
+      clarificationAnswer: { id: qObj.id, value: '__other__', customText: targetGold || offeredOptions[0] },
+      bypassAmbiguity: false,
+      intendedMetricNotOffered: true,
+      oracleUsed: 'lenient_other',
+      extraInteractions: 1,
+    };
+  }
+
+  // Primary: gold not offered, user bypasses
+  return {
+    asked: true,
+    clarificationAnswer: null,
+    bypassAmbiguity: true,
+    intendedMetricNotOffered: true,
+    oracleUsed: 'bypass',
+    extraInteractions: 2,
+  };
+}
+
 async function runE2EEvaluation() {
   console.log('=== EVAL2 LIVE END-TO-END EVALUATION ===\n');
 
@@ -399,4 +484,4 @@ if (require.main === module) {
   runE2EEvaluation();
 }
 
-module.exports = { runE2EEvaluation, computeRecordOutcome };
+module.exports = { runE2EEvaluation, computeRecordOutcome, resolveOracleAction };

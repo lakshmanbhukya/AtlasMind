@@ -143,6 +143,15 @@ async function runAggregation() {
     errorTaxonomy: {},
   };
 
+  const testSplitPath = path.resolve(__dirname, '../benchmark/test_split.jsonl');
+  if (fs.existsSync(testSplitPath)) {
+    const testQueries = fs.readFileSync(testSplitPath, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse);
+    const nullCount = testQueries.filter((q) => q.humanAmbiguous === null || q.humanAmbiguous === undefined).length;
+    if (nullCount > 0) {
+      throw new Error(`test_split.jsonl has ${nullCount} queries with humanAmbiguous = null. Human labeling must be validated and merged before running aggregate.`);
+    }
+  }
+
   // -------------------------------------------------------------------------
   // 1. Ingest Gate Evaluation Results (N = 330)
   // -------------------------------------------------------------------------

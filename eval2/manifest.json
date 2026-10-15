@@ -1,0 +1,18 @@
+{
+  "version": "eval2-frozen-1.0",
+  "createdAt": "2026-10-13T17:06:01.294Z",
+  "gitCommit": "a083960",
+  "gitTag": "gate-frozen",
+  "testSplitHash": "763e04376e7dfec8354152ec3cc5f3930d09cd476dcc8870077c0a5c62f549aa",
+  "schemasSnapshotHash": "8512a24a3ab9b6f7e447333366b6c4e8fd2cc9d5f591b54c1989d8a99c280d7d",
+  "splits": {
+    "rawCorpus": 360,
+    "pilotSplit": 30,
+    "testSplit": 330,
+    "e2eSubset": 100
+  },
+  "interAnnotatorAgreement": {
+    "kappaSampleSize": 60,
+    "observedAgreement": 1
+  }
+}

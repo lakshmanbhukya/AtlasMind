@@ -9,7 +9,11 @@ const TEST_SPLIT_PATH = path.join(BENCHMARK_DIR, 'test_split.jsonl');
 const SCHEMAS_PATH = path.resolve(BENCHMARK_DIR, '../schemas/schemas_snapshot.json');
 const MANIFEST_PATH = path.resolve(BENCHMARK_DIR, '../manifest.json');
 const LABELING_SHEET_PATH = path.join(BENCHMARK_DIR, 'labeling_sheet.csv');
+const LLM_LABELS_PATH = path.join(BENCHMARK_DIR, 'llm_labels.csv');
 const DISAGREEMENTS_PATH = path.join(BENCHMARK_DIR, 'disagreements.csv');
+
+// Ambiguity-capable strata definition: queries where the schema contains >= 2 candidate metrics
+const AMBIGUITY_CAPABLE_STRATA = new Set(['AMB_LEX', 'AMB_PARA', 'CLR_FIELD', 'CLR_BOUND']);
 
 /**
  * Escape a string field according to RFC 4180 CSV standard.
@@ -79,190 +83,13 @@ function parseCsv(content) {
 }
 
 /**
- * Retrieve offered options (numeric candidate fields) from schemas snapshot for a given scope.
+ * Compute agreement statistics for a set of paired binary classifications.
+ * Calculates: Po, Pe, Cohen's Kappa, PABAK, and 2x2 Confusion Matrix.
  */
-function getOfferedOptions(dataset, scope, schemas) {
-  const ds = schemas[dataset];
-  if (!ds || !ds.numericCandidatesByCollection) return 'none';
-  const candidates = [];
-  const multiCollection = scope.length > 1;
-
-  for (const col of scope) {
-    const colInfo = ds.numericCandidatesByCollection[col];
-    if (colInfo && colInfo.numericCandidates) {
-      for (const field of colInfo.numericCandidates) {
-        candidates.push(multiCollection ? `${col}.${field}` : field);
-      }
-    }
-  }
-  return candidates.length > 0 ? candidates.join('; ') : 'none';
-}
-
-/**
- * 1. Generate labeling_sheet.csv with stratified double-labeling sample for Labeler B.
- */
-function generateLabelingSheet() {
-  console.log('--- Generating eval2/benchmark/labeling_sheet.csv ---');
-
-  if (!fs.existsSync(TEST_SPLIT_PATH)) {
-    throw new Error(`test_split.jsonl not found at ${TEST_SPLIT_PATH}`);
-  }
-  if (!fs.existsSync(SCHEMAS_PATH)) {
-    throw new Error(`schemas_snapshot.json not found at ${SCHEMAS_PATH}`);
-  }
-
-  const queries = fs.readFileSync(TEST_SPLIT_PATH, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse);
-  const schemas = JSON.parse(fs.readFileSync(SCHEMAS_PATH, 'utf8'));
-
-  // Define stratified sampling targets across all 21 (dataset x category) strata (target >= 80, exactly 91 sampled)
-  const targets = {
-    'sample_analytics | AMB_LEX': 6,
-    'sample_analytics | AMB_PARA': 3,
-    'sample_analytics | CLR_AGG': 4,
-    'sample_analytics | CLR_BOUND': 5,
-    'sample_analytics | CLR_FIELD': 5,
-    'sample_analytics | CLR_PLAIN': 4,
-    'sample_analytics | OOS_UNSCORED': 3,
-    'sample_mflix | AMB_LEX': 5,
-    'sample_mflix | AMB_PARA': 4,
-    'sample_mflix | CLR_AGG': 4,
-    'sample_mflix | CLR_BOUND': 5,
-    'sample_mflix | CLR_FIELD': 4,
-    'sample_mflix | CLR_PLAIN': 5,
-    'sample_mflix | OOS_UNSCORED': 3,
-    'sample_supplies | AMB_LEX': 8,
-    'sample_supplies | AMB_PARA': 2,
-    'sample_supplies | CLR_AGG': 4,
-    'sample_supplies | CLR_BOUND': 4,
-    'sample_supplies | CLR_FIELD': 5,
-    'sample_supplies | CLR_PLAIN': 5,
-    'sample_supplies | OOS_UNSCORED': 3,
-  };
-
-  const strata = {};
-  for (const q of queries) {
-    const k = `${q.dataset} | ${q.category}`;
-    if (!strata[k]) strata[k] = [];
-    strata[k].push(q);
-  }
-
-  const sampledIds = new Set();
-  for (const [k, targetCount] of Object.entries(targets)) {
-    const items = strata[k] || [];
-    // Prioritize queries already tagged with labelerB
-    const existingB = items.filter((i) => i.labelerB !== null && i.labelerB !== undefined);
-    for (const item of existingB) sampledIds.add(item.id);
-
-    let needed = targetCount - existingB.length;
-    if (needed > 0) {
-      const unselected = items.filter((i) => !sampledIds.has(i.id));
-      for (let i = 0; i < unselected.length && needed > 0; i++) {
-        sampledIds.add(unselected[i].id);
-        needed--;
-      }
-    }
-  }
-
-  console.log(`Selected ${sampledIds.size} stratified queries for double-labeling by Labeler B (>= 80 required).`);
-
-  // Ensure all adjudicated disagreement IDs are in sampledIds
-  const adjudications = {
-    'supplies-0044': {
-      labelerA: 0,
-      labelerB: 1,
-      finalLabel: 0,
-      note: 'Disagreement resolved: Labeler B questioned if "most expensive" could mean total spend; consensus is unit price is the direct named metric for items. Clear (0).',
-    },
-    'analytics-0145': {
-      labelerA: 0,
-      labelerB: 1,
-      finalLabel: 0,
-      note: 'Disagreement resolved: Labeler B questioned if "top trades" could imply sorting by product count or gain; consensus is "by amount traded" explicitly specifies the metric transactions[].amount. Clear (0).',
-    },
-    'analytics-0185': {
-      labelerA: 1,
-      labelerB: 0,
-      finalLabel: 1,
-      note: 'Disagreement resolved: Labeler B assumed revenue maps directly to transaction amount; consensus is in financial trading transactions multiple conflicting metrics exist and revenue is not directly recorded. Ambiguous (1).',
-    },
-    'mflix-0263': {
-      labelerA: 0,
-      labelerB: 1,
-      finalLabel: 0,
-      note: 'Disagreement resolved: Labeler B noted both critic rating and critic meter exist; consensus is query explicitly specifies "critic rating", naming tomatoes.critic.rating. Clear (0).',
-    },
-    'mflix-0307': {
-      labelerA: 1,
-      labelerB: 0,
-      finalLabel: 1,
-      note: 'Disagreement resolved: Labeler B assumed metacritic; consensus is both metacritic and tomatoes critic ratings evaluate critical performance with differing ranks. Ambiguous (1).',
-    },
-  };
-
-  for (const id of Object.keys(adjudications)) {
-    sampledIds.add(id);
-  }
-
-  const headers = ['id', 'dataset', 'scope', 'text', 'offered_options', 'labelerA', 'labelerB', 'finalLabel', 'note'];
-  const rows = [headers.join(',')];
-
-  for (const q of queries) {
-    const scopeStr = Array.isArray(q.scope) ? q.scope.join(', ') : String(q.scope);
-    const offered = getOfferedOptions(q.dataset, q.scope, schemas);
-
-    const isSampledForB = sampledIds.has(q.id);
-    const hasDisagreement = adjudications[q.id];
-
-    let lA = q.humanAmbiguous ? 1 : 0;
-    let lB = '';
-    let finalLabel = lA;
-    let note = '';
-
-    if (hasDisagreement) {
-      lA = hasDisagreement.labelerA;
-      lB = String(hasDisagreement.labelerB);
-      finalLabel = hasDisagreement.finalLabel;
-      note = hasDisagreement.note;
-    } else if (isSampledForB) {
-      lB = String(lA); // Agreement
-    }
-
-    const row = [
-      escapeCsv(q.id),
-      escapeCsv(q.dataset),
-      escapeCsv(scopeStr),
-      escapeCsv(q.text),
-      escapeCsv(offered),
-      escapeCsv(lA),
-      escapeCsv(lB),
-      escapeCsv(finalLabel),
-      escapeCsv(note),
-    ];
-    rows.push(row.join(','));
-  }
-
-  fs.writeFileSync(LABELING_SHEET_PATH, rows.join('\n') + '\n', 'utf8');
-  console.log(`✅ Wrote ${LABELING_SHEET_PATH} (330 queries, 9 columns, no gate/predicted labels).`);
-}
-
-/**
- * 2. Calculate Cohen's Kappa, Observed Agreement, Confusion Matrix, and export disagreements.csv.
- */
-function computeKappa() {
-  console.log('\n--- COMPUTING COHEN\'S KAPPA ON DOUBLE-LABELED SUBSET ---');
-
-  if (!fs.existsSync(LABELING_SHEET_PATH)) {
-    generateLabelingSheet();
-  }
-
-  const raw = fs.readFileSync(LABELING_SHEET_PATH, 'utf8');
-  const rows = parseCsv(raw);
-
-  const doubleLabeled = rows.filter((r) => r.labelerB !== '');
-  const N = doubleLabeled.length;
-
+function calculateAgreementStats(pairs, labelAKey = 'labelerA', labelBKey = 'labelerB') {
+  const N = pairs.length;
   if (N === 0) {
-    throw new Error('No double-labeled rows found in labeling_sheet.csv (labelerB is empty everywhere).');
+    return { N: 0, Po: 0, Pe: 0, kappa: 0, pabak: 0, lowerCI: 0, upperCI: 0, confusionMatrix: { bothClear: 0, bothAmbiguous: 0, aClear_bAmb: 0, aAmb_bClear: 0 } };
   }
 
   let bothClear = 0;     // A=0, B=0
@@ -270,25 +97,17 @@ function computeKappa() {
   let aClear_bAmb = 0;   // A=0, B=1
   let aAmb_bClear = 0;   // A=1, B=0
 
-  const disagreements = [];
-
-  for (const r of doubleLabeled) {
-    const a = parseInt(r.labelerA, 10);
-    const b = parseInt(r.labelerB, 10);
+  for (const p of pairs) {
+    const a = parseInt(p[labelAKey], 10);
+    const b = parseInt(p[labelBKey], 10);
 
     if (a === 0 && b === 0) bothClear++;
     else if (a === 1 && b === 1) bothAmbiguous++;
-    else if (a === 0 && b === 1) {
-      aClear_bAmb++;
-      disagreements.push(r);
-    } else if (a === 1 && b === 0) {
-      aAmb_bClear++;
-      disagreements.push(r);
-    }
+    else if (a === 0 && b === 1) aClear_bAmb++;
+    else if (a === 1 && b === 0) aAmb_bClear++;
   }
 
   const totalAgreed = bothClear + bothAmbiguous;
-  const totalDisagreed = aClear_bAmb + aAmb_bClear;
   const Po = totalAgreed / N; // Observed agreement
 
   // Marginal probabilities
@@ -300,50 +119,22 @@ function computeKappa() {
   const Pe = (pA_amb * pB_amb) + (pA_clr * pB_clr); // Expected chance agreement
   const kappa = Pe < 1 ? (Po - Pe) / (1 - Pe) : 1;
 
-  // Standard error and 95% CI
-  const seKappa = Math.sqrt((Po * (1 - Po)) / (N * Math.pow(1 - Pe, 2)));
-  const lowerCI = Math.max(0, kappa - 1.96 * seKappa);
+  // PABAK = Prevalence-Adjusted and Bias-Adjusted Kappa: 2*Po - 1
+  const pabak = (2 * Po) - 1;
+
+  // Standard error and 95% CI for Cohen's Kappa
+  const seKappa = Math.sqrt((Po * (1 - Po)) / (N * Math.pow(Math.max(1 - Pe, 0.0001), 2)));
+  const lowerCI = Math.max(-1, kappa - 1.96 * seKappa);
   const upperCI = Math.min(1, kappa + 1.96 * seKappa);
-
-  console.log(`\nSample Size (N):            ${N} queries`);
-  console.log(`Observed Agreement (Po):    ${(Po * 100).toFixed(2)}% (${totalAgreed}/${N})`);
-  console.log(`Chance Agreement (Pe):      ${(Pe * 100).toFixed(2)}%`);
-  console.log(`Cohen's Kappa (κ):          ${kappa.toFixed(4)} [95% CI: ${lowerCI.toFixed(3)}, ${upperCI.toFixed(3)}]`);
-
-  console.log('\n--- CONFUSION MATRIX (Labeler A vs Labeler B) ---');
-  console.log('                  Labeler B: Clear (0)   Labeler B: Ambiguous (1)   Total');
-  console.log(`Labeler A: Clear (0)         ${String(bothClear).padStart(5)}                  ${String(aClear_bAmb).padStart(5)}             ${String(bothClear + aClear_bAmb).padStart(5)}`);
-  console.log(`Labeler A: Amb (1)           ${String(aAmb_bClear).padStart(5)}                  ${String(bothAmbiguous).padStart(5)}             ${String(aAmb_bClear + bothAmbiguous).padStart(5)}`);
-  console.log(`Total                        ${String(bothClear + aAmb_bClear).padStart(5)}                  ${String(aClear_bAmb + bothAmbiguous).padStart(5)}             ${String(N).padStart(5)}`);
-
-  // Write disagreements.csv
-  const disHeaders = ['id', 'dataset', 'scope', 'text', 'offered_options', 'labelerA', 'labelerB', 'finalLabel', 'resolution_note'];
-  const disRows = [disHeaders.join(',')];
-
-  for (const d of disagreements) {
-    disRows.push([
-      escapeCsv(d.id),
-      escapeCsv(d.dataset),
-      escapeCsv(d.scope),
-      escapeCsv(d.text),
-      escapeCsv(d.offered_options),
-      escapeCsv(d.labelerA),
-      escapeCsv(d.labelerB),
-      escapeCsv(d.finalLabel),
-      escapeCsv(d.note),
-    ].join(','));
-  }
-
-  fs.writeFileSync(DISAGREEMENTS_PATH, disRows.join('\n') + '\n', 'utf8');
-  console.log(`\n✅ Saved ${disagreements.length} adjudicated disagreements to ${DISAGREEMENTS_PATH}`);
 
   return {
     N,
     totalAgreed,
-    totalDisagreed,
+    totalDisagreed: N - totalAgreed,
     Po,
     Pe,
     kappa,
+    pabak,
     lowerCI,
     upperCI,
     confusionMatrix: {
@@ -352,15 +143,159 @@ function computeKappa() {
       aClear_bAmb,
       aAmb_bClear,
     },
-    disagreements,
   };
 }
 
 /**
- * 3. Validate that finalLabel is fully populated and reconciles with test_split.jsonl.
+ * 1. Compute Cohen's Kappa on double-labeled subset, refusal if any cell empty,
+ *    report on ambiguity-capable strata only, PABAK, and LLM-vs-human agreement.
+ */
+function computeKappa(options = {}) {
+  console.log('\n=== EVAL2 INTER-ANNOTATOR AGREEMENT & KAPPA EVALUATION ===');
+
+  if (!fs.existsSync(LABELING_SHEET_PATH)) {
+    throw new Error(`labeling_sheet.csv not found at ${LABELING_SHEET_PATH}`);
+  }
+
+  const sheetRows = parseCsv(fs.readFileSync(LABELING_SHEET_PATH, 'utf8'));
+  const doubleLabeledRows = sheetRows.filter((r) => r.doubleLabel === '1' || r.doubleLabel === 1);
+
+  if (doubleLabeledRows.length === 0) {
+    throw new Error('No double-label rows designated in labeling_sheet.csv (doubleLabel column has no 1s).');
+  }
+
+  // Refuse to run while ANY labelerA or labelerB cell on a doubleLabel row is empty
+  const pendingDoubleLabelRows = doubleLabeledRows.filter(
+    (r) => r.labelerA === '' || r.labelerA === null || r.labelerA === undefined ||
+           r.labelerB === '' || r.labelerB === null || r.labelerB === undefined
+  );
+
+  if (pendingDoubleLabelRows.length > 0) {
+    console.error(`\n❌ [REFUSAL] kappa.js refuses to execute while human annotations are pending.`);
+    console.error(`   Found ${pendingDoubleLabelRows.length} of ${doubleLabeledRows.length} double-label rows with empty labelerA or labelerB cells.`);
+    console.error(`   Both human labelers must complete all marked doubleLabel rows before kappa computation.\n`);
+
+    if (options.throwOnRefusal) {
+      throw new Error(`Refusal: ${pendingDoubleLabelRows.length} double-label rows have empty labelerA/labelerB cells.`);
+    }
+
+    return {
+      refused: true,
+      pendingCount: pendingDoubleLabelRows.length,
+      totalDoubleLabel: doubleLabeledRows.length,
+    };
+  }
+
+  console.log(`\nAll ${doubleLabeledRows.length} double-label rows are populated. Proceeding with agreement analysis.`);
+
+  // Load test_split.jsonl to access categories for stratification
+  const testSplitMap = new Map();
+  if (fs.existsSync(TEST_SPLIT_PATH)) {
+    const testQueries = fs.readFileSync(TEST_SPLIT_PATH, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse);
+    for (const q of testQueries) testSplitMap.set(q.id, q);
+  }
+
+  // A. Overall Double-Labeled Agreement
+  const overallStats = calculateAgreementStats(doubleLabeledRows, 'labelerA', 'labelerB');
+
+  console.log('\n--- 1. OVERALL INTER-ANNOTATOR AGREEMENT (Double-Labeled Sample) ---');
+  console.log(`Sample Size (N):            ${overallStats.N} queries`);
+  console.log(`Observed Agreement (Po):    ${(overallStats.Po * 100).toFixed(2)}% (${overallStats.totalAgreed}/${overallStats.N})`);
+  console.log(`Chance Agreement (Pe):      ${(overallStats.Pe * 100).toFixed(2)}%`);
+  console.log(`Cohen's Kappa (κ):          ${overallStats.kappa.toFixed(4)} [95% CI: ${overallStats.lowerCI.toFixed(3)}, ${overallStats.upperCI.toFixed(3)}]`);
+  console.log(`PABAK (Adjusted Kappa):     ${overallStats.pabak.toFixed(4)}`);
+
+  console.log('\nOverall Confusion Matrix (Labeler A vs Labeler B):');
+  console.log('                  Labeler B: Clear (0)   Labeler B: Ambiguous (1)   Total');
+  console.log(`Labeler A: Clear (0)         ${String(overallStats.confusionMatrix.bothClear).padStart(5)}                  ${String(overallStats.confusionMatrix.aClear_bAmb).padStart(5)}             ${String(overallStats.confusionMatrix.bothClear + overallStats.confusionMatrix.aClear_bAmb).padStart(5)}`);
+  console.log(`Labeler A: Amb (1)           ${String(overallStats.confusionMatrix.aAmb_bClear).padStart(5)}                  ${String(overallStats.confusionMatrix.bothAmbiguous).padStart(5)}             ${String(overallStats.confusionMatrix.aAmb_bClear + overallStats.confusionMatrix.bothAmbiguous).padStart(5)}`);
+  console.log(`Total                        ${String(overallStats.confusionMatrix.bothClear + overallStats.confusionMatrix.aAmb_bClear).padStart(5)}                  ${String(overallStats.confusionMatrix.aClear_bAmb + overallStats.confusionMatrix.bothAmbiguous).padStart(5)}             ${String(overallStats.N).padStart(5)}`);
+
+  // B. Ambiguity-Capable Strata Only (AMB_*, CLR_FIELD, CLR_BOUND)
+  const capableRows = doubleLabeledRows.filter((r) => {
+    const q = testSplitMap.get(r.id);
+    const cat = q?.category || '';
+    return AMBIGUITY_CAPABLE_STRATA.has(cat);
+  });
+
+  const capableStats = calculateAgreementStats(capableRows, 'labelerA', 'labelerB');
+
+  console.log('\n--- 2. AMBIGUITY-CAPABLE STRATA ONLY (AMB_*, CLR_FIELD, CLR_BOUND) ---');
+  console.log(`Sample Size (N):            ${capableStats.N} queries (excludes CLR_AGG, CLR_PLAIN, OOS)`);
+  console.log(`Observed Agreement (Po):    ${(capableStats.Po * 100).toFixed(2)}% (${capableStats.totalAgreed}/${capableStats.N})`);
+  console.log(`Chance Agreement (Pe):      ${(capableStats.Pe * 100).toFixed(2)}%`);
+  console.log(`Cohen's Kappa (κ):          ${capableStats.kappa.toFixed(4)} [95% CI: ${capableStats.lowerCI.toFixed(3)}, ${capableStats.upperCI.toFixed(3)}]`);
+  console.log(`PABAK (Adjusted Kappa):     ${capableStats.pabak.toFixed(4)}`);
+
+  // C. LLM-vs-Human Agreement (Separate Line)
+  let llmVsHumanStats = null;
+  if (fs.existsSync(LLM_LABELS_PATH)) {
+    const llmRows = parseCsv(fs.readFileSync(LLM_LABELS_PATH, 'utf8'));
+    const llmMap = new Map(llmRows.map((r) => [r.id, r]));
+
+    const pairedWithHuman = [];
+    for (const sheetRow of sheetRows) {
+      if (sheetRow.finalLabel === '' || sheetRow.finalLabel === null || sheetRow.finalLabel === undefined) continue;
+      const llmRow = llmMap.get(sheetRow.id);
+      if (llmRow && llmRow.llmFinal !== '') {
+        pairedWithHuman.push({
+          id: sheetRow.id,
+          humanFinal: sheetRow.finalLabel,
+          llmFinal: llmRow.llmFinal,
+        });
+      }
+    }
+
+    if (pairedWithHuman.length > 0) {
+      llmVsHumanStats = calculateAgreementStats(pairedWithHuman, 'humanFinal', 'llmFinal');
+
+      console.log('\n--- 3. LLM-VS-HUMAN AGREEMENT (Baseline Comparison) ---');
+      console.log(`Evaluated against Human Ground Truth (N = ${llmVsHumanStats.N}):`);
+      console.log(`  • Observed Agreement (Po):  ${(llmVsHumanStats.Po * 100).toFixed(2)}% (${llmVsHumanStats.totalAgreed}/${llmVsHumanStats.N})`);
+      console.log(`  • Cohen's Kappa (κ):        ${llmVsHumanStats.kappa.toFixed(4)} [95% CI: ${llmVsHumanStats.lowerCI.toFixed(3)}, ${llmVsHumanStats.upperCI.toFixed(3)}]`);
+      console.log(`  • PABAK (Adjusted Kappa):   ${llmVsHumanStats.pabak.toFixed(4)}`);
+      console.log(`  • LLM vs Human Disagreements: ${llmVsHumanStats.totalDisagreed}`);
+    }
+  }
+
+  // D. Export Disagreements CSV
+  const disagreements = doubleLabeledRows.filter((r) => r.labelerA !== r.labelerB);
+  const disHeaders = ['id', 'dataset', 'scope', 'text', 'offered_options', 'doubleLabel', 'labelerA', 'labelerB', 'finalLabel', 'note'];
+  const disCsvRows = [disHeaders.join(',')];
+
+  for (const d of disagreements) {
+    disCsvRows.push([
+      escapeCsv(d.id),
+      escapeCsv(d.dataset),
+      escapeCsv(d.scope),
+      escapeCsv(d.text),
+      escapeCsv(d.offered_options),
+      d.doubleLabel,
+      escapeCsv(d.labelerA),
+      escapeCsv(d.labelerB),
+      escapeCsv(d.finalLabel),
+      escapeCsv(d.note),
+    ].join(','));
+  }
+
+  fs.writeFileSync(DISAGREEMENTS_PATH, disCsvRows.join('\n') + '\n', 'utf8');
+  console.log(`\n✅ Saved ${disagreements.length} human disagreements to ${DISAGREEMENTS_PATH}`);
+
+  return {
+    refused: false,
+    overall: overallStats,
+    ambiguityCapable: capableStats,
+    llmVsHuman: llmVsHumanStats,
+    disagreementsCount: disagreements.length,
+  };
+}
+
+/**
+ * 2. Validate that finalLabel is non-empty, checks against test_split.jsonl,
+ *    and supports merging human labels and updating manifest hash.
  */
 function validateLabels(options = {}) {
-  console.log('\n--- VALIDATING GROUND TRUTH LABELS AGAINST test_split.jsonl ---');
+  console.log('\n=== VALIDATING HUMAN GROUND TRUTH LABELS ===');
 
   if (!fs.existsSync(LABELING_SHEET_PATH)) {
     throw new Error(`labeling_sheet.csv not found at ${LABELING_SHEET_PATH}`);
@@ -375,11 +310,12 @@ function validateLabels(options = {}) {
   // Check 1: Empty finalLabel detection
   const emptyFinal = sheetRows.filter((r) => r.finalLabel === '' || r.finalLabel === null || r.finalLabel === undefined);
   if (emptyFinal.length > 0) {
-    console.error(`❌ Validation Failure: Found ${emptyFinal.length} rows with empty finalLabel in labeling_sheet.csv!`);
-    for (const ef of emptyFinal.slice(0, 5)) {
-      console.error(`   - Row ID: ${ef.id}, Text: "${ef.text}"`);
+    console.error(`❌ Validation Failure: Found ${emptyFinal.length} of ${sheetRows.length} rows with empty finalLabel in labeling_sheet.csv!`);
+    console.error('   Human labeling is not yet complete. All 330 queries must have an adjudicated finalLabel.');
+    if (options.throwOnError) {
+      throw new Error(`Validation Failure: ${emptyFinal.length} empty finalLabels.`);
     }
-    process.exit(1);
+    return { valid: false, reason: 'empty_final_labels', count: emptyFinal.length };
   }
 
   // Check 2: Reconciliation with test_split.jsonl
@@ -390,6 +326,18 @@ function validateLabels(options = {}) {
     const sheetRow = sheetMap.get(q.id);
     if (!sheetRow) {
       differences.push({ id: q.id, reason: 'Missing in labeling_sheet.csv' });
+      continue;
+    }
+
+    if (q.humanAmbiguous === null || q.humanAmbiguous === undefined) {
+      differences.push({
+        id: q.id,
+        dataset: q.dataset,
+        text: q.text,
+        testSplitValue: null,
+        finalLabelValue: parseInt(sheetRow.finalLabel, 10),
+        reason: 'test_split.humanAmbiguous is null (pending merge)',
+      });
       continue;
     }
 
@@ -407,34 +355,38 @@ function validateLabels(options = {}) {
   }
 
   if (differences.length > 0) {
-    console.error(`\n❌ VALIDATION ERROR: Found ${differences.length} diff(s) between test_split.jsonl and labeling_sheet.csv!`);
-    console.error('Do not silently overwrite. Adjudicated differences detected:');
-    for (const d of differences) {
-      console.error(`  • [${d.id}] (${d.dataset}) "${d.text}"`);
-      console.error(`     test_split.humanAmbiguous: ${d.testSplitValue} | labeling_sheet.finalLabel: ${d.finalLabelValue ? 1 : 0}`);
-      if (d.note) console.error(`     Resolution Note: ${d.note}`);
+    console.error(`\n❌ VALIDATION DIFF DETECTED: ${differences.length} discrepancies between test_split.jsonl and labeling_sheet.csv.`);
+    console.error('Do not silently overwrite.');
+
+    for (const d of differences.slice(0, 10)) {
+      console.error(`  • [${d.id}] "${d.text?.slice(0, 45)}..."`);
+      console.error(`     test_split.humanAmbiguous: ${d.testSplitValue} | labeling_sheet.finalLabel: ${d.finalLabelValue}`);
+    }
+    if (differences.length > 10) console.error(`     ... and ${differences.length - 10} more.`);
+
+    if (options.merge) {
+      console.log('\n[--merge specified] Merging adjudicated human labels into test_split.jsonl...');
+      mergeHumanLabels(sheetMap);
+      return { valid: true, merged: true, diffCount: differences.length };
     }
 
-    if (options.sync) {
-      console.log('\n[--sync specified] Synchronizing test_split.jsonl with adjudicated finalLabels...');
-      regenerateTestSplit(sheetMap, differences);
-      return { valid: true, synced: true, diffCount: differences.length };
-    }
+    console.error('\nTo merge human labels into test_split.jsonl and update manifest SHA-256 hash, run:');
+    console.error('   node eval2/benchmark/kappa.js --merge\n');
 
-    console.error('\nTo reconcile and regenerate test_split.jsonl with updated manifest hash, run:');
-    console.error('   node eval2/benchmark/kappa.js --sync\n');
-    process.exit(1);
+    if (options.throwOnError) {
+      throw new Error(`Validation diff: ${differences.length} discrepancies detected.`);
+    }
+    return { valid: false, reason: 'diffs_detected', diffCount: differences.length };
   }
 
   console.log(`✅ Validation Passed: All ${queries.length} queries match labeling_sheet.csv finalLabel perfectly (0 diffs).`);
-  console.log('✅ Zero empty finalLabels found.');
-  return { valid: true, synced: false, diffCount: 0 };
+  return { valid: true, merged: false, diffCount: 0 };
 }
 
 /**
- * 4. Regenerate test_split.jsonl and update manifest.json hash if humanAmbiguous changes.
+ * 3. Merge human finalLabels into test_split.jsonl and update manifest.json hash.
  */
-function regenerateTestSplit(sheetMap, changedQueries = []) {
+function mergeHumanLabels(sheetMap) {
   const queries = fs.readFileSync(TEST_SPLIT_PATH, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse);
 
   const updatedQueries = queries.map((q) => {
@@ -442,7 +394,7 @@ function regenerateTestSplit(sheetMap, changedQueries = []) {
     if (!row) return q;
 
     const finalBool = parseInt(row.finalLabel, 10) === 1;
-    const lA = parseInt(row.labelerA, 10) === 1 ? 'AMBIGUOUS' : 'CLEAR';
+    const lA = row.labelerA !== '' ? (parseInt(row.labelerA, 10) === 1 ? 'AMBIGUOUS' : 'CLEAR') : null;
     let lB = null;
     if (row.labelerB === '1') lB = 'AMBIGUOUS';
     else if (row.labelerB === '0') lB = 'CLEAR';
@@ -455,28 +407,22 @@ function regenerateTestSplit(sheetMap, changedQueries = []) {
     };
   });
 
-  // Write updated test_split.jsonl
   const content = updatedQueries.map((q) => JSON.stringify(q)).join('\n') + '\n';
   fs.writeFileSync(TEST_SPLIT_PATH, content, 'utf8');
 
   // Compute new SHA-256 hash
   const newHash = crypto.createHash('sha256').update(fs.readFileSync(TEST_SPLIT_PATH)).digest('hex');
-  console.log(`\nNew test_split.jsonl SHA-256: ${newHash}`);
+  console.log(`New test_split.jsonl SHA-256: ${newHash}`);
 
   // Update manifest.json
   if (fs.existsSync(MANIFEST_PATH)) {
     const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf8'));
     manifest.testSplitHash = newHash;
-    manifest.interAnnotatorAgreement = {
-      kappaSampleSize: sheetMap.size > 0 ? Array.from(sheetMap.values()).filter((r) => r.labelerB !== '').length : 85,
-      observedAgreement: 0.9451,
-      cohenKappa: 0.8697,
-    };
     fs.writeFileSync(MANIFEST_PATH, JSON.stringify(manifest, null, 2) + '\n', 'utf8');
-    console.log(`✅ Updated ${MANIFEST_PATH} with new testSplitHash and agreement metrics.`);
+    console.log(`✅ Updated ${MANIFEST_PATH} with new testSplitHash.`);
   }
 
-  console.log(`\nSuccessfully regenerated test_split.jsonl. Updated ${changedQueries.length} affected query records.`);
+  console.log(`\n✅ Successfully merged human labels into test_split.jsonl.`);
 }
 
 // ---------------------------------------------------------------------------
@@ -484,29 +430,30 @@ function regenerateTestSplit(sheetMap, changedQueries = []) {
 // ---------------------------------------------------------------------------
 if (require.main === module) {
   const args = process.argv.slice(2);
-  const isSync = args.includes('--sync');
+  const isMerge = args.includes('--merge') || args.includes('--sync');
   const isValidateOnly = args.includes('--validate');
-  const isGenerateOnly = args.includes('--generate');
 
   try {
-    if (isGenerateOnly) {
-      generateLabelingSheet();
-    } else if (isValidateOnly) {
-      validateLabels({ sync: isSync });
+    if (isValidateOnly) {
+      const v = validateLabels({ merge: isMerge });
+      if (!v.valid) process.exit(1);
     } else {
-      generateLabelingSheet();
-      computeKappa();
-      validateLabels({ sync: isSync });
+      const kappaRes = computeKappa();
+      if (kappaRes.refused) {
+        process.exit(1);
+      }
+      const v = validateLabels({ merge: isMerge });
+      if (!v.valid) process.exit(1);
     }
   } catch (err) {
-    console.error('Error in kappa.js workflow:', err);
+    console.error('Error in kappa.js:', err.message);
     process.exit(1);
   }
 }
 
 module.exports = {
-  generateLabelingSheet,
   computeKappa,
   validateLabels,
-  regenerateTestSplit,
+  calculateAgreementStats,
+  mergeHumanLabels,
 };

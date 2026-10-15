@@ -101,6 +101,10 @@ function resolveOracleAction({ item, firstData, oracleMode = 'primary' }) {
   const targetGold = item.goldCandidate;
   const isOffered = targetGold ? offeredOptions.includes(targetGold) : false;
 
+  if (item.humanAmbiguous === null || item.humanAmbiguous === undefined) {
+    throw new Error(`humanAmbiguous is null for query ${item.id || 'unknown'}. Human labeling must be validated and merged before running evaluation.`);
+  }
+
   if (!item.humanAmbiguous) {
     // Clear query
     if (oracleMode === 'wrong_pick') {
@@ -232,6 +236,9 @@ async function runE2EEvaluation() {
 
       for (let i = 0; i < queries.length; i++) {
         const item = queries[i];
+        if (item.humanAmbiguous === null || item.humanAmbiguous === undefined) {
+          throw new Error(`humanAmbiguous is null for query ${item.id}. Human labeling must be validated and merged before running evaluation.`);
+        }
         const key = `${targetModel}|${cfg}|${item.id}`;
 
         if (completedSet.has(key)) {

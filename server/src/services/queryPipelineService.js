@@ -122,6 +122,8 @@ async function validateRequestedCollections(userDb, collections, options = {}) {
 async function processNaturalLanguageQuery({
     connectionId,
     text,
+    query: queryParam,
+    db: dbParam,
     collections,
     workspaceId,
     dropMissing,
@@ -133,7 +135,7 @@ async function processNaturalLanguageQuery({
     source = 'query',
     evalOptions = {},
 }) {
-    const query = text.trim();
+    const query = (text || queryParam || '').trim();
 
     const isEvalMode = process.env.EVAL_MODE === '1';
     const evalOpts = isEvalMode ? (evalOptions || {}) : {};
@@ -151,8 +153,12 @@ async function processNaturalLanguageQuery({
     let gateInfo = { reason: null, matchedTerms: [] };
     let safetyInfo = { code: null, reason: null };
     let currentLlmResult = null;
+    let clarificationSource = null;
 
     const wrapResponse = (statusCode, payload) => {
+        if (payload.needsClarification && clarificationSource) {
+            payload.clarificationSource = clarificationSource;
+        }
         if (isEvalMode) {
             payload.diagnostics = {
                 timings: {
@@ -169,13 +175,18 @@ async function processNaturalLanguageQuery({
                 retries: currentLlmResult?.retries || 0,
                 gate: gateInfo,
                 safety: safetyInfo,
+                clarificationSource,
+                rawText: currentLlmResult?.rawText || null,
+                finishReason: currentLlmResult?.finishReason || null,
             };
         }
-        return { statusCode, response: payload };
+        return { statusCode, response: payload, data: payload };
     };
 
-    // 1. Get User DB from pool
-    const userDb = await getUserDb(connectionId);
+    // 1. Get User DB from pool (or evalOptions.db / dbParam in evaluation mode)
+    const userDb = (isEvalMode && (evalOpts.db || dbParam))
+        ? (evalOpts.db || dbParam)
+        : await getUserDb(connectionId);
 
     // If workspaceId was provided, resolve its collections
     let effectiveCollections = collections;
@@ -222,12 +233,17 @@ async function processNaturalLanguageQuery({
     schemaMs = toMs(tSchemaStart);
 
     const tFewShotStart = hrNow();
-    const fewShotExamples = await getSimilarExamples(
-        query,
-        fewShotLimit,
-        connectionId,
-        isRestrictedScope ? effectiveScope : null
-    );
+    let fewShotExamples = [];
+    try {
+        fewShotExamples = await getSimilarExamples(
+            query,
+            fewShotLimit,
+            connectionId,
+            isRestrictedScope ? effectiveScope : null
+        );
+    } catch {
+        fewShotExamples = [];
+    }
     fewShotMs = toMs(tFewShotStart);
 
     // evalOptions.disableSchemaContext: field names only without types, samples, or relationship hints
@@ -283,6 +299,7 @@ async function processNaturalLanguageQuery({
             };
 
             if (ambiguityAnalysis.result && ambiguityAnalysis.result.needsClarification) {
+                clarificationSource = 'gate';
                 recordAmbiguityMetric('ambiguity_asked', { connectionId, source });
                 return wrapResponse(200, {
                     success: true,
@@ -301,6 +318,8 @@ async function processNaturalLanguageQuery({
     const targetModel = evalOpts.model || model;
     const llmGenOptions = {
         isClarificationPass,
+        disableClarificationMode: Boolean(evalOpts.disableClarificationMode),
+        forceFinalQueryMode: Boolean(evalOpts.forceFinalQueryMode),
         rawSchema,
         scopedCollections: isRestrictedScope ? effectiveScope : [],
         ...(evalOpts.temperature !== undefined ? { temperature: evalOpts.temperature } : {}),
@@ -319,6 +338,7 @@ async function processNaturalLanguageQuery({
 
     // If LLM indicates clarification is needed
     if (llmResult.needsClarification === true && !isClarificationPass) {
+        clarificationSource = 'llm';
         recordAmbiguityMetric('ambiguity_asked', { connectionId, source });
         return wrapResponse(200, {
             success: true,

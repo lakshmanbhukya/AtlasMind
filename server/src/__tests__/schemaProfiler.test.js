@@ -300,7 +300,7 @@ describe('A1: schemaProfiler', () => {
             process.env.EVAL_MODE = '1';
             process.env.EVAL_SCHEMA_SNAPSHOT = tmpSnapshotPath;
 
-            const mockDb = { databaseName: 'snap_db' };
+            const mockDb = { databaseName: 'snap_db', listCollections: () => ({ toArray: async () => [] }) };
             const schema = await profileSchema(mockDb);
 
             expect(schema.database).toBe('snap_db');
@@ -311,7 +311,7 @@ describe('A1: schemaProfiler', () => {
             process.env.EVAL_MODE = '1';
             process.env.EVAL_SCHEMA_SNAPSHOT = tmpSnapshotPath;
 
-            const mockDb = { databaseName: 'snap_db' };
+            const mockDb = { databaseName: 'snap_db', listCollections: () => ({ toArray: async () => [] }) };
             const schema = await profileSchema(mockDb, { collections: ['col1'] });
 
             expect(schema.database).toBe('snap_db');

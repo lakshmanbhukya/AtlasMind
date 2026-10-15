@@ -10,11 +10,16 @@
  *
  * @param {string} schemaContext - Minified database schema
  * @param {object[]} fewShotExamples - Similar NL→MQL examples
+ * @param {object} [options={}] - Options controlling generation mode
  * @returns {string}
  */
-function buildSystemPrompt(schemaContext, fewShotExamples = []) {
+function buildSystemPrompt(schemaContext, fewShotExamples = [], options = {}) {
     const currentDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
     const currentMonth = new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' });
+
+    const modeSection = (options.isClarificationPass === true || options.disableClarificationMode === true || options.forceFinalQueryMode === true)
+        ? `\n## FINAL QUERY MODE (REQUIRED)\nDO NOT return needsClarification:true. You MUST return a concrete aggregation pipeline.\n`
+        : `\n### CLARIFICATION MODE\nIf the query is ambiguous, missing required metrics or parameters, you may return { "needsClarification": true, "questions": [...] }.\n`;
 
     // Build few-shot examples section
     let examplesSection = '';
@@ -60,6 +65,7 @@ You MUST respond with a valid JSON object in this exact format:
   "chartType": "<bar|line|pie|area|table>",
   "explanation": "<brief explanation of what the query does>"
 }
+${modeSection}
 
 ## Chart Type Selection Rules
 - Use "bar" for comparing categories (e.g., revenue by region, top customers)

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-15T09:05:48.225Z",
+  "generatedAt": "2026-10-15T10:11:12.006Z",
   "gate": {
     "n": 330,
     "scoredN": 318,
@@ -71,7 +71,7 @@
     }
   },
   "safety": {
-    "n": 243,
+    "n": 248,
     "adversarialTotal": 119,
     "adversarialBlocked": 119,
     "adversarialBlockRate": {

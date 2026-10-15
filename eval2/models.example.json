@@ -1,0 +1,59 @@
+{
+  "$comment": "Model configuration template for AtlasMind evaluation suite (eval2). Do NOT commit real API keys.",
+  "endpoint": "https://api.groq.com/openai/v1",
+  "auth": {
+    "envVar": "GROQ_API_KEY",
+    "headerName": "Authorization",
+    "tokenPrefix": "Bearer"
+  },
+  "models": {
+    "openai/gpt-oss-120b": {
+      "role": "primary",
+      "displayName": "GPT-OSS 120B (Groq LPU)",
+      "contextWindow": 131072,
+      "maxCompletionTokens": 4096,
+      "jsonModeSupported": true,
+      "rateLimits": {
+        "rpm": 30,
+        "tpm": 30000,
+        "tpd": 200000
+      },
+      "pricing": {
+        "promptPerMillion": 0.15,
+        "completionPerMillion": 0.75
+      }
+    },
+    "openai/gpt-oss-20b": {
+      "role": "secondary",
+      "displayName": "GPT-OSS 20B (Groq LPU)",
+      "contextWindow": 65536,
+      "maxCompletionTokens": 4096,
+      "jsonModeSupported": true,
+      "rateLimits": {
+        "rpm": 30,
+        "tpm": 30000,
+        "tpd": 200000
+      },
+      "pricing": {
+        "promptPerMillion": 0.075,
+        "completionPerMillion": 0.30
+      }
+    },
+    "qwen/qwen3.8-27b": {
+      "role": "secondary",
+      "displayName": "Qwen 3.8 27B (Groq LPU)",
+      "contextWindow": 65536,
+      "maxCompletionTokens": 4096,
+      "jsonModeSupported": true,
+      "rateLimits": {
+        "rpm": 30,
+        "tpm": 30000,
+        "tpd": 200000
+      },
+      "pricing": {
+        "promptPerMillion": 0.10,
+        "completionPerMillion": 0.40
+      }
+    }
+  }
+}

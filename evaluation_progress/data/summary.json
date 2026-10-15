@@ -1,0 +1,733 @@
+{
+  "generatedAt": "2026-10-15T09:05:48.225Z",
+  "gate": {
+    "n": 330,
+    "scoredN": 318,
+    "confusionMatrix": {
+      "TP": 73,
+      "FP": 77,
+      "TN": 133,
+      "FN": 35
+    },
+    "recallOverall": {
+      "mean": 0.6759,
+      "lower": 0.5829,
+      "upper": 0.7568,
+      "pointPct": "67.6%",
+      "ciPct": "[58.3%, 75.7%]"
+    },
+    "recallLexical": {
+      "mean": 1,
+      "lower": 0.95,
+      "upper": 1,
+      "pointPct": "100.0%",
+      "ciPct": "[95.0%, 100.0%]"
+    },
+    "recallParaphrase": {
+      "mean": 0,
+      "lower": 0,
+      "upper": 0.0989,
+      "pointPct": "0.0%",
+      "ciPct": "[0.0%, 9.9%]"
+    },
+    "precision": {
+      "mean": 0.4867,
+      "lower": 0.408,
+      "upper": 0.566,
+      "pointPct": "48.7%",
+      "ciPct": "[40.8%, 56.6%]"
+    },
+    "specificity": {
+      "mean": 0.6333,
+      "lower": 0.5663,
+      "upper": 0.6956,
+      "pointPct": "63.3%",
+      "ciPct": "[56.6%, 69.6%]"
+    },
+    "ucr": {
+      "mean": 0.3667,
+      "lower": 0.3044,
+      "upper": 0.4337,
+      "pointPct": "36.7%",
+      "ciPct": "[30.4%, 43.4%]"
+    },
+    "microbench": {
+      "iterations": 10000,
+      "warmup": 1000,
+      "unit": "microseconds",
+      "mean": 34.78,
+      "p50": 28.5,
+      "p95": 57.2,
+      "p99": 83.8,
+      "max": 3619.7,
+      "hardware": {
+        "cpuModel": "AMD Ryzen 5 5600H with Radeon Graphics         ",
+        "cores": 12,
+        "arch": "x64",
+        "platform": "win32",
+        "totalMemoryGb": "7.34"
+      },
+      "recordedAt": "2026-10-13T17:08:24.380Z"
+    }
+  },
+  "safety": {
+    "n": 243,
+    "adversarialTotal": 119,
+    "adversarialBlocked": 119,
+    "adversarialBlockRate": {
+      "mean": 1,
+      "lower": 0.9687,
+      "upper": 1,
+      "pointPct": "100.0%",
+      "ciPct": "[96.9%, 100.0%]"
+    },
+    "benignTotal": 124,
+    "benignAllowed": 124,
+    "benignAllowanceRate": {
+      "mean": 1,
+      "lower": 0.97,
+      "upper": 1,
+      "pointPct": "100.0%",
+      "ciPct": "[97.0%, 100.0%]"
+    },
+    "authorWrittenBenchmark": true,
+    "replayDefenseVerified": true
+  },
+  "e2e": {
+    "model": "openai/gpt-oss-120b",
+    "nQueries": 100,
+    "c0a": {
+      "n": 100,
+      "ambN": 55,
+      "ambLexN": 35,
+      "ambParaN": 20,
+      "clrN": 45,
+      "silentAmbArr": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "silentAmbCI": {
+        "mean": 1,
+        "lower": 0.9347,
+        "upper": 1,
+        "pointPct": "100.0%",
+        "ciPct": "[93.5%, 100.0%]"
+      },
+      "silentLexCI": {
+        "mean": 1,
+        "lower": 0.9011,
+        "upper": 1,
+        "pointPct": "100.0%",
+        "ciPct": "[90.1%, 100.0%]"
+      },
+      "silentParaCI": {
+        "mean": 1,
+        "lower": 0.8389,
+        "upper": 1,
+        "pointPct": "100.0%",
+        "ciPct": "[83.9%, 100.0%]"
+      },
+      "matchLexCI": {
+        "mean": 0.6571,
+        "lower": 0.4915,
+        "upper": 0.7917,
+        "pointPct": "65.7%",
+        "ciPct": "[49.2%, 79.2%]"
+      },
+      "matchParaCI": {
+        "mean": 0.35,
+        "lower": 0.1812,
+        "upper": 0.5671,
+        "pointPct": "35.0%",
+        "ciPct": "[18.1%, 56.7%]"
+      },
+      "resultMatchClrCI": {
+        "mean": 1,
+        "lower": 0.9213,
+        "upper": 1,
+        "pointPct": "100.0%",
+        "ciPct": "[92.1%, 100.0%]"
+      },
+      "validClrCI": {
+        "mean": 1,
+        "lower": 0.9213,
+        "upper": 1,
+        "pointPct": "100.0%",
+        "ciPct": "[92.1%, 100.0%]"
+      },
+      "validTotalCI": {
+        "mean": 1,
+        "lower": 0.963,
+        "upper": 1,
+        "pointPct": "100.0%",
+        "ciPct": "[96.3%, 100.0%]"
+      },
+      "clarTotalCI": {
+        "mean": 0,
+        "lower": 0,
+        "upper": 0.037,
+        "pointPct": "0.0%",
+        "ciPct": "[0.0%, 3.7%]"
+      },
+      "clarGateCI": {
+        "mean": 0,
+        "lower": 0,
+        "upper": 0.037,
+        "pointPct": "0.0%",
+        "ciPct": "[0.0%, 3.7%]"
+      },
+      "clarLlmCI": {
+        "mean": 0,
+        "lower": 0,
+        "upper": 0.037,
+        "pointPct": "0.0%",
+        "ciPct": "[0.0%, 3.7%]"
+      },
+      "unnecInteractionsCI": {
+        "mean": 0,
+        "lower": 0,
+        "upper": 0.0787,
+        "pointPct": "0.0%",
+        "ciPct": "[0.0%, 7.9%]"
+      },
+      "meanPromptTokens": 1667.7,
+      "meanCompTokens": 244.1,
+      "meanTotalTokens": 1911.8,
+      "meanLatencyMs": 18798.6
+    },
+    "c0b": {
+      "n": 100,
+      "ambN": 55,
+      "ambLexN": 35,
+      "ambParaN": 20,
+      "clrN": 45,
+      "silentAmbArr": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0,
+        1,
+        0,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0,
+        1,
+        0,
+        1,
+        0,
+        0,
+        1,
+        0,
+        1
+      ],
+      "silentAmbCI": {
+        "mean": 0.6545,
+        "lower": 0.5225,
+        "upper": 0.7664,
+        "pointPct": "65.5%",
+        "ciPct": "[52.3%, 76.6%]"
+      },
+      "silentLexCI": {
+        "mean": 0.8,
+        "lower": 0.6411,
+        "upper": 0.8996,
+        "pointPct": "80.0%",
+        "ciPct": "[64.1%, 90.0%]"
+      },
+      "silentParaCI": {
+        "mean": 0.4,
+        "lower": 0.2188,
+        "upper": 0.6134,
+        "pointPct": "40.0%",
+        "ciPct": "[21.9%, 61.3%]"
+      },
+      "matchLexCI": {
+        "mean": 0.5143,
+        "lower": 0.3557,
+        "upper": 0.6701,
+        "pointPct": "51.4%",
+        "ciPct": "[35.6%, 67.0%]"
+      },
+      "matchParaCI": {
+        "mean": 0.15,
+        "lower": 0.0524,
+        "upper": 0.3604,
+        "pointPct": "15.0%",
+        "ciPct": "[5.2%, 36.0%]"
+      },
+      "resultMatchClrCI": {
+        "mean": 1,
+        "lower": 0.9213,
+        "upper": 1,
+        "pointPct": "100.0%",
+        "ciPct": "[92.1%, 100.0%]"
+      },
+      "validClrCI": {
+        "mean": 1,
+        "lower": 0.9213,
+        "upper": 1,
+        "pointPct": "100.0%",
+        "ciPct": "[92.1%, 100.0%]"
+      },
+      "validTotalCI": {
+        "mean": 0.81,
+        "lower": 0.7222,
+        "upper": 0.8749,
+        "pointPct": "81.0%",
+        "ciPct": "[72.2%, 87.5%]"
+      },
+      "clarTotalCI": {
+        "mean": 0.19,
+        "lower": 0.1251,
+        "upper": 0.2778,
+        "pointPct": "19.0%",
+        "ciPct": "[12.5%, 27.8%]"
+      },
+      "clarGateCI": {
+        "mean": 0,
+        "lower": 0,
+        "upper": 0.037,
+        "pointPct": "0.0%",
+        "ciPct": "[0.0%, 3.7%]"
+      },
+      "clarLlmCI": {
+        "mean": 0.19,
+        "lower": 0.1251,
+        "upper": 0.2778,
+        "pointPct": "19.0%",
+        "ciPct": "[12.5%, 27.8%]"
+      },
+      "unnecInteractionsCI": {
+        "mean": 0,
+        "lower": 0,
+        "upper": 0.0787,
+        "pointPct": "0.0%",
+        "ciPct": "[0.0%, 7.9%]"
+      },
+      "meanPromptTokens": 1669.8,
+      "meanCompTokens": 213.5,
+      "meanTotalTokens": 1883.3,
+      "meanLatencyMs": 19279.8
+    },
+    "c2": {
+      "n": 100,
+      "ambN": 55,
+      "ambLexN": 35,
+      "ambParaN": 20,
+      "clrN": 45,
+      "silentAmbArr": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0,
+        1,
+        0,
+        1,
+        0,
+        0,
+        1,
+        0,
+        1
+      ],
+      "silentAmbCI": {
+        "mean": 0.1455,
+        "lower": 0.0756,
+        "upper": 0.2616,
+        "pointPct": "14.5%",
+        "ciPct": "[7.6%, 26.2%]"
+      },
+      "silentLexCI": {
+        "mean": 0,
+        "lower": 0,
+        "upper": 0.0989,
+        "pointPct": "0.0%",
+        "ciPct": "[0.0%, 9.9%]"
+      },
+      "silentParaCI": {
+        "mean": 0.4,
+        "lower": 0.2188,
+        "upper": 0.6134,
+        "pointPct": "40.0%",
+        "ciPct": "[21.9%, 61.3%]"
+      },
+      "matchLexCI": {
+        "mean": 1,
+        "lower": 0.9011,
+        "upper": 1,
+        "pointPct": "100.0%",
+        "ciPct": "[90.1%, 100.0%]"
+      },
+      "matchParaCI": {
+        "mean": 0.15,
+        "lower": 0.0524,
+        "upper": 0.3604,
+        "pointPct": "15.0%",
+        "ciPct": "[5.2%, 36.0%]"
+      },
+      "resultMatchClrCI": {
+        "mean": 1,
+        "lower": 0.9213,
+        "upper": 1,
+        "pointPct": "100.0%",
+        "ciPct": "[92.1%, 100.0%]"
+      },
+      "validClrCI": {
+        "mean": 1,
+        "lower": 0.9213,
+        "upper": 1,
+        "pointPct": "100.0%",
+        "ciPct": "[92.1%, 100.0%]"
+      },
+      "validTotalCI": {
+        "mean": 0.88,
+        "lower": 0.8019,
+        "upper": 0.93,
+        "pointPct": "88.0%",
+        "ciPct": "[80.2%, 93.0%]"
+      },
+      "clarTotalCI": {
+        "mean": 0.71,
+        "lower": 0.6146,
+        "upper": 0.7899,
+        "pointPct": "71.0%",
+        "ciPct": "[61.5%, 79.0%]"
+      },
+      "clarGateCI": {
+        "mean": 0.59,
+        "lower": 0.492,
+        "upper": 0.6813,
+        "pointPct": "59.0%",
+        "ciPct": "[49.2%, 68.1%]"
+      },
+      "clarLlmCI": {
+        "mean": 0.12,
+        "lower": 0.07,
+        "upper": 0.1981,
+        "pointPct": "12.0%",
+        "ciPct": "[7.0%, 19.8%]"
+      },
+      "unnecInteractionsCI": {
+        "mean": 0.5333,
+        "lower": 0.3908,
+        "upper": 0.6706,
+        "pointPct": "53.3%",
+        "ciPct": "[39.1%, 67.1%]"
+      },
+      "meanPromptTokens": 1666.4,
+      "meanCompTokens": 228.8,
+      "meanTotalTokens": 1895.2,
+      "meanLatencyMs": 19820.7
+    },
+    "pairedComparison_C0b_vs_C2": {
+      "mcNemar": {
+        "b": 28,
+        "c": 0,
+        "n": 28,
+        "pValue": 7.450580596923828e-9,
+        "significant": true,
+        "pDisplay": "7.45e-9"
+      },
+      "pairedBootstrapDiff": {
+        "diffMean": 0.5091,
+        "lower": 0.3818,
+        "upper": 0.6364,
+        "diffPct": "50.9 pp",
+        "ciPct": "[38.2, 63.6]"
+      }
+    },
+    "pairedComparison_C0a_vs_C2": {
+      "mcNemar": {
+        "b": 47,
+        "c": 0,
+        "n": 47,
+        "pValue": 1.4210854715202004e-14,
+        "significant": true,
+        "pDisplay": "1.42e-14"
+      },
+      "pairedBootstrapDiff": {
+        "diffMean": 0.8545,
+        "lower": 0.7636,
+        "upper": 0.9455,
+        "diffPct": "85.5 pp",
+        "ciPct": "[76.4, 94.5]"
+      }
+    }
+  },
+  "errorTaxonomy": {
+    "C0a": {
+      "AMB_LEX": {
+        "pipeline_returned": 35,
+        "asked_resolved": 0,
+        "asked_unresolved": 0,
+        "invalid_json": 0,
+        "truncated": 0,
+        "execution_error": 0,
+        "empty_result": 0
+      },
+      "AMB_PARA": {
+        "pipeline_returned": 20,
+        "asked_resolved": 0,
+        "asked_unresolved": 0,
+        "invalid_json": 0,
+        "truncated": 0,
+        "execution_error": 0,
+        "empty_result": 0
+      },
+      "CLR_FIELD": {
+        "pipeline_returned": 15,
+        "asked_resolved": 0,
+        "asked_unresolved": 0,
+        "invalid_json": 0,
+        "truncated": 0,
+        "execution_error": 0,
+        "empty_result": 0
+      },
+      "CLR_BOUND": {
+        "pipeline_returned": 15,
+        "asked_resolved": 0,
+        "asked_unresolved": 0,
+        "invalid_json": 0,
+        "truncated": 0,
+        "execution_error": 0,
+        "empty_result": 0
+      },
+      "CLR_PLAIN": {
+        "pipeline_returned": 15,
+        "asked_resolved": 0,
+        "asked_unresolved": 0,
+        "invalid_json": 0,
+        "truncated": 0,
+        "execution_error": 0,
+        "empty_result": 0
+      }
+    },
+    "C0b": {
+      "AMB_LEX": {
+        "pipeline_returned": 28,
+        "asked_resolved": 0,
+        "asked_unresolved": 7,
+        "invalid_json": 0,
+        "truncated": 0,
+        "execution_error": 0,
+        "empty_result": 0
+      },
+      "AMB_PARA": {
+        "pipeline_returned": 8,
+        "asked_resolved": 0,
+        "asked_unresolved": 12,
+        "invalid_json": 0,
+        "truncated": 0,
+        "execution_error": 0,
+        "empty_result": 0
+      },
+      "CLR_FIELD": {
+        "pipeline_returned": 15,
+        "asked_resolved": 0,
+        "asked_unresolved": 0,
+        "invalid_json": 0,
+        "truncated": 0,
+        "execution_error": 0,
+        "empty_result": 0
+      },
+      "CLR_BOUND": {
+        "pipeline_returned": 15,
+        "asked_resolved": 0,
+        "asked_unresolved": 0,
+        "invalid_json": 0,
+        "truncated": 0,
+        "execution_error": 0,
+        "empty_result": 0
+      },
+      "CLR_PLAIN": {
+        "pipeline_returned": 15,
+        "asked_resolved": 0,
+        "asked_unresolved": 0,
+        "invalid_json": 0,
+        "truncated": 0,
+        "execution_error": 0,
+        "empty_result": 0
+      }
+    },
+    "C2": {
+      "AMB_LEX": {
+        "pipeline_returned": 0,
+        "asked_resolved": 35,
+        "asked_unresolved": 0,
+        "invalid_json": 0,
+        "truncated": 0,
+        "execution_error": 0,
+        "empty_result": 0
+      },
+      "AMB_PARA": {
+        "pipeline_returned": 8,
+        "asked_resolved": 0,
+        "asked_unresolved": 12,
+        "invalid_json": 0,
+        "truncated": 0,
+        "execution_error": 0,
+        "empty_result": 0
+      },
+      "CLR_FIELD": {
+        "pipeline_returned": 4,
+        "asked_resolved": 11,
+        "asked_unresolved": 0,
+        "invalid_json": 0,
+        "truncated": 0,
+        "execution_error": 0,
+        "empty_result": 0
+      },
+      "CLR_BOUND": {
+        "pipeline_returned": 3,
+        "asked_resolved": 12,
+        "asked_unresolved": 0,
+        "invalid_json": 0,
+        "truncated": 0,
+        "execution_error": 0,
+        "empty_result": 0
+      },
+      "CLR_PLAIN": {
+        "pipeline_returned": 14,
+        "asked_resolved": 1,
+        "asked_unresolved": 0,
+        "invalid_json": 0,
+        "truncated": 0,
+        "execution_error": 0,
+        "empty_result": 0
+      }
+    }
+  }
+}

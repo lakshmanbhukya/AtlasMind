@@ -1,0 +1,7 @@
+id,dataset,scope,text,offered_options,labelerA,labelerB,finalLabel,note
+analytics-0221,sample_analytics,customers,Show the customer records for the period of interest.,none,1,1,,
+analytics-0227,sample_analytics,accounts,Show account counts grouped by trading limit range.,limit,1,,,
+analytics-0234,sample_analytics,customers,Show the number of customers in each age group.,none,1,,,
+analytics-0240,sample_analytics,accounts,Give me an overview of account activity by date range.,limit,1,,,
+mflix-0300,sample_mflix,movies,Identify the movie with the greatest Rotten Tomatoes rotten count.,runtime; num_mflix_comments; awards.wins; awards.nominations; imdb.rating; imdb.votes; metacritic; tomatoes.viewer.rating; tomatoes.viewer.numReviews; tomatoes.viewer.meter; tomatoes.critic.rating; tomatoes.critic.numReviews; tomatoes.critic.meter; tomatoes.fresh; tomatoes.rotten,0,1,,
+mflix-0314,sample_mflix,movies,Show the top films by audience response.,runtime; num_mflix_comments; awards.wins; awards.nominations; imdb.rating; imdb.votes; metacritic; tomatoes.viewer.rating; tomatoes.viewer.numReviews; tomatoes.viewer.meter; tomatoes.critic.rating; tomatoes.critic.numReviews; tomatoes.critic.meter; tomatoes.fresh; tomatoes.rotten,0,1,,

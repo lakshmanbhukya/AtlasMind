@@ -13,20 +13,20 @@
 {"type":"adversarial","category":"code_execution_nested_project","blocked":true,"expected":"BLOCKED","reason":"Arbitrary code execution operator \"$accumulator\" is strictly forbidden."}
 {"type":"adversarial","category":"code_execution_nested_lookup","blocked":true,"expected":"BLOCKED","reason":"Arbitrary code execution operator \"$accumulator\" is strictly forbidden."}
 {"type":"adversarial","category":"code_execution_nested_facet","blocked":true,"expected":"BLOCKED","reason":"Arbitrary code execution operator \"$accumulator\" is strictly forbidden."}
-{"type":"adversarial","category":"mutating_stage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$out\" found at position 0. Write operations are not permitted."}
-{"type":"adversarial","category":"mutating_stage_multistage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$out\" found at position 1. Write operations are not permitted."}
-{"type":"adversarial","category":"mutating_stage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$merge\" found at position 0. Write operations are not permitted."}
-{"type":"adversarial","category":"mutating_stage_multistage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$merge\" found at position 1. Write operations are not permitted."}
-{"type":"adversarial","category":"mutating_stage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$delete\" found at position 0. Write operations are not permitted."}
-{"type":"adversarial","category":"mutating_stage_multistage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$delete\" found at position 1. Write operations are not permitted."}
-{"type":"adversarial","category":"mutating_stage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$drop\" found at position 0. Write operations are not permitted."}
-{"type":"adversarial","category":"mutating_stage_multistage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$drop\" found at position 1. Write operations are not permitted."}
-{"type":"adversarial","category":"mutating_stage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$update\" found at position 0. Write operations are not permitted."}
-{"type":"adversarial","category":"mutating_stage_multistage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$update\" found at position 1. Write operations are not permitted."}
-{"type":"adversarial","category":"mutating_stage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$set\" found at position 0. Write operations are not permitted."}
-{"type":"adversarial","category":"mutating_stage_multistage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$set\" found at position 1. Write operations are not permitted."}
-{"type":"adversarial","category":"mutating_stage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$unset\" found at position 0. Write operations are not permitted."}
-{"type":"adversarial","category":"mutating_stage_multistage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$unset\" found at position 1. Write operations are not permitted."}
+{"type":"adversarial","category":"mutating_stage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$out\" found at stage 0. Write operations are not permitted."}
+{"type":"adversarial","category":"mutating_stage_multistage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$out\" found at stage 1. Write operations are not permitted."}
+{"type":"adversarial","category":"mutating_stage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$merge\" found at stage 0. Write operations are not permitted."}
+{"type":"adversarial","category":"mutating_stage_multistage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$merge\" found at stage 1. Write operations are not permitted."}
+{"type":"adversarial","category":"mutating_stage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$delete\" found at stage 0. Write operations are not permitted."}
+{"type":"adversarial","category":"mutating_stage_multistage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$delete\" found at stage 1. Write operations are not permitted."}
+{"type":"adversarial","category":"mutating_stage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$drop\" found at stage 0. Write operations are not permitted."}
+{"type":"adversarial","category":"mutating_stage_multistage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$drop\" found at stage 1. Write operations are not permitted."}
+{"type":"adversarial","category":"mutating_stage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$update\" found at stage 0. Write operations are not permitted."}
+{"type":"adversarial","category":"mutating_stage_multistage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$update\" found at stage 1. Write operations are not permitted."}
+{"type":"adversarial","category":"mutating_stage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$set\" found at stage 0. Write operations are not permitted."}
+{"type":"adversarial","category":"mutating_stage_multistage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$set\" found at stage 1. Write operations are not permitted."}
+{"type":"adversarial","category":"mutating_stage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$unset\" found at stage 0. Write operations are not permitted."}
+{"type":"adversarial","category":"mutating_stage_multistage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$unset\" found at stage 1. Write operations are not permitted."}
 {"type":"adversarial","category":"mutating_operator_in_match","blocked":true,"expected":"BLOCKED","reason":"Blocked operator \"$deleteMany\" found at stage 0. Mutating operations are not permitted."}
 {"type":"adversarial","category":"mutating_operator_in_project","blocked":true,"expected":"BLOCKED","reason":"Blocked operator \"$deleteMany\" found at stage 0. Mutating operations are not permitted."}
 {"type":"adversarial","category":"mutating_operator_in_match","blocked":true,"expected":"BLOCKED","reason":"Blocked operator \"$deleteOne\" found at stage 0. Mutating operations are not permitted."}
@@ -43,22 +43,31 @@
 {"type":"adversarial","category":"mutating_operator_in_project","blocked":true,"expected":"BLOCKED","reason":"Blocked operator \"$dropDatabase\" found at stage 0. Mutating operations are not permitted."}
 {"type":"adversarial","category":"mutating_operator_in_match","blocked":true,"expected":"BLOCKED","reason":"Blocked operator \"$dropCollection\" found at stage 0. Mutating operations are not permitted."}
 {"type":"adversarial","category":"mutating_operator_in_project","blocked":true,"expected":"BLOCKED","reason":"Blocked operator \"$dropCollection\" found at stage 0. Mutating operations are not permitted."}
-{"type":"adversarial","category":"restricted_admin_stage","blocked":true,"expected":"BLOCKED","reason":"Unrecognized or restricted pipeline stage \"$collStats\" at position 0. Only standard analytical stages are permitted."}
-{"type":"adversarial","category":"restricted_admin_stage_chained","blocked":true,"expected":"BLOCKED","reason":"Unrecognized or restricted pipeline stage \"$collStats\" at position 1. Only standard analytical stages are permitted."}
-{"type":"adversarial","category":"restricted_admin_stage","blocked":true,"expected":"BLOCKED","reason":"Unrecognized or restricted pipeline stage \"$indexStats\" at position 0. Only standard analytical stages are permitted."}
-{"type":"adversarial","category":"restricted_admin_stage_chained","blocked":true,"expected":"BLOCKED","reason":"Unrecognized or restricted pipeline stage \"$indexStats\" at position 1. Only standard analytical stages are permitted."}
-{"type":"adversarial","category":"restricted_admin_stage","blocked":true,"expected":"BLOCKED","reason":"Unrecognized or restricted pipeline stage \"$currentOp\" at position 0. Only standard analytical stages are permitted."}
-{"type":"adversarial","category":"restricted_admin_stage_chained","blocked":true,"expected":"BLOCKED","reason":"Unrecognized or restricted pipeline stage \"$currentOp\" at position 1. Only standard analytical stages are permitted."}
-{"type":"adversarial","category":"scope_violation_lookup","blocked":true,"expected":"BLOCKED","reason":"Collection \"admin_credentials\" is outside the allowed scope"}
-{"type":"adversarial","category":"scope_violation_unionWith","blocked":true,"expected":"BLOCKED","reason":"Collection \"admin_credentials\" is outside the allowed scope"}
-{"type":"adversarial","category":"scope_violation_unionWith_obj","blocked":true,"expected":"BLOCKED","reason":"Collection \"admin_credentials\" is outside the allowed scope"}
-{"type":"adversarial","category":"scope_violation_graphLookup","blocked":true,"expected":"BLOCKED","reason":"Collection \"admin_credentials\" is outside the allowed scope"}
-{"type":"adversarial","category":"scope_violation_nested_facet","blocked":true,"expected":"BLOCKED","reason":"Collection \"admin_credentials\" is outside the allowed scope"}
-{"type":"adversarial","category":"scope_violation_lookup","blocked":true,"expected":"BLOCKED","reason":"Collection \"system_logs\" is outside the allowed scope"}
-{"type":"adversarial","category":"scope_violation_unionWith","blocked":true,"expected":"BLOCKED","reason":"Collection \"system_logs\" is outside the allowed scope"}
-{"type":"adversarial","category":"scope_violation_unionWith_obj","blocked":true,"expected":"BLOCKED","reason":"Collection \"system_logs\" is outside the allowed scope"}
-{"type":"adversarial","category":"scope_violation_graphLookup","blocked":true,"expected":"BLOCKED","reason":"Collection \"system_logs\" is outside the allowed scope"}
-{"type":"adversarial","category":"scope_violation_nested_facet","blocked":true,"expected":"BLOCKED","reason":"Collection \"system_logs\" is outside the allowed scope"}
+{"type":"adversarial","category":"restricted_admin_stage","blocked":true,"expected":"BLOCKED","reason":"Unrecognized or restricted pipeline stage \"$collStats\" at stage 0. Only standard analytical stages are permitted."}
+{"type":"adversarial","category":"restricted_admin_stage_chained","blocked":true,"expected":"BLOCKED","reason":"Unrecognized or restricted pipeline stage \"$collStats\" at stage 1. Only standard analytical stages are permitted."}
+{"type":"adversarial","category":"nested_restricted_stage_lookup","blocked":true,"expected":"BLOCKED","reason":"Unrecognized or restricted pipeline stage \"$collStats\" at stage 0.$lookup.pipeline[0]. Only standard analytical stages are permitted."}
+{"type":"adversarial","category":"nested_restricted_stage_facet","blocked":true,"expected":"BLOCKED","reason":"Unrecognized or restricted pipeline stage \"$collStats\" at stage 0.$facet.b1[0]. Only standard analytical stages are permitted."}
+{"type":"adversarial","category":"nested_restricted_stage_unionWith","blocked":true,"expected":"BLOCKED","reason":"Unrecognized or restricted pipeline stage \"$collStats\" at stage 0.$unionWith.pipeline[0]. Only standard analytical stages are permitted."}
+{"type":"adversarial","category":"restricted_admin_stage","blocked":true,"expected":"BLOCKED","reason":"Unrecognized or restricted pipeline stage \"$indexStats\" at stage 0. Only standard analytical stages are permitted."}
+{"type":"adversarial","category":"restricted_admin_stage_chained","blocked":true,"expected":"BLOCKED","reason":"Unrecognized or restricted pipeline stage \"$indexStats\" at stage 1. Only standard analytical stages are permitted."}
+{"type":"adversarial","category":"nested_restricted_stage_lookup","blocked":true,"expected":"BLOCKED","reason":"Unrecognized or restricted pipeline stage \"$indexStats\" at stage 0.$lookup.pipeline[0]. Only standard analytical stages are permitted."}
+{"type":"adversarial","category":"nested_restricted_stage_facet","blocked":true,"expected":"BLOCKED","reason":"Unrecognized or restricted pipeline stage \"$indexStats\" at stage 0.$facet.b1[0]. Only standard analytical stages are permitted."}
+{"type":"adversarial","category":"nested_restricted_stage_unionWith","blocked":true,"expected":"BLOCKED","reason":"Unrecognized or restricted pipeline stage \"$indexStats\" at stage 0.$unionWith.pipeline[0]. Only standard analytical stages are permitted."}
+{"type":"adversarial","category":"restricted_admin_stage","blocked":true,"expected":"BLOCKED","reason":"Unrecognized or restricted pipeline stage \"$currentOp\" at stage 0. Only standard analytical stages are permitted."}
+{"type":"adversarial","category":"restricted_admin_stage_chained","blocked":true,"expected":"BLOCKED","reason":"Unrecognized or restricted pipeline stage \"$currentOp\" at stage 1. Only standard analytical stages are permitted."}
+{"type":"adversarial","category":"nested_restricted_stage_lookup","blocked":true,"expected":"BLOCKED","reason":"Unrecognized or restricted pipeline stage \"$currentOp\" at stage 0.$lookup.pipeline[0]. Only standard analytical stages are permitted."}
+{"type":"adversarial","category":"nested_restricted_stage_facet","blocked":true,"expected":"BLOCKED","reason":"Unrecognized or restricted pipeline stage \"$currentOp\" at stage 0.$facet.b1[0]. Only standard analytical stages are permitted."}
+{"type":"adversarial","category":"nested_restricted_stage_unionWith","blocked":true,"expected":"BLOCKED","reason":"Unrecognized or restricted pipeline stage \"$currentOp\" at stage 0.$unionWith.pipeline[0]. Only standard analytical stages are permitted."}
+{"type":"adversarial","category":"scope_violation_lookup","blocked":true,"expected":"BLOCKED","reason":"Access to \"admin_credentials\" is not allowed"}
+{"type":"adversarial","category":"scope_violation_unionWith","blocked":true,"expected":"BLOCKED","reason":"Access to \"admin_credentials\" is not allowed"}
+{"type":"adversarial","category":"scope_violation_unionWith_obj","blocked":true,"expected":"BLOCKED","reason":"Access to \"admin_credentials\" is not allowed"}
+{"type":"adversarial","category":"scope_violation_graphLookup","blocked":true,"expected":"BLOCKED","reason":"Access to \"admin_credentials\" is not allowed"}
+{"type":"adversarial","category":"scope_violation_nested_facet","blocked":true,"expected":"BLOCKED","reason":"Access to \"admin_credentials\" is not allowed"}
+{"type":"adversarial","category":"scope_violation_lookup","blocked":true,"expected":"BLOCKED","reason":"Access to \"system_logs\" is not allowed"}
+{"type":"adversarial","category":"scope_violation_unionWith","blocked":true,"expected":"BLOCKED","reason":"Access to \"system_logs\" is not allowed"}
+{"type":"adversarial","category":"scope_violation_unionWith_obj","blocked":true,"expected":"BLOCKED","reason":"Access to \"system_logs\" is not allowed"}
+{"type":"adversarial","category":"scope_violation_graphLookup","blocked":true,"expected":"BLOCKED","reason":"Access to \"system_logs\" is not allowed"}
+{"type":"adversarial","category":"scope_violation_nested_facet","blocked":true,"expected":"BLOCKED","reason":"Access to \"system_logs\" is not allowed"}
 {"type":"adversarial","category":"scope_violation_lookup","blocked":true,"expected":"BLOCKED","reason":"Collection \"internal_secrets\" is outside the allowed scope"}
 {"type":"adversarial","category":"scope_violation_unionWith","blocked":true,"expected":"BLOCKED","reason":"Collection \"internal_secrets\" is outside the allowed scope"}
 {"type":"adversarial","category":"scope_violation_unionWith_obj","blocked":true,"expected":"BLOCKED","reason":"Collection \"internal_secrets\" is outside the allowed scope"}
@@ -110,13 +119,20 @@
 {"type":"adversarial","category":"scope_violation_target_collection","blocked":true,"expected":"BLOCKED","reason":"Target collection \"api_tokens\" is outside the allowed scope"}
 {"type":"adversarial","category":"scope_violation_target_collection","blocked":true,"expected":"BLOCKED","reason":"Target collection \"billing_details\" is outside the allowed scope"}
 {"type":"adversarial","category":"oversized_pipeline","blocked":true,"expected":"BLOCKED","reason":"Pipeline has too many stages (max 20)"}
-{"type":"adversarial","category":"invalid_collection_name","blocked":true,"expected":"BLOCKED","reason":"Invalid collection name: \"system.users\""}
-{"type":"adversarial","category":"invalid_collection_name","blocked":true,"expected":"BLOCKED","reason":"Invalid collection name: \"system.version\""}
-{"type":"adversarial","category":"invalid_collection_name","blocked":true,"expected":"BLOCKED","reason":"Invalid collection name: \"admin.keys\""}
-{"type":"adversarial","category":"invalid_collection_name","blocked":true,"expected":"BLOCKED","reason":"Invalid collection name: \"local.oplog\""}
-{"type":"adversarial","category":"invalid_collection_name","blocked":true,"expected":"BLOCKED","reason":"Invalid collection name: \"config.settings\""}
+{"type":"adversarial","category":"invalid_collection_name","blocked":true,"expected":"BLOCKED","reason":"Access to \"system.users\" is not allowed"}
+{"type":"adversarial","category":"invalid_collection_name","blocked":true,"expected":"BLOCKED","reason":"Access to \"system.version\" is not allowed"}
+{"type":"adversarial","category":"invalid_collection_name","blocked":true,"expected":"BLOCKED","reason":"Access to \"admin.keys\" is not allowed"}
+{"type":"adversarial","category":"invalid_collection_name","blocked":true,"expected":"BLOCKED","reason":"Access to \"local.oplog\" is not allowed"}
+{"type":"adversarial","category":"invalid_collection_name","blocked":true,"expected":"BLOCKED","reason":"Access to \"config.settings\" is not allowed"}
 {"type":"adversarial","category":"invalid_collection_name","blocked":true,"expected":"BLOCKED","reason":"Invalid collection name: \"123_invalid\""}
 {"type":"adversarial","category":"invalid_collection_name","blocked":true,"expected":"BLOCKED","reason":"Invalid collection name: \"$special\""}
+{"type":"adversarial","category":"document_lookup_admin_db","blocked":true,"expected":"BLOCKED","reason":"Access to database \"admin\" in $lookup.from is not allowed"}
+{"type":"adversarial","category":"document_lookup_unauthorized_coll","blocked":true,"expected":"BLOCKED","reason":"Collection \"passwords\" is outside the allowed scope"}
+{"type":"adversarial","category":"document_lookup_cross_db","blocked":true,"expected":"BLOCKED","reason":"Cross-database access to \"unauthorized_db\" in $lookup.from is outside authorized scope (authorized: \"sales_db\")"}
+{"type":"adversarial","category":"document_lookup_unexpected_keys","blocked":true,"expected":"BLOCKED","reason":"Malformed document-form $lookup.from: unexpected keys [unexpectedInjection] or missing collection string."}
+{"type":"adversarial","category":"document_lookup_nonstring_coll","blocked":true,"expected":"BLOCKED","reason":"Malformed document-form $lookup.from: unexpected keys [] or missing collection string."}
+{"type":"adversarial","category":"document_lookup_invalid_type","blocked":true,"expected":"BLOCKED","reason":"Malformed $lookup.from: must be string or { coll, [db] } document"}
+{"type":"adversarial","category":"document_lookup_invalid_db_name","blocked":true,"expected":"BLOCKED","reason":"Invalid database name \"admin.keys\" in $lookup.from"}
 {"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
 {"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
 {"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}

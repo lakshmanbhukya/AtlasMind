@@ -84,6 +84,21 @@ function generateAdversarialPipelines() {
       pipeline: [{ $match: { status: 'active' } }, { [stg]: { allUsers: true } }],
       options: { allowedCollections: ['orders'], targetCollection: 'orders' },
     });
+    cases.push({
+      category: 'nested_restricted_stage_lookup',
+      pipeline: [{ $lookup: { from: 'orders', pipeline: [{ [stg]: {} }], as: 'stats' } }],
+      options: { allowedCollections: ['orders'], targetCollection: 'orders' },
+    });
+    cases.push({
+      category: 'nested_restricted_stage_facet',
+      pipeline: [{ $facet: { b1: [{ [stg]: {} }] } }],
+      options: { allowedCollections: ['orders'], targetCollection: 'orders' },
+    });
+    cases.push({
+      category: 'nested_restricted_stage_unionWith',
+      pipeline: [{ $unionWith: { coll: 'orders', pipeline: [{ [stg]: {} }] } }],
+      options: { allowedCollections: ['orders'], targetCollection: 'orders' },
+    });
   }
 
   // Category 5: Cross-Scope Collection Reference ($lookup, $unionWith, $graphLookup, $facet)
@@ -147,6 +162,43 @@ function generateAdversarialPipelines() {
       collectionName: badCol,
     });
   }
+
+  // Category 9: Document-form $lookup.from Adversarial Vectors
+  cases.push({
+    category: 'document_lookup_admin_db',
+    pipeline: [{ $lookup: { from: { db: 'admin', coll: 'system.users' }, as: 'leak' } }],
+    options: { allowedCollections: ['orders'], targetCollection: 'orders' },
+  });
+  cases.push({
+    category: 'document_lookup_unauthorized_coll',
+    pipeline: [{ $lookup: { from: { coll: 'passwords' }, as: 'leak' } }],
+    options: { allowedCollections: ['orders', 'customers'], targetCollection: 'orders' },
+  });
+  cases.push({
+    category: 'document_lookup_cross_db',
+    pipeline: [{ $lookup: { from: { db: 'unauthorized_db', coll: 'orders' }, as: 'leak' } }],
+    options: { allowedCollections: ['orders'], targetCollection: 'orders', targetDatabase: 'sales_db' },
+  });
+  cases.push({
+    category: 'document_lookup_unexpected_keys',
+    pipeline: [{ $lookup: { from: { coll: 'orders', unexpectedInjection: true }, as: 'leak' } }],
+    options: { allowedCollections: ['orders'], targetCollection: 'orders' },
+  });
+  cases.push({
+    category: 'document_lookup_nonstring_coll',
+    pipeline: [{ $lookup: { from: { coll: 12345 }, as: 'leak' } }],
+    options: { allowedCollections: ['orders'], targetCollection: 'orders' },
+  });
+  cases.push({
+    category: 'document_lookup_invalid_type',
+    pipeline: [{ $lookup: { from: 99999, as: 'leak' } }],
+    options: { allowedCollections: ['orders'], targetCollection: 'orders' },
+  });
+  cases.push({
+    category: 'document_lookup_invalid_db_name',
+    pipeline: [{ $lookup: { from: { db: 'admin.keys', coll: 'orders' }, as: 'leak' } }],
+    options: { allowedCollections: ['orders'], targetCollection: 'orders' },
+  });
 
   return cases;
 }

@@ -18,6 +18,90 @@ process.env.EVAL_SCHEMA_SNAPSHOT = path.resolve(__dirname, '../schemas/schemas_s
 const TOKENS_PER_CALL_ESTIMATE = 1900; // measured ~1.9K tokens / call
 
 /**
+ * Single-key enforcement:
+ * Enforces exactly one Groq API key from environment.
+ * Prohibits multiple keys, key rotation (GROQ_API_KEYS), and comma/semicolon-delimited keys.
+ * Never logs or exposes the key prefix or secret in error messages.
+ *
+ * @param {object} env
+ * @returns {string} apiKey
+ */
+function validateSingleApiKey(env = process.env) {
+  const apiKey = env.GROQ_API_KEY;
+  if (!apiKey || typeof apiKey !== 'string' || apiKey.trim() === '') {
+    throw new Error('GROQ_API_KEY environment variable is missing.');
+  }
+  if (env.GROQ_API_KEYS) {
+    throw new Error('Single API key required. Key rotation / multiple keys via GROQ_API_KEYS are strictly prohibited.');
+  }
+  if (apiKey.includes(',') || apiKey.includes(';') || apiKey.includes(' ')) {
+    throw new Error('Single API key required. Comma-separated or multiple keys in GROQ_API_KEY are strictly prohibited.');
+  }
+  return apiKey.trim();
+}
+
+/**
+ * Token and cost estimation helper
+ */
+function estimateTokensForQueries(targetQueriesList, model = 'openai/gpt-oss-120b', pricingObj = null) {
+  const modelPricing = pricingObj?.models?.[model] || { promptPerMillion: 0.15, completionPerMillion: 0.75 };
+
+  let totalCalls = 0;
+  let totalPromptTokens = 0;
+  let totalCompTokens = 0;
+
+  for (const item of targetQueriesList) {
+    // Config passes: C0a=1, C0b=1, C2=1 or 2
+    const calls = item.config === 'C2' && (item.humanAmbiguous || item.isClearBypass) ? 2 : 1;
+    const promptPerCall = 1500;
+    const compPerCall = 400;
+    totalCalls += calls;
+    totalPromptTokens += calls * promptPerCall;
+    totalCompTokens += calls * compPerCall;
+  }
+
+  const totalTokens = totalPromptTokens + totalCompTokens;
+  const estimatedCostUsd = Number(
+    ((totalPromptTokens * modelPricing.promptPerMillion + totalCompTokens * modelPricing.completionPerMillion) / 1000000).toFixed(4)
+  );
+
+  return {
+    totalCalls,
+    promptTokens: totalPromptTokens,
+    completionTokens: totalCompTokens,
+    totalTokens,
+    estimatedCostUsd,
+  };
+}
+
+/**
+ * SupersededBy tracking helper:
+ * Finds any existing active records for (model, config, queryId) and marks them supersededBy: newId.
+ * Sets the new record's recordId = newId, supersededBy = null.
+ *
+ * @param {Array<object>} existingRecords
+ * @param {object} newRecord
+ * @returns {{ updatedRecords: Array<object>, newRecord: object, supersededCount: number }}
+ */
+function updateSupersededRecords(existingRecords, newRecord) {
+  const newId = newRecord.recordId || `${newRecord.model}_${newRecord.config}_${newRecord.queryId}_${Date.now()}`;
+  newRecord.recordId = newId;
+  newRecord.supersededBy = null;
+
+  let supersededCount = 0;
+  for (const rec of existingRecords) {
+    if (rec.model === newRecord.model &&
+        rec.config === newRecord.config &&
+        rec.queryId === newRecord.queryId &&
+        !rec.supersededBy) {
+      rec.supersededBy = newId;
+      supersededCount++;
+    }
+  }
+  return { updatedRecords: existingRecords, newRecord, supersededCount };
+}
+
+/**
  * Check live Groq models endpoint to confirm model ID existence
  */
 function checkLiveModelId(modelId, apiKey) {
@@ -55,37 +139,57 @@ function checkLiveModelId(modelId, apiKey) {
   });
 }
 
-async function runTargetedRerun() {
+async function runTargetedRerun(options = {}) {
   console.log('=== EVAL2 TARGETED RERUN & ESTIMATION GUARD (Item A5) ===\n');
 
-  const apiKey = process.env.GROQ_API_KEY;
-  if (!apiKey) {
-    console.error('❌ Error: GROQ_API_KEY environment variable is missing.');
-    process.exit(1);
-  }
-
   const args = process.argv.slice(2);
-  const isConfirmed = args.includes('--confirm');
-  const includeSecondary = args.includes('--include-secondary');
+  const isConfirmed = options.confirm !== undefined ? options.confirm : args.includes('--confirm');
+  const includeSecondary = options.includeSecondary !== undefined ? options.includeSecondary : args.includes('--include-secondary');
 
-  const pricingPath = path.resolve(__dirname, '../pricing.json');
+  const pricingPath = options.pricingPath || path.resolve(__dirname, '../pricing.json');
   const pricing = JSON.parse(fs.readFileSync(pricingPath, 'utf8'));
 
-  // Load 100 queries
-  const subsetPath = path.resolve(__dirname, '../benchmark/e2e_subset.jsonl');
-  const queries = fs.readFileSync(subsetPath, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse);
+  // Load ground truth map from test_split.jsonl
+  const testSplitPath = options.testSplitPath || path.resolve(__dirname, '../benchmark/test_split.jsonl');
+  let groundTruthMap = new Map();
+  if (fs.existsSync(testSplitPath)) {
+    const testQueries = fs.readFileSync(testSplitPath, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse);
+    groundTruthMap = new Map(testQueries.map((q) => [q.id, q]));
+  }
+
+  // Load queries from e2e_subset.jsonl
+  const subsetPath = options.subsetPath || path.resolve(__dirname, '../benchmark/e2e_subset.jsonl');
+  const rawQueries = fs.readFileSync(subsetPath, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse);
+
+  // Join ground truth and find flips
+  const flippedQueries = [];
+  const queries = rawQueries.map((item) => {
+    const q = { ...item };
+    const gt = groundTruthMap.get(q.id);
+    if (gt && gt.humanAmbiguous !== null && gt.humanAmbiguous !== undefined) {
+      if (q.humanAmbiguous !== undefined && q.humanAmbiguous !== null && q.humanAmbiguous !== gt.humanAmbiguous) {
+        console.warn(`⚠️ [GROUND TRUTH DRIFT] Query ${q.id}: stored=${q.humanAmbiguous} != test_split=${gt.humanAmbiguous}`);
+        flippedQueries.push({ id: q.id, stored: q.humanAmbiguous, updated: gt.humanAmbiguous });
+      }
+      q.humanAmbiguous = gt.humanAmbiguous;
+      if (gt.category) q.category = gt.category;
+      if (gt.scopeCapable !== undefined) q.scopeCapable = gt.scopeCapable;
+    }
+    return q;
+  });
 
   // Identify targeted queries per spec:
   // - C0a: all 100 queries
-  // - C0b: 19 queries that were invalid in preliminary run
-  // - C2: 24 clear queries where gate asked + 20 AMB_PARA queries (44 total)
+  // - C0b: 19 queries that were invalid in preliminary run + any ground truth flips
+  // - C2: 24 clear queries where gate asked + 20 AMB_PARA queries + any ground truth flips
   const c0aTargetQueries = queries;
   const c0bInvalidIds = new Set([
     'supplies-0072', 'supplies-0081', 'supplies-0084', 'supplies-0085', 'supplies-0091', 'supplies-0093', 'supplies-0100',
     'supplies-0086', 'supplies-0088', 'supplies-0089', 'supplies-0097', 'supplies-0098', 'supplies-0099',
     'analytics-0203', 'analytics-0208', 'analytics-0211', 'analytics-0216', 'analytics-0217', 'analytics-0219'
   ]);
-  const c0bTargetQueries = queries.filter((q) => c0bInvalidIds.has(q.id));
+  const flippedIds = new Set(flippedQueries.map((f) => f.id));
+  const c0bTargetQueries = queries.filter((q) => c0bInvalidIds.has(q.id) || flippedIds.has(q.id));
 
   const c2ClearBypassIds = new Set([
     'supplies-0043', 'supplies-0044', 'supplies-0045', 'supplies-0047', 'supplies-0048', 'supplies-0049',
@@ -93,54 +197,73 @@ async function runTargetedRerun() {
     'supplies-0024', 'supplies-0026', 'supplies-0027', 'supplies-0028', 'supplies-0031', 'supplies-0032',
     'supplies-0033', 'supplies-0034', 'supplies-0035', 'supplies-0036', 'supplies-0037', 'supplies-0014'
   ]);
-  const c2TargetQueries = queries.filter((q) => c2ClearBypassIds.has(q.id) || q.category === 'AMB_PARA');
+  const c2TargetQueries = queries.filter((q) => c2ClearBypassIds.has(q.id) || q.category === 'AMB_PARA' || flippedIds.has(q.id));
 
   const totalPrimaryCalls = c0aTargetQueries.length + c0bTargetQueries.length + c2TargetQueries.length;
   const totalPrimaryTokens = totalPrimaryCalls * TOKENS_PER_CALL_ESTIMATE;
 
+  const targetItemsForEstimation = [
+    ...c0aTargetQueries.map((q) => ({ ...q, config: 'C0a' })),
+    ...c0bTargetQueries.map((q) => ({ ...q, config: 'C0b' })),
+    ...c2TargetQueries.map((q) => ({ ...q, config: 'C2', isClearBypass: c2ClearBypassIds.has(q.id) })),
+  ];
+
+  const tokenEstimates = estimateTokensForQueries(targetItemsForEstimation, 'openai/gpt-oss-120b', pricing);
+
   console.log('------------------------------------------------------------');
   console.log('ESTIMATED LLM INVOCATIONS & TOKEN CONSUMPTION:');
   console.log('Primary Model: openai/gpt-oss-120b');
-  console.log(`  • C0a (Zero-ARL, all queries):   ${c0aTargetQueries.length} calls (~${(c0aTargetQueries.length * TOKENS_PER_CALL_ESTIMATE).toLocaleString()} tokens)`);
-  console.log(`  • C0b (Invalid repair queries):  ${c0bTargetQueries.length} calls (~${(c0bTargetQueries.length * TOKENS_PER_CALL_ESTIMATE).toLocaleString()} tokens)`);
-  console.log(`  • C2  (Oracle & Para changes):   ${c2TargetQueries.length} calls (~${(c2TargetQueries.length * TOKENS_PER_CALL_ESTIMATE).toLocaleString()} tokens)`);
-  console.log(`  TOTAL Primary Calls:             ${totalPrimaryCalls} calls (~${totalPrimaryTokens.toLocaleString()} tokens)`);
+  console.log(`  • C0a (Zero-ARL, all queries):   ${c0aTargetQueries.length} calls`);
+  console.log(`  • C0b (Invalid repair queries):  ${c0bTargetQueries.length} calls`);
+  console.log(`  • C2  (Oracle & Para changes):   ${c2TargetQueries.length} calls`);
+  console.log(`  • Ground Truth Flips:            ${flippedQueries.length} queries`);
+  console.log(`  TOTAL Estimated Calls:           ${totalPrimaryCalls} calls`);
+  console.log(`  TOTAL Estimated Tokens:          ~${totalPrimaryTokens.toLocaleString()} tokens`);
+  console.log(`  Estimated Cost:                  $${tokenEstimates.estimatedCostUsd.toFixed(4)} USD`);
   console.log('------------------------------------------------------------');
 
-  // Secondary Models Check
-  console.log('\nChecking live availability of secondary models on Groq endpoint...');
-  const qwenLive = await checkLiveModelId('qwen/qwen3.8-27b', apiKey);
-  const gpt20bLive = await checkLiveModelId('openai/gpt-oss-20b', apiKey);
-
-  console.log(`  • openai/gpt-oss-20b: ${gpt20bLive ? '✅ LIVE' : '❌ ABSENT'}`);
-  console.log(`  • qwen/qwen3.8-27b:   ${qwenLive ? '✅ LIVE' : '❌ ABSENT'}`);
-
-  if (includeSecondary) {
-    const secQueries = queries.slice(0, 60);
-    const secCalls = secQueries.length * 2; // C0a + C2
-    console.log(`Secondary Models scope (60-query subset, C0a + C2 = ${secCalls} calls each):`);
-    if (gpt20bLive) console.log(`  • openai/gpt-oss-20b: ${secCalls} calls (~${(secCalls * TOKENS_PER_CALL_ESTIMATE).toLocaleString()} tokens)`);
-    if (qwenLive) console.log(`  • qwen/qwen3.8-27b:   ${secCalls} calls (~${(secCalls * TOKENS_PER_CALL_ESTIMATE).toLocaleString()} tokens)`);
+  let qwenLive = false;
+  let gpt20bLive = false;
+  const envObj = options.env || process.env;
+  const rawKey = envObj.GROQ_API_KEY;
+  if (rawKey && !options.skipLiveCheck) {
+    const validKey = validateSingleApiKey(envObj);
+    console.log('\nChecking live availability of secondary models on Groq endpoint...');
+    qwenLive = await checkLiveModelId('qwen/qwen3.8-27b', validKey);
+    gpt20bLive = await checkLiveModelId('openai/gpt-oss-20b', validKey);
+    console.log(`  • openai/gpt-oss-20b: ${gpt20bLive ? '✅ LIVE' : '❌ ABSENT'}`);
+    console.log(`  • qwen/qwen3.8-27b:   ${qwenLive ? '✅ LIVE' : '❌ ABSENT'}`);
   }
 
   if (!isConfirmed) {
     console.log('\n⚠️ [SAFETY GUARD] Execution halted because --confirm was not passed.');
-    console.log('Running all calls on one key may exceed daily rate limits without quota planning.');
+    console.log('Running in DRY-RUN mode. No LLM calls executed.');
     console.log('To confirm and execute the targeted rerun under single-key budget, run:');
     console.log('   node eval2/runners/run_targeted_reeval.js --confirm\n');
     return {
       confirmed: false,
+      dryRun: true,
       totalPrimaryCalls,
       totalPrimaryTokens,
       qwenLive,
       gpt20bLive,
+      targetCounts: {
+        c0a: c0aTargetQueries.length,
+        c0b: c0bTargetQueries.length,
+        c2: c2TargetQueries.length,
+        flips: flippedQueries.length,
+      },
+      tokenEstimates,
+      flippedQueries,
     };
   }
 
+  // Execution confirmed: validate single API key strictly
+  const apiKey = validateSingleApiKey(envObj);
   console.log('\n✅ --confirm received. Beginning targeted re-evaluation under single-key discipline...\n');
 
-  const rawPath = path.resolve(__dirname, '../results/e2e_raw.jsonl');
-  const existingRecords = fs.existsSync(rawPath)
+  const rawPath = options.resultsPath || path.resolve(__dirname, '../results/e2e_raw.jsonl');
+  let existingRecords = fs.existsSync(rawPath)
     ? fs.readFileSync(rawPath, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse)
     : [];
 
@@ -345,7 +468,7 @@ async function runTargetedRerun() {
       }
     }
 
-    console.log('Targeted rerun ready for execution.');
+    console.log('Targeted rerun confirmed. Ready for execution under single-key discipline.');
   } catch (err) {
     if (err instanceof QuotaExhaustedError) {
       console.warn(`\n⚠️ [QUOTA PAUSE] ${err.message}`);
@@ -373,4 +496,10 @@ if (require.main === module) {
   });
 }
 
-module.exports = { runTargetedRerun, checkLiveModelId };
+module.exports = {
+  runTargetedRerun,
+  validateSingleApiKey,
+  estimateTokensForQueries,
+  updateSupersededRecords,
+  checkLiveModelId,
+};

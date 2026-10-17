@@ -128,10 +128,33 @@ function compareMultisets(resArr1, resArr2) {
   return norm1.every((val, idx) => val === norm2[idx]);
 }
 
-async function runAggregation() {
+function joinGroundTruthToRecords(records, groundTruthMap) {
+  const activeRecords = records.filter((l) => !l.supersededBy);
+  for (const r of activeRecords) {
+    const qId = r.queryId || r.id;
+    const gt = groundTruthMap.get(qId);
+    if (gt) {
+      if (r.humanAmbiguous !== undefined && r.humanAmbiguous !== null && r.humanAmbiguous !== gt.humanAmbiguous) {
+        console.warn(`⚠️ [GROUND TRUTH DRIFT] Record ${qId} (${r.config || 'gate'}): stored=${r.humanAmbiguous} != test_split=${gt.humanAmbiguous}`);
+      }
+      r.humanAmbiguous = Boolean(gt.humanAmbiguous);
+      if (gt.category) r.category = gt.category;
+      if (gt.scopeCapable !== undefined) r.scopeCapable = gt.scopeCapable;
+      if (r.needsClarification !== undefined && r.isValidPipeline !== undefined) {
+        r.isSilentAssumption = Boolean(r.humanAmbiguous && !r.needsClarification && r.isValidPipeline);
+      }
+    } else if (groundTruthMap.size > 0) {
+      console.warn(`⚠️ [GROUND TRUTH MISSING] Record ${qId} not found in test_split.jsonl`);
+    }
+  }
+  return activeRecords;
+}
+
+async function runAggregation(options = {}) {
   console.log('=== EVAL2 RIGOROUS AGGREGATION & LATEX TABLE GENERATOR ===\n');
 
-  const resultsDir = path.resolve(__dirname, '../results');
+  const baseResultsDir = path.resolve(__dirname, '../results');
+  const resultsDir = options.resultsDir || baseResultsDir;
   const tablesDir = path.join(resultsDir, 'tables');
   if (!fs.existsSync(tablesDir)) fs.mkdirSync(tablesDir, { recursive: true });
 
@@ -143,13 +166,15 @@ async function runAggregation() {
     errorTaxonomy: {},
   };
 
-  const testSplitPath = path.resolve(__dirname, '../benchmark/test_split.jsonl');
+  const testSplitPath = options.testSplitPath || path.resolve(__dirname, '../benchmark/test_split.jsonl');
+  let groundTruthMap = new Map();
   if (fs.existsSync(testSplitPath)) {
     const testQueries = fs.readFileSync(testSplitPath, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse);
     const nullCount = testQueries.filter((q) => q.humanAmbiguous === null || q.humanAmbiguous === undefined).length;
     if (nullCount > 0) {
       throw new Error(`test_split.jsonl has ${nullCount} queries with humanAmbiguous = null. Human labeling must be validated and merged before running aggregate.`);
     }
+    groundTruthMap = new Map(testQueries.map((q) => [q.id, q]));
   }
 
   // -------------------------------------------------------------------------
@@ -158,7 +183,8 @@ async function runAggregation() {
   const gatePath = path.join(resultsDir, 'gate_eval_results.jsonl');
   if (fs.existsSync(gatePath)) {
     console.log('Ingesting gate_eval_results.jsonl...');
-    const lines = fs.readFileSync(gatePath, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));
+    const rawLines = fs.readFileSync(gatePath, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));
+    const lines = joinGroundTruthToRecords(rawLines, groundTruthMap);
 
     let TP = 0, FP = 0, TN = 0, FN = 0;
     let TP_lex = 0, FN_lex = 0;
@@ -319,8 +345,12 @@ Expired Approval Token Replay & \\multicolumn{3}{c}{100\\% Blocked (HTTP 401 Una
   // -------------------------------------------------------------------------
   const e2ePath = path.join(resultsDir, 'e2e_raw.jsonl');
   if (fs.existsSync(e2ePath) && fs.readFileSync(e2ePath, 'utf8').trim().length > 0) {
-    console.log('Ingesting e2e_raw.jsonl (300 multi-baseline records)...');
-    const lines = fs.readFileSync(e2ePath, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));
+    console.log('Ingesting e2e_raw.jsonl (multi-baseline records)...');
+    const rawLines = fs.readFileSync(e2ePath, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));
+    const lines = joinGroundTruthToRecords(rawLines, groundTruthMap);
+    if (rawLines.length > lines.length) {
+      console.log(`Filtered out ${rawLines.length - lines.length} superseded records (${lines.length} active).`);
+    }
 
     const c0aLines = lines.filter((l) => l.config === 'C0a');
     const c0bLines = lines.filter((l) => l.config === 'C0b');
@@ -594,6 +624,7 @@ if (require.main === module) {
 
 module.exports = {
   runAggregation,
+  joinGroundTruthToRecords,
   computeWilsonCI,
   computePairedBootstrap,
   computeExactMcNemar,

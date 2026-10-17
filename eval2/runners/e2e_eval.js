@@ -163,7 +163,31 @@ function resolveOracleAction({ item, firstData, oracleMode = 'primary' }) {
   };
 }
 
-async function runE2EEvaluation() {
+function loadGroundTruthMap(testSplitPath = path.resolve(__dirname, '../benchmark/test_split.jsonl')) {
+  if (!fs.existsSync(testSplitPath)) return new Map();
+  const testQueries = fs.readFileSync(testSplitPath, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse);
+  return new Map(testQueries.map((q) => [q.id, q]));
+}
+
+function joinGroundTruthToQueries(queries, groundTruthMap) {
+  for (const item of queries) {
+    const gt = groundTruthMap.get(item.id);
+    if (gt) {
+      if (item.humanAmbiguous !== undefined && item.humanAmbiguous !== null && item.humanAmbiguous !== gt.humanAmbiguous) {
+        console.warn(`⚠️ [GROUND TRUTH DRIFT] Query ${item.id}: stored=${item.humanAmbiguous} != test_split=${gt.humanAmbiguous}`);
+      }
+      item.humanAmbiguous = gt.humanAmbiguous;
+      if (gt.category) item.category = gt.category;
+      if (gt.scopeCapable !== undefined) item.scopeCapable = gt.scopeCapable;
+    }
+    if (item.humanAmbiguous === null || item.humanAmbiguous === undefined) {
+      throw new Error(`humanAmbiguous is null for query ${item.id}. Human labeling must be validated and merged before running evaluation.`);
+    }
+  }
+  return queries;
+}
+
+async function runE2EEvaluation(options = {}) {
   console.log('=== EVAL2 LIVE END-TO-END EVALUATION ===\n');
 
   const apiKey = process.env.GROQ_API_KEY;
@@ -175,13 +199,13 @@ async function runE2EEvaluation() {
 
   // Parse command line arguments
   const args = process.argv.slice(2);
-  let targetModel = 'openai/gpt-oss-120b';
+  let targetModel = options.model || 'openai/gpt-oss-120b';
   const modelIdx = args.indexOf('--model');
   if (modelIdx !== -1 && args[modelIdx + 1]) {
     targetModel = args[modelIdx + 1];
   }
 
-  let targetConfig = 'all'; // 'all', 'C0', 'C2'
+  let targetConfig = options.config || 'all'; // 'all', 'C0', 'C2'
   const configIdx = args.indexOf('--config');
   if (configIdx !== -1 && args[configIdx + 1]) {
     targetConfig = args[configIdx + 1];
@@ -195,17 +219,24 @@ async function runE2EEvaluation() {
   const pricing = JSON.parse(fs.readFileSync(pricingPath, 'utf8'));
   const modelPricing = pricing.models[targetModel] || { promptPerMillion: 0.15, completionPerMillion: 0.75 };
 
+  // Load ground truth map from test_split.jsonl
+  const testSplitPath = options.testSplitPath || path.resolve(__dirname, '../benchmark/test_split.jsonl');
+  const groundTruthMap = loadGroundTruthMap(testSplitPath);
+
   // Load 100-query stratified subset
-  const e2eSubsetPath = path.resolve(__dirname, '../benchmark/e2e_subset.jsonl');
-  const queries = fs.readFileSync(e2eSubsetPath, 'utf8')
+  const e2eSubsetPath = options.e2eSubsetPath || path.resolve(__dirname, '../benchmark/e2e_subset.jsonl');
+  const rawQueries = fs.readFileSync(e2eSubsetPath, 'utf8')
     .trim()
     .split('\n')
+    .filter(Boolean)
     .map((l) => JSON.parse(l));
 
-  console.log(`Loaded ${queries.length} queries from e2e_subset.jsonl\n`);
+  const queries = joinGroundTruthToQueries(rawQueries, groundTruthMap);
+
+  console.log(`Loaded ${queries.length} queries from e2e_subset.jsonl (ground truth joined from test_split.jsonl)\n`);
 
   // Setup append-only raw traces and resume checkpoints
-  const resultsPath = path.resolve(__dirname, '../results/e2e_raw.jsonl');
+  const resultsPath = options.resultsPath || path.resolve(__dirname, '../results/e2e_raw.jsonl');
   const outDir = path.dirname(resultsPath);
   if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
 
@@ -491,4 +522,10 @@ if (require.main === module) {
   runE2EEvaluation();
 }
 
-module.exports = { runE2EEvaluation, computeRecordOutcome, resolveOracleAction };
+module.exports = {
+  runE2EEvaluation,
+  computeRecordOutcome,
+  resolveOracleAction,
+  loadGroundTruthMap,
+  joinGroundTruthToQueries,
+};

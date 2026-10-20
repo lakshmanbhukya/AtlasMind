@@ -1,4 +1,50 @@
-const { getDb } = require('../db/connection');
+const dbConnection = require('../db/connection');
+
+/**
+ * Escape regular expression special characters in user input.
+ *
+ * @param {string} string
+ * @returns {string}
+ */
+function escapeRegex(string) {
+    if (!string || typeof string !== 'string') return '';
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Build tenant and collection isolation filter for few-shot examples.
+ *
+ * @param {string|null} [connectionId]
+ * @param {string[]|null} [collections]
+ * @returns {object}
+ */
+function buildExampleFilter(connectionId, collections = null) {
+    const tenantOr = connectionId
+        ? {
+            $or: [
+                { connectionId },
+                { connectionId: null },
+                { connectionId: { $exists: false } },
+            ],
+        }
+        : {
+            $or: [
+                { connectionId: null },
+                { connectionId: { $exists: false } },
+            ],
+        };
+
+    if (collections && Array.isArray(collections) && collections.length > 0) {
+        return {
+            $and: [
+                { collection: { $in: collections } },
+                tenantOr,
+            ],
+        };
+    }
+
+    return tenantOr;
+}
 
 /**
  * Retrieve similar NL→MQL examples for few-shot prompting.
@@ -8,10 +54,17 @@ const { getDb } = require('../db/connection');
  *
  * @param {string} queryText - The user's natural language query
  * @param {number} [limit=3] - Number of examples to return
+ * @param {string|null} [connectionId=null] - Multi-tenant connection ID
+ * @param {string[]|null} [collections=null] - Allowed collections scope
  * @returns {Promise<object[]>}
  */
-async function getSimilarExamples(queryText, limit = 3) {
-    const db = getDb();
+async function getSimilarExamples(queryText, limit = 3, connectionId = null, collections = null) {
+    let db;
+    try {
+        db = dbConnection.getDb();
+    } catch {
+        return [];
+    }
     const collection = db.collection('few_shot_examples');
 
     // Check if the collection exists and has documents
@@ -33,7 +86,7 @@ async function getSimilarExamples(queryText, limit = 3) {
     }
 
     // Fallback: regex-based text matching
-    return await textFallbackSearch(collection, queryText, limit);
+    return await textFallbackSearch(collection, queryText, limit, connectionId, collections);
 }
 
 /**
@@ -82,9 +135,11 @@ async function attemptVectorSearch(collection, queryText, limit) {
  * @param {import('mongodb').Collection} collection
  * @param {string} queryText
  * @param {number} limit
+ * @param {string|null} [connectionId=null]
+ * @param {string[]|null} [collections=null]
  * @returns {Promise<object[]>}
  */
-async function textFallbackSearch(collection, queryText, limit) {
+async function textFallbackSearch(collection, queryText, limit, connectionId = null, collections = null) {
     // Extract significant keywords (remove stopwords)
     const stopwords = new Set([
         'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been',
@@ -121,12 +176,24 @@ async function textFallbackSearch(collection, queryText, limit) {
             .toArray();
     }
 
-    // Build a regex OR pattern from keywords
-    const regexPattern = keywords.join('|');
+    // Build a regex OR pattern from escaped keywords
+    const regexPattern = keywords.map(escapeRegex).join('|');
+    const filter = buildExampleFilter(connectionId, collections);
+
+    const searchQuery = {
+        natural_language: { $regex: regexPattern, $options: 'i' },
+        ...(connectionId ? { connectionId } : {}),
+    };
+
+    if (filter.$and) {
+        searchQuery.$and = filter.$and;
+    } else if (filter.$or) {
+        searchQuery.$and = [filter];
+    }
 
     const results = await collection
         .find(
-            { natural_language: { $regex: regexPattern, $options: 'i' } },
+            searchQuery,
             { projection: { _id: 0, embedding: 0 } }
         )
         .limit(limit)
@@ -151,27 +218,35 @@ async function textFallbackSearch(collection, queryText, limit) {
  * @param {string} param0.naturalLanguage
  * @param {object[]} param0.mqlPipeline
  * @param {string} param0.collection
+ * @param {string} [param0.connectionId]
  */
-async function addExample({ naturalLanguage, mqlPipeline, collection }) {
+async function addExample({ naturalLanguage, mqlPipeline, collection, connectionId }) {
     try {
-        const db = getDb();
+        const db = dbConnection.getDb();
         const coll = db.collection('few_shot_examples');
 
         // Check if this query already exists to avoid duplicates
-        const exists = await coll.findOne({ natural_language: naturalLanguage });
+        const existsQuery = { natural_language: naturalLanguage };
+        if (connectionId) existsQuery.connectionId = connectionId;
+        const exists = await coll.findOne(existsQuery);
         if (exists) return;
 
-        await coll.insertOne({
+        const doc = {
             natural_language: naturalLanguage,
             mql_pipeline: mqlPipeline,
             collection: collection,
             tags: ['user-generated'],
             timestamp: new Date(),
-        });
+        };
+        if (connectionId) {
+            doc.connectionId = connectionId;
+        }
+
+        await coll.insertOne(doc);
         console.log(`✅ Saved new memory example: "${naturalLanguage}"`);
     } catch (error) {
         console.error('❌ Failed to save memory example:', error.message);
     }
 }
 
-module.exports = { getSimilarExamples, addExample };
+module.exports = { getSimilarExamples, addExample, escapeRegex, buildExampleFilter };

@@ -38,6 +38,7 @@ router.get('/:id', async (req, res) => {
                         chartType: 1,
                         pinnedAt: 1,
                         lastRefreshedAt: 1,
+                        scope: 1,
                     },
                 }
             );

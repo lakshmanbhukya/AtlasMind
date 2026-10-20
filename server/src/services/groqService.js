@@ -70,9 +70,13 @@ async function generateMQL(naturalLanguage, schemaContext, fewShotExamples, mode
         systemPrompt += '\n\nOUTPUT FORMAT: Return ONLY a raw JSON object with keys: pipeline, collection, chartType, explanation. Do not wrap in markdown or backticks.';
     }
 
+    const nlText = typeof naturalLanguage === 'string'
+        ? naturalLanguage
+        : (naturalLanguage?.query || naturalLanguage?.naturalLanguage || JSON.stringify(naturalLanguage));
+
     const messages = [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: naturalLanguage },
+        { role: 'user', content: nlText },
     ];
 
     let consumed = 0;
@@ -172,6 +176,7 @@ async function generateMQL(naturalLanguage, schemaContext, fewShotExamples, mode
         total_tokens: chatCompletion?.usage?.total_tokens ?? 0,
     };
     const modelId = chatCompletion?.model || targetModel;
+    const finishReason = chatCompletion?.choices?.[0]?.finish_reason || 'stop';
 
     // If the LLM indicates clarification is needed
     if (parsed.needsClarification === true) {
@@ -186,6 +191,7 @@ async function generateMQL(naturalLanguage, schemaContext, fewShotExamples, mode
             usage,
             model: modelId,
             rawText: content,
+            finishReason,
             timings: { llmMs },
             retries,
             jsonModeUsed,
@@ -218,6 +224,7 @@ async function generateMQL(naturalLanguage, schemaContext, fewShotExamples, mode
         usage,
         model: modelId,
         rawText: content,
+        finishReason,
         timings: { llmMs },
         retries,
         jsonModeUsed,

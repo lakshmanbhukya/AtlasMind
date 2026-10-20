@@ -1,6 +1,8 @@
 const express = require('express');
 const { ObjectId } = require('mongodb');
 const { getDb } = require('../db/connection');
+const { getUserDb } = require('../services/userDbPool');
+const { executePipeline } = require('../services/queryExecutor');
 
 const router = express.Router();
 const COLLECTION = 'dashboards';
@@ -62,6 +64,7 @@ router.post('/pin', async (req, res) => {
             query,
             pipeline,
             collection,
+            scope: req.body.scope || [],
             results, // Store snapshot of results
             chartType: chartType || 'table',
             pinnedAt: new Date(),
@@ -159,10 +162,22 @@ router.post('/:id/refresh', async (req, res) => {
         }
 
         // Re-execute the stored pipeline
-        const { executePipeline } = require('../services/queryExecutor');
+        const userDb = await getUserDb(pin.connectionId || req.connectionId);
         const { results, executionTimeMs } = await executePipeline(
+            userDb,
             pin.collection,
             pin.pipeline
+        );
+
+        const lastRefreshedAt = new Date();
+        await db.collection(COLLECTION).updateOne(
+            { _id: new ObjectId(id) },
+            {
+                $set: {
+                    results,
+                    lastRefreshedAt,
+                },
+            }
         );
 
         return res.json({
@@ -170,6 +185,7 @@ router.post('/:id/refresh', async (req, res) => {
             data: {
                 ...pin,
                 results,
+                lastRefreshedAt,
                 meta: { resultCount: results.length, executionTimeMs },
             },
         });

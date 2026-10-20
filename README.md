@@ -117,6 +117,40 @@ AtlasMind supports dynamic model switching from the chat UI. The active Groq mod
 
 ---
 
+## Evaluation & Benchmark Reproduction
+
+AMB-MQL includes a rigorous, human-annotated benchmark suite (`eval2`) with cryptographic manifest tracking:
+
+- **Benchmark Dataset:** 330 queries across three MongoDB Atlas sample datasets (`sample_supplies`, `sample_analytics`, `sample_mflix`) partitioned into five ambiguity strata.
+- **Manifest Hash:** `test_split.jsonl` SHA-256 `cf885deec42faf71898f32cd0a2df71faa1927459a2f2880f5515559fd4c3030` tracked in [`eval2/manifest.json`](./eval2/manifest.json).
+- **Execution Log:** Operational policies, single-key discipline, and run logs documented in [`RUN_LOG.md`](./RUN_LOG.md).
+
+### Reproduction Commands
+
+1. **Verify Inter-Annotator Agreement & Ground Truth Validation:**
+   ```bash
+   node eval2/benchmark/kappa.js
+   node eval2/benchmark/kappa.js --validate
+   ```
+2. **Recompute Aggregated Metrics & Statistics:**
+   ```bash
+   node eval2/runners/aggregate.js
+   ```
+3. **Generate Data-Driven LaTeX Tables & Macros:**
+   ```bash
+   node paper/latex/scripts/generate_latex_data.js
+   ```
+4. **Run Unit & Safety Test Suite:**
+   ```bash
+   npm test --prefix server
+   ```
+5. **Dry-Run Targeted Rerun & Token Estimation:**
+   ```bash
+   node eval2/runners/run_targeted_reeval.js
+   ```
+
+---
+
 ## Author
 
 Lakshman Bhukya  

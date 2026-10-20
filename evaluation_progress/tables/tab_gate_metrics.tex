@@ -8,15 +8,15 @@
 \toprule
 \textbf{Evaluation Metric} & \textbf{Point Estimate [95\% Wilson CI]} & \textbf{Cases ($n$)} & \textbf{Notes / Scope} \\
 \midrule
-Lexical Candidate Recall ($T_{\text{vague}}$, \texttt{AMB\_LEX}) & 100.0\%~{\scriptsize[95.0, 100.0]} & 73 & Definitional coverage$^{\dagger}$ \\
-Paraphrase Boundary Recall (\texttt{AMB\_PARA}) & 0.0\%~{\scriptsize[0.0, 9.9]} & 35 & Lexical gate limit (LLM handles) \\
-Overall Candidate Recall & 67.6\%~{\scriptsize[58.3, 75.7]} & 108 & Blended across candidate categories \\
+Lexical Candidate Recall ($T_{\text{vague}}$, \texttt{AMB\_LEX}) & 100.0\%~{\scriptsize[90.8, 100.0]} & 38 & Definitional coverage$^{\dagger}$ \\
+Paraphrase Boundary Recall (\texttt{AMB\_PARA}) & 0.0\%~{\scriptsize[0.0, 12.9]} & 26 & Lexical gate limit (LLM handles) \\
+Overall Candidate Recall & 55.1\%~{\scriptsize[43.4, 66.2]} & 69 & Blended across candidate categories \\
 \midrule
-Precision & 48.7\%~{\scriptsize[40.8, 56.6]} & 150 & Offered top-4 candidate binding \\
-Specificity & 63.3\%~{\scriptsize[56.6, 69.6]} & 210 & Clean pass-through on clear queries \\
-Unnecessary Clarification Rate (UCR) & 36.7\%~{\scriptsize[30.4, 43.4]} & 210 & $\text{FP}/(\text{TN}+\text{FP}) = 1 - \text{Specificity}$ \\
+Precision & 25.3\%~{\scriptsize[19.1, 32.9]} & 150 & Offered top-4 candidate binding \\
+Specificity & 55.0\%~{\scriptsize[48.8, 61.1]} & 249 & Clean pass-through on clear queries \\
+Unnecessary Clarification Rate (UCR) & 45.0\%~{\scriptsize[38.9, 51.2]} & 249 & $\text{FP}/(\text{TN}+\text{FP}) = 1 - \text{Specificity}$ \\
 \midrule
-\textbf{Confusion Matrix} & \multicolumn{3}{c}{\text{TP} = 73, \text{FP} = 77, \text{TN} = 133, \text{FN} = 35 ($N_{\text{scored}} = 318$)} \\
+\textbf{Confusion Matrix} & \multicolumn{3}{c}{\text{TP} = 38, \text{FP} = 112, \text{TN} = 137, \text{FN} = 31 ($N_{\text{scored}} = 318$)} \\
 \midrule
 \textbf{Latency Microbenchmark} & \multicolumn{3}{c}{\textbf{Host CPU:} AMD Ryzen 5 5600H (12 cores, 10,000 runs)} \\
 Mean Execution Latency & \multicolumn{3}{c}{34.78\,$\mu$s (p50: 28.5\,$\mu$s, p99: 83.8\,$\mu$s)} \\

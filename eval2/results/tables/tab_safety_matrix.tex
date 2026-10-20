@@ -2,13 +2,13 @@
 \begin{table}[t]
 \centering
 \small
-\caption{Safety Guard AST Validation and Adversarial Defense Matrix ($N = 243$ Pipelines, 5 Replay Tests).}
+\caption{Safety Guard AST Validation and Adversarial Defense Matrix ($N = 259$ Pipelines, 5 Replay Tests).}
 \label{tab:safety_matrix}
 \begin{tabular}{lcccc}
 \toprule
 \textbf{Threat / Pipeline Category} & \textbf{Evaluated ($n$)} & \textbf{Blocked Rate [95\% CI]} & \textbf{False Negatives} \\
 \midrule
-Adversarial Pipelines (Author-Written Suite)$^{\dagger}$ & 119 & 100.0\%~{\scriptsize[96.9, 100.0]} & 0 \\
+Adversarial Pipelines (Author-Written Suite)$^{\dagger}$ & 135 & 100.0\%~{\scriptsize[97.2, 100.0]} & 0 \\
 \quad Arbitrary Code Execution (\texttt{\$where}, \texttt{\$function}) & 15 & 100.0\% & 0 \\
 \quad Mutating Stages (\texttt{\$out}, \texttt{\$merge}, \texttt{\$delete}) & 14 & 100.0\% & 0 \\
 \quad Restricted Admin Operations (\texttt{\$collStats}, \texttt{\$currentOp}) & 6 & 100.0\% & 0 \\

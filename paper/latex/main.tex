@@ -1,0 +1,82 @@
+\documentclass[journal,10pt,twocolumn]{IEEEtran}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsfonts}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{cite}
+\usepackage{url}
+\usepackage{microtype}
+\usepackage{multirow}
+\usepackage{array}
+\usepackage{hyperref}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usetikzlibrary{arrows.meta,positioning}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    citecolor=blue,
+    urlcolor=blue
+}
+
+% Input programmatic empirical numbers
+\input{numbers.tex}
+
+\begin{document}
+
+\title{AMB-MQL: Grounded Ambiguity Gating and AST Safety Verification for Natural Language to MongoDB Query Translation}
+
+\author{
+    \IEEEauthorblockN{Anonymous Authors}
+    \thanks{Manuscript submitted to IEEE for peer review. All source code, benchmark suites, human annotations, and empirical evaluation harnesses are available in the artifact repository.}
+}
+
+\markboth{IEEE Transactions on Knowledge and Data Engineering,~Vol.~XX, No.~XX,~October~2026}%
+{Anonymous \MakeLowercase{\textit{et al.}}: AMB-MQL: Grounded Ambiguity Gating and AST Safety for MongoDB}
+
+\maketitle
+
+% 00. Abstract
+\input{sections/00_abstract.tex}
+
+\begin{IEEEkeywords}
+Conversational Business Intelligence, Natural Language Interfaces to Databases (NLIDB), MongoDB Query Language (MQL), Ambiguity Resolution, Abstract Syntax Tree Safety, Multi-Tenant Architecture.
+\end{IEEEkeywords}
+
+% 01. Introduction
+\input{sections/01_introduction.tex}
+
+% 02. System Architecture
+\input{sections/02_architecture.tex}
+
+% 03. Deterministic Ambiguity Gating
+\input{sections/03_gate.tex}
+
+% 04. Single-Call Generation and Safety Verification
+\input{sections/04_generation_safety.tex}
+
+% 05. Experimental Setup
+\input{sections/05_experimental_setup.tex}
+
+% 06. Empirical Results
+\input{sections/06_results.tex}
+
+% 07. Related Work
+\input{sections/07_related_work.tex}
+
+% 08. Threats to Validity and System Limitations
+\input{sections/08_limitations.tex}
+
+% 09. Conclusion
+\input{sections/09_conclusion.tex}
+
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}

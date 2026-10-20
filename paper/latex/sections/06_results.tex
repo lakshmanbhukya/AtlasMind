@@ -1,0 +1,37 @@
+\section{Empirical Results}
+\label{sec:results}
+
+\subsection{Deterministic Ambiguity Gate Evaluation}
+Table~\ref{tab:gate_metrics} reports the performance of the deterministic ambiguity gate on the full \numTotalQueries{}-query test split ($N_{\text{scored}} = \gateScoredN{}$).
+
+\input{tables/tab_gate.tex}
+
+The gate achieves \gateRecallLexical{} recall on lexically triggered ambiguous queries (\texttt{AMB\_LEX}), verifying that whenever a query contains a trigger term and the schema offers multiple numeric metrics, the gate intercepts it. Conversely, on paraphrased queries lacking trigger tokens (\texttt{AMB\_PARA}), gate recall is \gateRecallParaphrase{}, delineating the lexical boundary condition of the pre-filter. Across all ambiguous queries, overall recall is \gateRecallOverall{}.
+
+On unambiguous queries, the gate exhibits a specificity of \gateSpecificity{} and an Unnecessary Clarification Rate (UCR) of \gateUCR{} ($n = 112$ false positives). Root-cause analysis of the 112 false-positive queries reveals:
+\begin{enumerate}
+    \item \textbf{Heuristic Bound Misses (37.5\%, 42 queries):} Queries specifying explicit sort directions or limits (e.g., ``lowest price'', ``highest quantity'') where the gate matched the superlative but failed to detect the trailing bound phrase.
+    \item \textbf{Disambiguated Field Mentions (31.3\%, 35 queries):} Queries where the user explicitly named an exact compound field (e.g., ``greatest Rotten Tomatoes rotten count'').
+    \item \textbf{Schema Candidate Density (29.5\%, 33 queries):} Queries in collections with multiple candidate fields where the prompt included a general verb.
+    \item \textbf{Syntactic Collocations (1.8\%, 2 queries):} Non-metric idioms such as ``at least one'' matching ``least''.
+\end{enumerate}
+
+\subsection{End-to-End Generation Comparison}
+Table~\ref{tab:e2e_comparison} details the end-to-end performance comparison across configurations C0a, C0b, and C2 on \texttt{openai/gpt-oss-120b} ($N = \e2eTotalQueries{}$).
+
+\input{tables/tab_e2e.tex}
+
+Under un-gated generation (C0a), the model exhibits a \e2eCZeroASilentAmb{} silent assumption rate across ambiguous queries, silently guessing a metric on every instance. Enabling model-driven clarification (C0b) lowers silent assumptions to \e2eCZeroBSilentAmb{}, but the model still guesses on approximately two-thirds of ambiguous queries. AtlasMind (C2) slashes silent assumptions to \e2eCTwoSilentAmb{}---a paired reduction of \e2eSilentAmbDelta{} ($p = \e2eSilentAmbMcNemarP{}$ under exact two-sided McNemar test, $b = 18, c = 0$).
+
+\input{figures/fig_outcomes.tex}
+
+On lexically ambiguous queries (\texttt{AMB\_LEX}), silent assumptions are completely eliminated (\e2eCTwoSilentLex{} in C2 vs. \e2eCZeroASilentLex{} in C0a), driving intended metric match accuracy from 65.7\% to \e2eCTwoMetricMatchLex{}. On paraphrased queries (\texttt{AMB\_PARA}), where the gate remains silent, C2 matches C0b's fallback behavior (\e2eCTwoSilentPara{} silent assumptions).
+
+Figure~\ref{fig:outcomes} illustrates the outcome distribution. When the gate presents unnecessary clarifications on clear queries ($n = 45$, 24 gate prompts), the simulated oracle user triggers the bypass option. The generated pipeline executes cleanly with 100\% validity and zero semantic corruption, demonstrating that user bypass provides a safe escape hatch at the cost of one additional user interaction.
+
+\subsection{Safety Guard and Adversarial Resistance}
+Table~\ref{tab:safety_matrix} evaluates the safety validator across 259 aggregation pipelines and 5 cryptographic replay test suites.
+
+\input{tables/tab_safety.tex}
+
+The recursive AST validator achieved a \safetyAdversarialBlockRate{} block rate across all 135 adversarial attack pipelines, successfully neutralizing arbitrary JavaScript execution (\texttt{\$where}, \texttt{\$function}), mutating operations (\texttt{\$out}, \texttt{\$merge}), administrative diagnostic commands (\texttt{\$collStats}, \texttt{\$currentOp}), cross-scope collection leaks, and nested sub-pipeline injections inside \texttt{\$facet} and \texttt{\$lookup}. Concurrently, the validator exhibited \safetyBenignAllowRate{} specificity on 124 benign analytical queries without false rejections. Furthermore, all 5 cryptographic replay defenses successfully blocked token tampering, session mismatch, and JTI double-spend replay attacks.

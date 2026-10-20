@@ -1,0 +1,24 @@
+\section{Threats to Validity and System Limitations}
+\label{sec:limitations}
+
+In accordance with rigorous empirical standards, we document eight specific technical boundaries and methodological limitations of AMB-MQL:
+
+\begin{enumerate}
+    \item \textbf{Lexical Gate Bounds:} The deterministic ambiguity gate operates strictly over a 15-token lexical trigger dictionary ($\mathcal{T}_{\text{vague}}$). While it achieves \gateRecallLexical{} recall on lexically cued queries (\texttt{AMB\_LEX}), it exhibits \gateRecallParaphrase{} recall on paraphrased ambiguity (\texttt{AMB\_PARA}, e.g., ``Which films commanded viewer attention?''). Resolving paraphrased queries relies entirely on LLM-initiated conversational fallback.
+    
+    \item \textbf{Heuristic Field Binding Fragility:} The gate's field binding detector relies on regular expression heuristics (matching phrases such as ``by $\langle\text{field}\rangle$''). As shown in Table~\ref{tab:gate_metrics}, heuristic binding misses represent 37.5\% (42 queries) of all false-positive gate activations, causing unnecessary clarification prompts on queries where the bound metric was stated in an unsupported syntactic structure (e.g., ``Rank items from highest to lowest price'').
+    
+    \item \textbf{Four-Candidate Truncation:} When profiled collections expose more than four numeric metric candidates, the gate truncates the interactive card options to the top four fields (alphabetically or by schema sample order). In dense collections containing numerous metric columns, this truncation can omit the user's intended attribute, forcing fallback to the free-text ``Other'' option.
+    
+    \item \textbf{Simulated Oracle User:} In end-to-end evaluation, user interaction on clarification cards is simulated via an oracle agent that selects the ground-truth interpretation when present among the offered options and triggers the bypass flag on clear queries. Real-world end users may exhibit cognitive bias, select non-optimal metrics, or provide ambiguous free-text responses.
+    
+    \item \textbf{Author-Written Adversarial Corpus:} The 259-pipeline safety evaluation corpus was authored by the research team to stress-test specific AST attack vectors (e.g., sub-pipeline lookups, faceted mutations, prototype pollution). While the stage allowlist guarantees rejection of unlisted operators by construction, this test suite does not replace automated fuzzing or formal symbolic execution.
+    
+    \item \textbf{Single Primary LLM Architecture:} End-to-end benchmark generation was evaluated on a single frontier open-weights model (\texttt{openai/gpt-oss-120b}). Although preliminary checks confirmed endpoint availability on secondary models (\texttt{openai/gpt-oss-20b}, \texttt{qwen/qwen3.8-27b}), cross-model generalizability across differing tokenizer architectures requires further empirical study.
+    
+    \item \textbf{Benchmark Scale and Schema Diversity:} The evaluation corpus encompasses \numTotalQueries{} execution-verified queries across three Atlas sample datasets. While each query is execution-tested and verified against physical MongoDB instances, the scale remains modest compared to multi-thousand-query relational Text-to-SQL benchmarks.
+    
+    \item \textbf{Over-Blocking of \texttt{\$set} and \texttt{\$unset}:} The safety guard treats \texttt{\$set} and \texttt{\$unset} as mutating write stages, requiring cryptographic approval tokens. While these operators modify physical documents in MongoDB update operations, in aggregation pipelines they operate as pure in-memory document reshaping stages. This conservative design over-blocks benign aggregation pipelines utilizing \texttt{\$set} or \texttt{\$unset} for temporary field projection.
+\end{enumerate}
+
+Additionally, connection credential encryption relies on AES-256 in CBC mode~\cite{nist80038a}, which provides confidentiality but lacks an integrated cryptographic message authentication code (MAC), and connection URI digests are computed without per-tenant salts. Future iterations will adopt authenticated encryption (AES-256-GCM) with salted HMAC digests.

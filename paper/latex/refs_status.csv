@@ -1,0 +1,22 @@
+key,title,type,verified,notes
+hossen2023bert,BERT Model-based Natural Language to NoSQL Query Conversion using Deep Learning Approach,article,false,Pages updated to 810-821 per PDF footer; DOI dropped
+tend2025benchmark,Bridging the Gap: Enabling Natural Language Queries for NoSQL Databases through Text-to-NoSQL Translation,article,false,arXiv:2502.11201v3 (Lu et al. 2026) replacing anonymous placeholder
+spider2018,Spider: A Large-Scale Human-Labeled Dataset for Complex and Cross-Domain Semantic Parsing and Text-to-SQL Task,inproceedings,false,Retained cross-domain benchmark reference; pending publisher page check
+bird2023,Can LLM Already Serve as a Database Interface? A BIg Bench for Large-Scale Database Grounded Text-to-SQLs,inproceedings,false,Pages updated to 42330-42357 per NeurIPS 2023 proceedings
+dinsql2023,DIN-SQL: Decomposed In-Context Learning of Text-to-SQL with Self-Correction,inproceedings,false,Pages updated to 36339-36348 per NeurIPS 2023 proceedings
+dailsql2023,Text-to-SQL Empowered by Large Language Models: A Benchmark Evaluation,article,false,PVLDB vol 17 no 5 pp 1132-1145 (2024)
+docspider2025,DocSpider: A Dataset of Cross-Domain Natural Language Querying for MongoDB,article,false,Natural Language Processing vol 31 no 6 pp 1367-1398
+multitend2025,MultiTEND: A Multilingual Benchmark for Natural Language to NoSQL Query Translation,inproceedings,false,ACL 2025 Findings pp 24632-24657
+sm3text2024,SM3-Text-to-Query: Synthetic Multi-Model Medical Text-to-Query Benchmark,inproceedings,false,NeurIPS 2024 vol 37 pp 88627-88663
+quamar2022nli,Natural Language Interfaces to Data,article,false,Foundations and Trends in Databases vol 11 no 4 pp 319-414
+ozcan2020nli,State of the Art and Open Challenges in Natural Language Interfaces to Data,inproceedings,false,ACM SIGMOD 2020 pp 2629-2636
+blank2019nosql,Querying NoSQL with Deep Learning to Answer Natural Language Questions,inproceedings,false,AAAI 2019 vol 33 no 1 pp 9416-9421
+fast2018iris,Iris: A Conversational Agent for Complex Tasks,article,false,Author list completed (Fast Chen Mendelsohn Bassen Bernstein); CHI 2018
+mongodb2024manual,Aggregation Pipeline MongoDB Manual,manual,false,Official MongoDB Documentation; accessed October 2026
+aliannejadi2019asking,Asking Clarifying Questions in Open-Domain Information-Seeking Conversations,inproceedings,false,Retained conversational search reference; pending publisher page check
+zamani2020generating,Generating Clarifying Questions for Information Retrieval,inproceedings,false,Retained clarification generation reference; pending publisher page check
+min2020ambigqa,AmbigQA: Answering Ambiguous Open-Domain Questions,inproceedings,false,Retained open-domain QA ambiguity reference; pending publisher page check
+setlur2016eviza,Eviza: A Natural Language Interface for Visual Analysis,inproceedings,false,Retained conversational visual analysis reference; pending publisher page check
+jwt2015rfc,JSON Web Token (JWT),misc,false,IETF RFC 7519; pending publisher page check
+nist2001aes,Advanced Encryption Standard (AES),misc,false,FIPS PUB 197 specification
+nist80038a,Recommendation for Block Cipher Modes of Operation: Methods and Techniques,techreport,false,NIST SP 800-38A for CBC mode

@@ -235,11 +235,12 @@ function calculateAgreementStats(pairs, labelAKey = 'labelerA', labelBKey = 'lab
 function computeKappa(options = {}) {
   console.log('\n=== EVAL2 INTER-ANNOTATOR AGREEMENT & KAPPA EVALUATION ===');
 
-  if (!fs.existsSync(LABELING_SHEET_PATH)) {
-    throw new Error(`labeling_sheet.csv not found at ${LABELING_SHEET_PATH}`);
+  const sheetPath = options.sheetPath || LABELING_SHEET_PATH;
+  if (!fs.existsSync(sheetPath)) {
+    throw new Error(`labeling_sheet.csv not found at ${sheetPath}`);
   }
 
-  const sheetRows = parseCsv(fs.readFileSync(LABELING_SHEET_PATH, 'utf8'));
+  const sheetRows = parseCsv(fs.readFileSync(sheetPath, 'utf8'));
 
   // Load procedure metadata from PROCEDURE.md
   const procMeta = loadProcedureMetadata();
@@ -353,15 +354,18 @@ function computeKappa(options = {}) {
 function validateLabels(options = {}) {
   console.log('\n=== VALIDATING HUMAN GROUND TRUTH LABELS ===');
 
-  if (!fs.existsSync(LABELING_SHEET_PATH)) {
-    throw new Error(`labeling_sheet.csv not found at ${LABELING_SHEET_PATH}`);
+  const sheetPath = options.sheetPath || LABELING_SHEET_PATH;
+  const testSplitPath = options.testSplitPath || TEST_SPLIT_PATH;
+
+  if (!fs.existsSync(sheetPath)) {
+    throw new Error(`labeling_sheet.csv not found at ${sheetPath}`);
   }
-  if (!fs.existsSync(TEST_SPLIT_PATH)) {
-    throw new Error(`test_split.jsonl not found at ${TEST_SPLIT_PATH}`);
+  if (!fs.existsSync(testSplitPath)) {
+    throw new Error(`test_split.jsonl not found at ${testSplitPath}`);
   }
 
-  const sheetRows = parseCsv(fs.readFileSync(LABELING_SHEET_PATH, 'utf8'));
-  const queries = fs.readFileSync(TEST_SPLIT_PATH, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse);
+  const sheetRows = parseCsv(fs.readFileSync(sheetPath, 'utf8'));
+  const queries = fs.readFileSync(testSplitPath, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse);
 
   // Check 1: Designated doubleLabel rows must have labelerB
   const designatedRows = sheetRows.filter((r) => r.doubleLabel === '1' || r.doubleLabel === 1);

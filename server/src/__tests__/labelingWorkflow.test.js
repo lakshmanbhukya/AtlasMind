@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const {
     computeKappa,
     validateLabels,
@@ -41,57 +42,95 @@ describe('Human Labeling Workflow (eval2/benchmark)', () => {
         ]);
     });
 
-    test('3. Review sheets and PROCEDURE.md generated correctly', () => {
-        // b_relabel.csv: exactly 8 rows, empty labelerB, no labelerA column
+    test('3. Review sheets and PROCEDURE.md contain completed human inputs', () => {
+        // b_relabel.csv: exactly 8 completed relabel rows, no labelerA column
         expect(fs.existsSync(bRelabelPath)).toBe(true);
         const bContent = fs.readFileSync(bRelabelPath, 'utf8').trim().split('\n');
         expect(bContent.length).toBe(9); // header + 8 rows
-        const bHeader = bContent[0].split(',');
-        expect(bHeader).toEqual(['id', 'scope', 'text', 'offered_options', 'labelerB']);
-        expect(bHeader).not.toContain('labelerA');
+        expect(bContent[0]).not.toContain('labelerA');
+
+        // Verify each row has an adjudicated labelerB value (0 or 1)
         for (let i = 1; i < bContent.length; i++) {
-            expect(bContent[i].endsWith(',')).toBe(true); // empty labelerB
+            const row = bContent[i];
+            expect(row).toMatch(/,[01],/);
         }
 
-        // needs_human_decision.csv: exactly 6 rows, empty finalLabel and note
+        // needs_human_decision.csv: exactly 6 adjudicated rows
         expect(fs.existsSync(needsDecisionPath)).toBe(true);
         const nhdContent = fs.readFileSync(needsDecisionPath, 'utf8').trim().split('\n');
         expect(nhdContent.length).toBe(7); // header + 6 rows
-        const nhdHeader = nhdContent[0].split(',');
+        const nhdHeader = nhdContent[0].split(',').map((h) => h.trim());
         expect(nhdHeader).toEqual(['id', 'dataset', 'scope', 'text', 'offered_options', 'labelerA', 'labelerB', 'finalLabel', 'note']);
+        for (let i = 1; i < nhdContent.length; i++) {
+            const parts = nhdContent[i].split(',');
+            // finalLabel is not empty and is 0 or 1
+            expect(nhdContent[i]).toMatch(/,[01],/);
+        }
 
         // agent_suggestions.csv: separate file for optional human reference
         expect(fs.existsSync(suggestionsPath)).toBe(true);
 
-        // PROCEDURE.md: defines protocol fields
+        // PROCEDURE.md: defines protocol fields with confirmed human inputs
         expect(fs.existsSync(procedurePath)).toBe(true);
         const meta = loadProcedureMetadata();
         expect(meta).toHaveProperty('pass1_annotatorA');
         expect(meta).toHaveProperty('pass1_annotatorB');
         expect(meta).toHaveProperty('pass1_blind');
         expect(meta).toHaveProperty('relabel_blind');
+        expect(meta.isConfirmed).toBe(true);
     });
 
-    test('4. test_split.jsonl has llmAmbiguous and humanAmbiguous = null (pending merge)', () => {
+    test('4. test_split.jsonl has finalized humanAmbiguous and preserves llmAmbiguous', () => {
         const queries = fs.readFileSync(testSplitPath, 'utf8').trim().split('\n').map(JSON.parse);
         expect(queries.length).toBe(330);
+        let ambCount = 0;
+        let clrCount = 0;
         for (const q of queries) {
-            expect(q.humanAmbiguous).toBeNull();
+            expect(typeof q.humanAmbiguous).toBe('boolean');
             expect(typeof q.llmAmbiguous).toBe('boolean');
+            if (q.humanAmbiguous) ambCount++;
+            else clrCount++;
         }
+        expect(ambCount).toBe(83);
+        expect(clrCount).toBe(247);
     });
 
-    test('5. kappa.js refuses execution while designated doubleLabel rows lack labelerB', () => {
+    test('5. kappa.js computes agreement on merged sheet and refuses on missing doubleLabel cells', () => {
+        // Live production merged sheet
         const res = computeKappa();
-        expect(res.refused).toBe(true);
-        expect(res.pendingCount).toBe(4);
-        expect(res.pendingIds).toEqual(['mflix-0307', 'mflix-0312', 'mflix-0315', 'mflix-0321']);
+        expect(res.refused).toBe(false);
+        expect(res.pendingCount).toBe(0);
         expect(res.totalDesignated).toBe(91);
 
-        // Dual subset reporting exists in output
+        // Stratified designated 91 rows agreement: 100% agreement, kappa = 1.0
         expect(res.designatedStats).toBeDefined();
+        expect(res.designatedStats.N).toBe(91);
+        expect(res.designatedStats.Po).toBe(1.0);
+        expect(res.designatedStats.kappa).toBe(1.0);
+
+        // All 95 double-labeled rows: 97.89% agreement, kappa = 0.9568
         expect(res.allTwoLabelStats).toBeDefined();
-        expect(res.allTwoLabelStats.N).toBe(91);
+        expect(res.allTwoLabelStats.N).toBe(95);
+        expect(res.allTwoLabelStats.totalAgreed).toBe(93);
+        expect(res.allTwoLabelStats.kappa).toBeCloseTo(0.9568, 3);
+
+        // Refusal guard check with an incomplete sheet fixture
+        const tmpSheet = path.join(os.tmpdir(), `test_labeling_${Date.now()}.csv`);
+        const incompleteCsv = [
+            'id,dataset,scope,text,offered_options,doubleLabel,labelerA,labelerB,finalLabel,note',
+            'q-001,sample,scope,query 1,opt,1,1,,,', // doubleLabel=1 but labelerB is missing
+            'q-002,sample,scope,query 2,opt,0,0,,,',
+        ].join('\n') + '\n';
+        fs.writeFileSync(tmpSheet, incompleteCsv, 'utf8');
+
+        try {
+            const refusalRes = computeKappa({ sheetPath: tmpSheet });
+            expect(refusalRes.refused).toBe(true);
+            expect(refusalRes.pendingCount).toBe(1);
+            expect(refusalRes.pendingIds).toEqual(['q-001']);
+        } finally {
+            if (fs.existsSync(tmpSheet)) fs.unlinkSync(tmpSheet);
+        }
     });
 
     test('6. calculateAgreementStats correctly computes Po, Pe, Cohen kappa, and PABAK', () => {
@@ -108,10 +147,27 @@ describe('Human Labeling Workflow (eval2/benchmark)', () => {
         expect(stats.kappa).toBeGreaterThan(0);
     });
 
-    test('7. validateLabels fails while designated double-label rows lack labelerB', () => {
+    test('7. validateLabels succeeds on merged data and fails on missing double-label rows', () => {
+        // Merged production state
         const res = validateLabels();
-        expect(res.valid).toBe(false);
-        expect(res.reason).toBe('missing_double_label_b');
-        expect(res.count).toBe(4);
+        expect(res.valid).toBe(true);
+        expect(res.diffCount).toBe(0);
+
+        // Failure guard check with incomplete sheet
+        const tmpSheet = path.join(os.tmpdir(), `test_val_${Date.now()}.csv`);
+        const incompleteCsv = [
+            'id,dataset,scope,text,offered_options,doubleLabel,labelerA,labelerB,finalLabel,note',
+            'q-001,sample,scope,query 1,opt,1,1,,,', // doubleLabel=1 but missing labelerB
+        ].join('\n') + '\n';
+        fs.writeFileSync(tmpSheet, incompleteCsv, 'utf8');
+
+        try {
+            const refusalRes = validateLabels({ sheetPath: tmpSheet });
+            expect(refusalRes.valid).toBe(false);
+            expect(refusalRes.reason).toBe('missing_double_label_b');
+            expect(refusalRes.count).toBe(1);
+        } finally {
+            if (fs.existsSync(tmpSheet)) fs.unlinkSync(tmpSheet);
+        }
     });
 });

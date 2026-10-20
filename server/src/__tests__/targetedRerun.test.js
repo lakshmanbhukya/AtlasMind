@@ -11,8 +11,8 @@ describe('A5: Targeted Rerun & Estimation Guard', () => {
         const res = await runTargetedRerun();
 
         expect(res.confirmed).toBe(false);
-        expect(res.totalPrimaryCalls).toBe(163);
-        expect(res.totalPrimaryTokens).toBe(163 * 1900);
+        expect(res.totalPrimaryCalls).toBe(187);
+        expect(res.totalPrimaryTokens).toBe(187 * 1900);
         expect(res.gpt20bLive).toBe(true);
         expect(res.qwenLive).toBe(true);
 

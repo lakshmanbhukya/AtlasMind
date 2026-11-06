@@ -1,18 +1,10 @@
-const { getDb } = require('../db/connection');
-
-// Collections to exclude from schema profiling (system/internal collections)
-const SYSTEM_COLLECTIONS = new Set([
-    'few_shot_examples',
-    'query_history',
-    'dashboards',
-    'user_connections',  // AtlasMind internal — not user data
-    'system.views',
-]);
+const { isUserCollection } = require('../db/systemCollections');
 
 // Skip collections whose name contains 'embed' (evaluation default; cannot be overridden by options)
 const EMBED_SKIP_RE = /embed/i;
 
-// Cache for schema results, keyed by ${connectionId || 'default'}:${db.databaseName}:sz${sampleSize}
+// Cache for schema results, keyed by ${connectionId}:${db.databaseName}:sz${sampleSize}.
+// Calls without a connectionId are never cached, so tenants cannot share an entry.
 const schemaCache = new Map();
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -188,24 +180,23 @@ async function profileCollection(db, collectionName, { sampleSize = 5 } = {}) {
 
 /**
  * Profile the entire database — all user-facing collections.
- * Results are cached for 5 minutes.
+ * Results are cached for 5 minutes per tenant (options.connectionId); without
+ * a connectionId the database is profiled fresh on every call.
+ * Prefer services/tenantSchema.getSchema(connectionId) from routes.
  * @param {import('mongodb').Db} db
  * @param {object} [options]
+ * @param {string} [options.connectionId] Tenant identity; required for caching
  * @param {boolean} [options.forceRefresh=false] Bypass the cache
  * @param {number} [options.sampleSize=5] Number of sample documents per collection
  * @param {object} [options.snapshot] `{ [databaseName]: schema }` returned instead of live profiling
  *        (supplied by an ExperimentConfig; see services/experiment.js)
  * @returns {Promise<object>}
  */
-async function profileSchema(dbOrOptions, options = {}) {
-    // Handle cases where db is omitted or just options are passed
-    let db = dbOrOptions;
-    let actualOptions = options;
-
+async function profileSchema(db, options = {}) {
     if (!db || typeof db.listCollections !== 'function') {
-        actualOptions = db || {};
-        db = getDb(); // Fetch global DB from connection helper
+        throw new TypeError('profileSchema requires a database handle');
     }
+    const actualOptions = options;
 
     const sampleSize = actualOptions.sampleSize || 5;
     const now = Date.now();
@@ -218,11 +209,13 @@ async function profileSchema(dbOrOptions, options = {}) {
         return want ? { ...snap, collections: snap.collections.filter((c) => want.has(c.name)) } : snap;
     }
 
-    const cacheKey = `${actualOptions.connectionId || 'default'}:${dbName}:sz${sampleSize}`;
+    const cacheKey = actualOptions.connectionId
+        ? `${actualOptions.connectionId}:${dbName}:sz${sampleSize}`
+        : null;
 
     let cachedOrFresh = null;
 
-    if (!actualOptions.forceRefresh && schemaCache.has(cacheKey)) {
+    if (cacheKey && !actualOptions.forceRefresh && schemaCache.has(cacheKey)) {
         const cached = schemaCache.get(cacheKey);
         if (now - cached.timestamp < CACHE_TTL_MS) {
             cachedOrFresh = cached;
@@ -234,11 +227,7 @@ async function profileSchema(dbOrOptions, options = {}) {
 
         const userCollections = collections
             .map((c) => c.name)
-            .filter((name) => {
-                if (SYSTEM_COLLECTIONS.has(name) || name.startsWith('system.')) return false;
-                if (EMBED_SKIP_RE.test(name)) return false;
-                return true;
-            });
+            .filter((name) => isUserCollection(name) && !EMBED_SKIP_RE.test(name));
 
         const profiles = await Promise.all(
             userCollections.map((name) => profileCollection(db, name, { sampleSize }))
@@ -251,8 +240,7 @@ async function profileSchema(dbOrOptions, options = {}) {
         };
 
         cachedOrFresh = { schema, timestamp: now };
-        // Update cache
-        schemaCache.set(cacheKey, cachedOrFresh);
+        if (cacheKey) schemaCache.set(cacheKey, cachedOrFresh);
     }
 
     if (actualOptions.collections && Array.isArray(actualOptions.collections)) {

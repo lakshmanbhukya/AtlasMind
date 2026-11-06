@@ -1,6 +1,5 @@
 const express = require('express');
-const { profileSchema } = require('../services/schemaProfiler');
-const { getUserDb } = require('../services/userDbPool');
+const { getSchema } = require('../services/tenantSchema');
 
 const router = express.Router();
 
@@ -15,10 +14,7 @@ const router = express.Router();
  */
 router.get('/', async (req, res) => {
     try {
-        const connectionId = req.connectionId;
-        const db = await getUserDb(connectionId);
-
-        const schema = await profileSchema(db);
+        const schema = await getSchema(req.connectionId);
 
         return res.json({
             success: true,
@@ -43,10 +39,7 @@ router.get('/', async (req, res) => {
  */
 router.get('/refresh', async (req, res) => {
     try {
-        const connectionId = req.connectionId;
-        const db = await getUserDb(connectionId);
-
-        const schema = await profileSchema(db, { forceRefresh: true });
+        const schema = await getSchema(req.connectionId, { forceRefresh: true });
 
         return res.json({
             success: true,

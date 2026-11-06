@@ -9,6 +9,7 @@ const { validatePipeline, validateCollectionName } = require('./safetyGuard');
 const { executePipeline } = require('./queryExecutor');
 const queryHistoryStore = require('../stores/queryHistoryStore');
 const { getUserDb } = require('./userDbPool');
+const { listUserCollections } = require('./tenantSchema');
 const { getDb } = require('../db/connection');
 const {
     hasWriteIntent,
@@ -103,16 +104,6 @@ function normalizeParams(contextOrParams, inputParams) {
     return { ...(contextOrParams || {}) };
 }
 
-const SYSTEM_COLLECTIONS = new Set([
-    'few_shot_examples',
-    'query_history',
-    'dashboards',
-    'user_connections',
-    'workspaces',
-    'approval_tokens',
-    'system.views',
-]);
-
 /**
  * Validate requested collection scope against the user's real DB collections.
  *
@@ -123,10 +114,7 @@ const SYSTEM_COLLECTIONS = new Set([
  * @returns {Promise<{ valid: boolean, error?: { status: number, code: string, message: string }, effectiveScope: string[], allUserCollections: string[] }>}
  */
 async function validateRequestedCollections(userDb, collections, options = {}) {
-    const dbCollections = await userDb.listCollections().toArray();
-    const allUserCollections = dbCollections
-        .map((c) => c.name)
-        .filter((name) => !SYSTEM_COLLECTIONS.has(name) && !name.startsWith('system.'));
+    const allUserCollections = await listUserCollections(userDb);
     const userCollSet = new Set(allUserCollections);
 
     if (collections === undefined || collections === null) {

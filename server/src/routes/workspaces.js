@@ -1,30 +1,12 @@
 const express = require('express');
 const Workspace = require('../models/Workspace');
-const { getUserDb } = require('../services/userDbPool');
+const { getUserCollections } = require('../services/tenantSchema');
 
 const router = express.Router();
 
-const SYSTEM_COLLECTIONS = new Set([
-    'few_shot_examples',
-    'query_history',
-    'dashboards',
-    'user_connections',
-    'workspaces',
-    'system.views',
-]);
-
-/**
- * Fetch available user collections from user DB.
- * @param {string} connectionId
- * @returns {Promise<Set<string>>}
- */
+/** Available user collections for this tenant, as a Set. */
 async function getUserCollectionSet(connectionId) {
-    const userDb = await getUserDb(connectionId);
-    const dbCollections = await userDb.listCollections().toArray();
-    const userCols = dbCollections
-        .map((c) => c.name)
-        .filter((name) => !SYSTEM_COLLECTIONS.has(name) && !name.startsWith('system.'));
-    return new Set(userCols);
+    return new Set(await getUserCollections(connectionId));
 }
 
 /**

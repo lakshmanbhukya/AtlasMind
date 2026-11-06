@@ -21,7 +21,7 @@ const revenueData = [
   { month: "Apr", v: 73000 }, { month: "May", v: 89000 }, { month: "Jun", v: 95000 },
   { month: "Jul", v: 104000 }, { month: "Aug", v: 118000 },
 ];
-const scatterData = Array.from({ length: 30 }, (_, i) => ({
+const scatterData = Array.from({ length: 30 }, () => ({
   x: Math.random() * 100, y: Math.random() * 100, z: Math.random() * 30 + 5,
 }));
 const composedData = [
@@ -45,8 +45,6 @@ function TerminalWindow() {
   const [active, setActive] = useState(true);
   useEffect(() => {
     const timers = [];
-    setVisibleLines([]);
-    setActive(true);
 
     lines.forEach((line) => {
       const t = setTimeout(() => {

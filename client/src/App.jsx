@@ -231,7 +231,6 @@ export default function App() {
                 selectedCollections={selectedCollections}
                 onSetCollections={handleSetCollections}
                 onChangeScopeMode={setScopeMode}
-                onSelectWorkspace={handleSelectWorkspace}
               />
             </ErrorBoundary>
           ) : (

@@ -201,7 +201,7 @@ export default function ChartRenderer({ data, chartType: initialChartType = 'bar
                                 stroke={COLORS[i % COLORS.length]}
                                 strokeWidth={2.5}
                                 dot={(props) => {
-                                    const { cx, cy, payload, index } = props;
+                                    const { cx, cy, index } = props;
                                     return (
                                         <circle 
                                             key={`dot-${index}`}

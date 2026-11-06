@@ -198,45 +198,4 @@ router.post('/:id/refresh', async (req, res) => {
     }
 });
 
-/**
- * GET /api/dashboard/shared/:id
- *
- * Public route to fetch a shared dashboard widget without auth.
- */
-router.get('/shared/:id', async (req, res) => {
-    try {
-        const { id } = req.params;
-
-        if (!ObjectId.isValid(id)) {
-            return res.status(400).json({
-                success: false,
-                error: { code: 'validation_error', message: 'Invalid pin ID' },
-            });
-        }
-
-        const db = getDb();
-        const pin = await db
-            .collection(COLLECTION)
-            .findOne({ _id: new ObjectId(id) });
-
-        if (!pin) {
-            return res.status(404).json({
-                success: false,
-                error: { code: 'not_found', message: 'Pin not found' },
-            });
-        }
-
-        return res.json({
-            success: true,
-            data: pin,
-        });
-    } catch (error) {
-        console.error('❌ Dashboard share fetch error:', error);
-        return res.status(500).json({
-            success: false,
-            error: { code: 'dashboard_error', message: error.message },
-        });
-    }
-});
-
 module.exports = router;

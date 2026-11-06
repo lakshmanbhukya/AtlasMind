@@ -11,7 +11,6 @@ const { getUserDb } = require('./userDbPool');
 const { getDb } = require('../db/connection');
 const {
     hasWriteIntent,
-    checkDeterministicAmbiguity,
     analyzeAmbiguity,
     validateClarifications,
     buildEnrichedQuery,

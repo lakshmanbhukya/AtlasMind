@@ -108,4 +108,52 @@ describe('Phase 2: Few-Shot Memory Isolation & Filter Tests', () => {
         expect(insertedDoc.connectionId).toBe('conn-A');
         expect(insertedDoc.natural_language).toBe('top products');
     });
+    const TENANT_A = {
+        $or: [
+            { connectionId: 'conn-A' },
+            { connectionId: null },
+            { connectionId: { $exists: false } },
+        ],
+    };
+
+    test('Atlas Search path filters by tenant before limiting', async () => {
+        await getSimilarExamples('top products', 3, 'conn-A');
+        const searchPipeline = mockCollection.aggregate.mock.calls[0][0];
+        expect(Object.keys(searchPipeline[0])).toEqual(['$search']);
+        expect(searchPipeline[1]).toEqual({ $match: TENANT_A });
+        expect(searchPipeline[2]).toEqual({ $limit: 3 });
+    });
+
+    test('random-sample fallbacks filter by tenant', async () => {
+        mockFind.mockReturnValue({ limit: () => ({ toArray: async () => [] }) });
+        await getSimilarExamples('top products', 3, 'conn-A');
+        const samplePipeline = mockCollection.aggregate.mock.calls[1][0];
+        expect(samplePipeline[0]).toEqual({ $match: TENANT_A });
+        expect(Object.keys(samplePipeline[1])).toEqual(['$sample']);
+
+        mockCollection.aggregate.mockClear();
+        await getSimilarExamples('show the', 3, 'conn-A'); // stopwords only
+        const noKeywordPipeline = mockCollection.aggregate.mock.calls[1][0];
+        expect(noKeywordPipeline[0]).toEqual({ $match: TENANT_A });
+    });
+
+    test('regex path does not override the filter with a top-level connectionId (global seeds stay visible)', async () => {
+        await getSimilarExamples('top products', 3, 'conn-A');
+        const queryArg = mockFind.mock.calls[0][0];
+        expect(queryArg.connectionId).toBeUndefined();
+        expect(queryArg.$and).toContainEqual(TENANT_A);
+    });
+
+    test('without a connectionId only global seeds can match', async () => {
+        await getSimilarExamples('top products', 3, null);
+        const queryArg = mockFind.mock.calls[0][0];
+        expect(queryArg.$and).toContainEqual({
+            $or: [{ connectionId: null }, { connectionId: { $exists: false } }],
+        });
+    });
+
+    test('addExample stores nothing without a connectionId', async () => {
+        await addExample({ naturalLanguage: 'x', mqlPipeline: [], collection: 'c' });
+        expect(mockInsertOne).not.toHaveBeenCalled();
+    });
 });

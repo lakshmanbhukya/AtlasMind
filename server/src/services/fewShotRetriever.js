@@ -47,9 +47,13 @@ function buildExampleFilter(connectionId, collections = null) {
 }
 
 /**
- * Retrieve similar NL→MQL examples for few-shot prompting.
+ * Retrieve similar NL→MQL examples for few-shot prompting (Few-Shot Memory).
  *
- * Primary: Atlas Vector Search ($vectorSearch stage)
+ * Every search path (Atlas Search, regex fallback, random sample) applies the
+ * same tenant filter: the caller's own examples plus global seed examples,
+ * never another tenant's. Without a connectionId only global seeds match.
+ *
+ * Primary: Atlas Search ($search) on natural_language
  * Fallback: Text regex matching on the natural_language field
  *
  * @param {string} queryText - The user's natural language query
@@ -74,9 +78,11 @@ async function getSimilarExamples(queryText, limit = 3, connectionId = null, col
         return [];
     }
 
-    // Try Atlas Vector Search first (requires a vector search index)
+    const tenantFilter = buildExampleFilter(connectionId, collections);
+
+    // Try Atlas Search first (requires a search index)
     try {
-        const vectorResults = await attemptVectorSearch(collection, queryText, limit);
+        const vectorResults = await attemptVectorSearch(collection, queryText, limit, tenantFilter);
         if (vectorResults.length > 0) {
             return vectorResults;
         }
@@ -86,7 +92,17 @@ async function getSimilarExamples(queryText, limit = 3, connectionId = null, col
     }
 
     // Fallback: regex-based text matching
-    return await textFallbackSearch(collection, queryText, limit, connectionId, collections);
+    return await textFallbackSearch(collection, queryText, limit, tenantFilter);
+}
+
+function sampleExamples(collection, limit, tenantFilter) {
+    return collection
+        .aggregate([
+            { $match: tenantFilter },
+            { $sample: { size: limit } },
+            { $project: { _id: 0, embedding: 0 } },
+        ])
+        .toArray();
 }
 
 /**
@@ -96,9 +112,10 @@ async function getSimilarExamples(queryText, limit = 3, connectionId = null, col
  * @param {import('mongodb').Collection} collection
  * @param {string} queryText
  * @param {number} limit
+ * @param {object} tenantFilter - from buildExampleFilter
  * @returns {Promise<object[]>}
  */
-async function attemptVectorSearch(collection, queryText, limit) {
+async function attemptVectorSearch(collection, queryText, limit, tenantFilter) {
     // For vector search, we need an embedding of the query text.
     // In a production system, you'd call an embedding API here.
     // For now, we use Atlas Search text-based approach as a proxy.
@@ -113,6 +130,7 @@ async function attemptVectorSearch(collection, queryText, limit) {
                 },
             },
         },
+        { $match: tenantFilter },
         { $limit: limit },
         {
             $project: {
@@ -135,11 +153,10 @@ async function attemptVectorSearch(collection, queryText, limit) {
  * @param {import('mongodb').Collection} collection
  * @param {string} queryText
  * @param {number} limit
- * @param {string|null} [connectionId=null]
- * @param {string[]|null} [collections=null]
+ * @param {object} tenantFilter - from buildExampleFilter
  * @returns {Promise<object[]>}
  */
-async function textFallbackSearch(collection, queryText, limit, connectionId = null, collections = null) {
+async function textFallbackSearch(collection, queryText, limit, tenantFilter) {
     // Extract significant keywords (remove stopwords)
     const stopwords = new Set([
         'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been',
@@ -168,28 +185,16 @@ async function textFallbackSearch(collection, queryText, limit, connectionId = n
 
     if (keywords.length === 0) {
         // Return random examples if no meaningful keywords
-        return await collection
-            .aggregate([
-                { $sample: { size: limit } },
-                { $project: { _id: 0, embedding: 0 } },
-            ])
-            .toArray();
+        return await sampleExamples(collection, limit, tenantFilter);
     }
 
     // Build a regex OR pattern from escaped keywords
     const regexPattern = keywords.map(escapeRegex).join('|');
-    const filter = buildExampleFilter(connectionId, collections);
 
     const searchQuery = {
         natural_language: { $regex: regexPattern, $options: 'i' },
-        ...(connectionId ? { connectionId } : {}),
+        $and: tenantFilter.$and ? tenantFilter.$and : [tenantFilter],
     };
-
-    if (filter.$and) {
-        searchQuery.$and = filter.$and;
-    } else if (filter.$or) {
-        searchQuery.$and = [filter];
-    }
 
     const results = await collection
         .find(
@@ -201,12 +206,7 @@ async function textFallbackSearch(collection, queryText, limit, connectionId = n
 
     // If regex finds nothing, return random samples
     if (results.length === 0) {
-        return await collection
-            .aggregate([
-                { $sample: { size: limit } },
-                { $project: { _id: 0, embedding: 0 } },
-            ])
-            .toArray();
+        return await sampleExamples(collection, limit, tenantFilter);
     }
 
     return results;
@@ -214,6 +214,8 @@ async function textFallbackSearch(collection, queryText, limit, connectionId = n
 
 /**
  * Save a successful NL→MQL interaction as a few-shot example for future queries.
+ * Examples are always stored under the caller's connectionId; without one,
+ * nothing is stored (only the seeder writes global examples).
  * @param {object} param0
  * @param {string} param0.naturalLanguage
  * @param {object[]} param0.mqlPipeline
@@ -222,13 +224,15 @@ async function textFallbackSearch(collection, queryText, limit, connectionId = n
  */
 async function addExample({ naturalLanguage, mqlPipeline, collection, connectionId }) {
     try {
+        if (!connectionId) {
+            console.warn('⚠️ Skipped saving memory example without a connectionId');
+            return;
+        }
         const db = dbConnection.getDb();
         const coll = db.collection('few_shot_examples');
 
-        // Check if this query already exists to avoid duplicates
-        const existsQuery = { natural_language: naturalLanguage };
-        if (connectionId) existsQuery.connectionId = connectionId;
-        const exists = await coll.findOne(existsQuery);
+        // Check if this query already exists for this tenant to avoid duplicates
+        const exists = await coll.findOne({ natural_language: naturalLanguage, connectionId });
         if (exists) return;
 
         const doc = {
@@ -237,10 +241,8 @@ async function addExample({ naturalLanguage, mqlPipeline, collection, connection
             collection: collection,
             tags: ['user-generated'],
             timestamp: new Date(),
+            connectionId,
         };
-        if (connectionId) {
-            doc.connectionId = connectionId;
-        }
 
         await coll.insertOne(doc);
         console.log(`✅ Saved new memory example: "${naturalLanguage}"`);

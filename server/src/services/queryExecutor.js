@@ -1,4 +1,3 @@
-const connection = require('../db/connection');
 const { normalizeBson } = require('../utils/normalizeBson');
 const { validateCollectionName, validatePipeline } = require('./safetyGuard');
 
@@ -87,53 +86,8 @@ async function executePipeline(db, collectionName, pipeline, options = {}) {
     return { results, executionTimeMs };
 }
 
-/**
- * Save a query to the history collection for analytics and replay.
- *
- * @param {object} entry
- * @param {string} entry.naturalLanguage - Original user query
- * @param {object[]} entry.generatedPipeline - The MQL pipeline
- * @param {string} entry.collection - Target collection
- * @param {string} entry.chartType - Suggested chart type
- * @param {number} entry.resultCount - Number of results returned
- * @param {number} entry.executionTimeMs - How long the query took
- */
-async function saveQueryHistory(entry) {
-    try {
-        const db = connection.getDb();
-        // Extract results if present, and slice to first 100 rows for storage safety
-        let resultsSnapshot = undefined;
-        if (entry.results && Array.isArray(entry.results)) {
-            resultsSnapshot = entry.results.slice(0, 100);
-        }
-
-        const entryToSave = { ...entry };
-        if (resultsSnapshot !== undefined) {
-            entryToSave.results = resultsSnapshot;
-        }
-
-        if (entry.isEdit === true && entry.connectionId && entry.naturalLanguage) {
-            await db.collection('query_history').findOneAndUpdate(
-                { connectionId: entry.connectionId, naturalLanguage: entry.naturalLanguage },
-                { $set: { ...entryToSave, updatedAt: new Date() } },
-                { sort: { timestamp: -1 } }
-            );
-            return;
-        }
-
-        await db.collection('query_history').insertOne({
-            ...entryToSave,
-            timestamp: new Date(),
-        });
-    } catch (error) {
-        // Non-critical — log but don't throw
-        console.warn('⚠️ Failed to save query history:', error.message);
-    }
-}
-
 module.exports = {
     executePipeline,
-    saveQueryHistory,
     assertSafePipeline: guardPipeline,
     UnsafePipelineError,
 };

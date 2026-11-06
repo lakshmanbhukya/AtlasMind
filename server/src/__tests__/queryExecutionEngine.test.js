@@ -66,7 +66,9 @@ const mockExecutePipeline = jest.fn();
 const mockSaveQueryHistory = jest.fn();
 jest.mock('../services/queryExecutor', () => ({
     executePipeline: (...args) => mockExecutePipeline(...args),
-    saveQueryHistory: (...args) => mockSaveQueryHistory(...args),
+}));
+jest.mock('../stores/queryHistoryStore', () => ({
+    record: (...args) => mockSaveQueryHistory(...args),
 }));
 
 const {

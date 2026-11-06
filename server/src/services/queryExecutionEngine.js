@@ -6,7 +6,8 @@ const { formatMinifiedSchema, formatFieldNamesOnly, profileSchema } = require('.
 const { getSimilarExamples, addExample } = require('./fewShotRetriever');
 const { generateMQL } = require('./groqService');
 const { validatePipeline, validateCollectionName } = require('./safetyGuard');
-const { executePipeline, saveQueryHistory } = require('./queryExecutor');
+const { executePipeline } = require('./queryExecutor');
+const queryHistoryStore = require('../stores/queryHistoryStore');
 const { getUserDb } = require('./userDbPool');
 const { getDb } = require('../db/connection');
 const {
@@ -737,7 +738,7 @@ async function runNaturalLanguageQuery(params) {
     }
 
     // 11. Save to query_history and few-shot examples
-    saveQueryHistory({
+    queryHistoryStore.record({
         connectionId,
         naturalLanguage: query,
         clarifications: sanitizedClarifications || null,
@@ -893,7 +894,7 @@ async function runApprovedWrite(params) {
     }
 
     // Log transaction to central query history
-    saveQueryHistory({
+    queryHistoryStore.record({
         connectionId,
         naturalLanguage: query,
         generatedPipeline: pipeline,

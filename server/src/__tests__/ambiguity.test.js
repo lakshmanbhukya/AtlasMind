@@ -198,16 +198,20 @@ describe('Ambiguity-Aware Query Generation — Complete Test Suite (Tests 1–10
         });
 
         await getSimilarExamples('top sales', 3, 'connection-B');
-        expect(mockFind).toHaveBeenCalledWith(
-            expect.objectContaining({ connectionId: 'connection-B' }),
-            expect.any(Object)
-        );
+        const filter = mockFind.mock.calls[0][0];
+        expect(filter.$and).toContainEqual({
+            $or: [
+                { connectionId: 'connection-B' },
+                { connectionId: null },
+                { connectionId: { $exists: false } },
+            ],
+        });
         spy.mockRestore();
     });
 
     // Test 9 — history consolidation
-    test('Test 9 — history: saveQueryHistory stores one consolidated entry and updates in-place on isEdit:true', async () => {
-        const { saveQueryHistory } = require('../services/queryExecutor');
+    test('Test 9 — history: record stores one consolidated entry and updates in-place on isEdit:true', async () => {
+        const { record: saveQueryHistory } = require('../stores/queryHistoryStore');
         const mockInsertOne = jest.fn().mockResolvedValue({ insertedId: 'h1' });
         const mockFindOneAndUpdate = jest.fn().mockResolvedValue({ _id: 'h1' });
 

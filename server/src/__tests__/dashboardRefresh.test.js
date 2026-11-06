@@ -128,7 +128,7 @@ describe('Dashboard Refresh & Scope Persistence Tests', () => {
             { scope: ['orders'] }
         );
         expect(mockPinsCollection.updateOne).toHaveBeenCalledWith(
-            { _id: new ObjectId(pinId) },
+            { _id: new ObjectId(pinId), connectionId: 'tenant-conn-123' },
             expect.objectContaining({
                 $set: expect.objectContaining({
                     results: [{ total: 100 }],

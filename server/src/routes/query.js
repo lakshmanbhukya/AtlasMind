@@ -1,6 +1,6 @@
 const express = require('express');
 const { QueryExecutionEngine } = require('../services/queryExecutionEngine');
-const { getDb } = require('../db/connection');
+const queryHistoryStore = require('../stores/queryHistoryStore');
 const { sendOutcome, sendError } = require('./engineHttp');
 
 const router = express.Router();
@@ -89,68 +89,16 @@ router.post('/export', async (req, res) => {
 /**
  * GET /api/query/history
  *
- * Fetch recent query history for this connection (from central DB).
- * Returns fully projected pipelines and result snapshots for frontend session replay.
+ * Recent query history for this connection, with pipelines and result
+ * snapshots for client-side session replay.
  */
 router.get('/history', async (req, res) => {
     try {
-        const connectionId = req.connectionId;
-        const db = getDb();
-
-        const query = connectionId ? { connectionId } : {};
-
-        const history = await db
-            .collection('query_history')
-            .find(query)
-            .sort({ timestamp: -1 })
-            .limit(20)
-            .project({
-                _id: 1,
-                naturalLanguage: 1,
-                timestamp: 1,
-                collection: 1,
-                resultCount: 1,
-                schemaContext: 1,
-                generatedPipeline: 1,
-                chartType: 1,
-                results: 1,
-            })
-            .toArray();
-
-        const now = Date.now();
-        const formatted = history.map((item) => {
-            const diff = now - new Date(item.timestamp).getTime();
-            const minutes = Math.floor(diff / 60000);
-            const hours   = Math.floor(diff / 3600000);
-            const days    = Math.floor(diff / 86400000);
-
-            let timeLabel;
-            if (minutes < 1)     timeLabel = 'Just now';
-            else if (minutes < 60) timeLabel = `${minutes} min ago`;
-            else if (hours < 24)   timeLabel = `${hours} hour${hours > 1 ? 's' : ''} ago`;
-            else if (days === 1)   timeLabel = 'Yesterday';
-            else                   timeLabel = `${days} days ago`;
-
-            return {
-                id: item._id.toString(),
-                query: item.naturalLanguage,
-                time: timeLabel,
-                collection: item.collection || '',
-                resultCount: item.resultCount || 0,
-                schemaContext: item.schemaContext || '',
-                pipeline: item.generatedPipeline || [],
-                chartType: item.chartType || 'table',
-                results: item.results || [],
-                active: false,
-            };
-        });
-
-        if (formatted.length > 0) formatted[0].active = true;
-
+        const items = await queryHistoryStore.listRecent(req.connectionId);
         return res.json({
             success: true,
-            data: formatted,
-            meta: { count: formatted.length },
+            data: items,
+            meta: { count: items.length },
         });
     } catch (error) {
         console.error('❌ Chat history error:', error);
@@ -164,22 +112,11 @@ router.get('/history', async (req, res) => {
 /**
  * PATCH /api/query/history/:id
  *
- * Rename a specific query history item (update its naturalLanguage display label).
- * Multi-tenant safe: verifies item belongs to the active connectionId.
+ * Rename a history item (its naturalLanguage display label) for this connection.
  */
 router.patch('/history/:id', async (req, res) => {
     try {
-        const { id } = req.params;
         const { name } = req.body;
-        const connectionId = req.connectionId;
-        const { ObjectId } = require('mongodb');
-
-        if (!id) {
-            return res.status(400).json({
-                success: false,
-                error: { code: 'validation_error', message: 'History ID is required' },
-            });
-        }
 
         if (!name || typeof name !== 'string' || !name.trim()) {
             return res.status(400).json({
@@ -188,17 +125,8 @@ router.patch('/history/:id', async (req, res) => {
             });
         }
 
-        const db = getDb();
-        const filter = {
-            _id: new ObjectId(id),
-            ...(connectionId ? { connectionId } : {}),
-        };
-
-        const result = await db.collection('query_history').updateOne(filter, {
-            $set: { naturalLanguage: name.trim(), renamedAt: new Date() },
-        });
-
-        if (result.matchedCount === 0) {
+        const renamed = await queryHistoryStore.rename(req.connectionId, req.params.id, name.trim());
+        if (!renamed) {
             return res.status(404).json({
                 success: false,
                 error: { code: 'not_found', message: 'History item not found or unauthorized' },
@@ -218,31 +146,12 @@ router.patch('/history/:id', async (req, res) => {
 /**
  * DELETE /api/query/history/:id
  *
- * Delete a specific query history log from database.
- * Multi-tenant safe: checks that the item belongs to the active connectionId.
+ * Delete a history item belonging to this connection.
  */
 router.delete('/history/:id', async (req, res) => {
     try {
-        const { id } = req.params;
-        const connectionId = req.connectionId;
-        const { ObjectId } = require('mongodb');
-
-        if (!id) {
-            return res.status(400).json({
-                success: false,
-                error: { code: 'validation_error', message: 'History ID is required' },
-            });
-        }
-
-        const db = getDb();
-        const filter = {
-            _id: new ObjectId(id),
-            ...(connectionId ? { connectionId } : {}),
-        };
-
-        const result = await db.collection('query_history').deleteOne(filter);
-
-        if (result.deletedCount === 0) {
+        const removed = await queryHistoryStore.remove(req.connectionId, req.params.id);
+        if (!removed) {
             return res.status(404).json({
                 success: false,
                 error: { code: 'not_found', message: 'History item not found or unauthorized' },

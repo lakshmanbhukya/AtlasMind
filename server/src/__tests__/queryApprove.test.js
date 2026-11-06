@@ -42,8 +42,8 @@ jest.mock('../services/queryExecutor', () => ({
         results: [{ modified: 1 }],
         executionTimeMs: 15,
     }),
-    saveQueryHistory: jest.fn(),
 }));
+jest.mock('../stores/queryHistoryStore', () => ({ record: jest.fn() }));
 
 const queryRouter = require('../routes/query');
 const { executePipeline } = require('../services/queryExecutor');

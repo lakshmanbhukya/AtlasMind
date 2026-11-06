@@ -1,6 +1,5 @@
-const { getDb } = require('../db/connection');
+const queryHistoryStore = require('../stores/queryHistoryStore');
 
-const COLLECTION_NAME = 'query_history';
 const DEFAULT_RETENTION_DAYS = 30;
 const DEFAULT_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -11,12 +10,10 @@ let cleanupTimer = null;
  */
 async function initializeCleanupIndexes() {
     try {
-        const db = getDb();
-        const collection = db.collection(COLLECTION_NAME);
-        await collection.createIndex({ timestamp: 1 });
-        console.log(`✅ Initialized cleanup index on ${COLLECTION_NAME} (timestamp: 1)`);
+        await queryHistoryStore.ensureIndexes();
+        console.log('✅ Initialized query_history indexes');
     } catch (err) {
-        console.warn(`⚠️ Failed to initialize cleanup index on ${COLLECTION_NAME}:`, err.message);
+        console.warn('⚠️ Failed to initialize query_history indexes:', err.message);
     }
 }
 
@@ -32,24 +29,7 @@ async function cleanOldPlaygroundChats(options = {}) {
     const cutoffDate = new Date(Date.now() - (retentionDays * 24 * 60 * 60 * 1000));
 
     try {
-        const db = getDb();
-        if (!db) {
-            console.warn('⚠️ Cleanup skipped: Database connection is not available.');
-            return { success: false, deletedCount: 0, cutoffDate, retentionDays };
-        }
-
-        const collection = db.collection(COLLECTION_NAME);
-
-        // Delete records where timestamp is older than cutoffDate
-        const filter = {
-            $or: [
-                { timestamp: { $lt: cutoffDate } },
-                { createdAt: { $lt: cutoffDate } },
-            ]
-        };
-
-        const result = await collection.deleteMany(filter);
-        const deletedCount = result.deletedCount || 0;
+        const deletedCount = await queryHistoryStore.purgeOlderThan(cutoffDate);
 
         if (deletedCount > 0) {
             console.log(`🧹 [Auto-Clean Cron] Deleted ${deletedCount} playground chats older than ${retentionDays} days (before ${cutoffDate.toISOString()}) across all users.`);

@@ -2,7 +2,7 @@ const express = require('express');
 const { ObjectId } = require('mongodb');
 const { getDb } = require('../db/connection');
 const { getUserDb } = require('../services/userDbPool');
-const { executePipeline } = require('../services/queryExecutor');
+const { executePipeline, assertSafePipeline, UnsafePipelineError } = require('../services/queryExecutor');
 
 const router = express.Router();
 const COLLECTION = 'dashboards';
@@ -57,6 +57,9 @@ router.post('/pin', async (req, res) => {
             });
         }
 
+        // Never store a pipeline that could not be executed later.
+        assertSafePipeline(collection, pipeline, { scope: req.body.scope || null });
+
         const db = getDb();
         const pin = {
             connectionId: req.connectionId || 'test-connection',
@@ -77,6 +80,12 @@ router.post('/pin', async (req, res) => {
             data: { ...pin, _id: result.insertedId },
         });
     } catch (error) {
+        if (error instanceof UnsafePipelineError) {
+            return res.status(422).json({
+                success: false,
+                error: { code: error.code, message: error.message },
+            });
+        }
         console.error('❌ Dashboard pin error:', error);
         return res.status(500).json({
             success: false,
@@ -161,12 +170,13 @@ router.post('/:id/refresh', async (req, res) => {
             });
         }
 
-        // Re-execute the stored pipeline
+        // Re-execute the stored pipeline (executePipeline re-applies the safety guard)
         const userDb = await getUserDb(pin.connectionId || req.connectionId);
         const { results, executionTimeMs } = await executePipeline(
             userDb,
             pin.collection,
-            pin.pipeline
+            pin.pipeline,
+            { scope: pin.scope || null }
         );
 
         const lastRefreshedAt = new Date();
@@ -190,6 +200,12 @@ router.post('/:id/refresh', async (req, res) => {
             },
         });
     } catch (error) {
+        if (error instanceof UnsafePipelineError) {
+            return res.status(422).json({
+                success: false,
+                error: { code: error.code, message: error.message },
+            });
+        }
         console.error('❌ Dashboard refresh error:', error);
         return res.status(500).json({
             success: false,

@@ -99,7 +99,7 @@ describe('A5: normalizeBson', () => {
             }),
         };
 
-        const { results } = await executePipeline(mockDb, 'orders', []);
+        const { results } = await executePipeline(mockDb, 'orders', [{ $match: {} }]);
         expect(results).toHaveLength(1);
         expect(results[0]._id).toBe('60d5ec49f1a2c8a123456789');
         expect(results[0].created).toBe('2025-01-01T00:00:00.000Z');

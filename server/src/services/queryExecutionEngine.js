@@ -720,7 +720,11 @@ async function runNaturalLanguageQuery(params) {
     const { results, executionTimeMs } = await executePipeline(
         userDb,
         llmResult.collection,
-        pipelineCheck.pipeline
+        pipelineCheck.pipeline,
+        {
+            scope: isRestrictedScope ? effectiveScope : null,
+            unsafeSkipGuard: Boolean(evalOpts.disableSafetyGuard),
+        }
     );
     dbMs = toMs(tDbStart);
 
@@ -879,7 +883,8 @@ async function runApprovedWrite(params) {
         const execRes = await executePipeline(
             userDb,
             collection,
-            pipelineCheck.pipeline || pipeline
+            pipelineCheck.pipeline || pipeline,
+            { scope: scope || null, approvedWrite: true }
         );
         results = execRes.results;
         executionTimeMs = execRes.executionTimeMs;

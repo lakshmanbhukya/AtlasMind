@@ -328,7 +328,8 @@ describe('QueryExecutionEngine Interface Tests', () => {
             expect(mockExecutePipeline).toHaveBeenCalledWith(
                 mockUserDb,
                 'orders',
-                expect.any(Array)
+                expect.any(Array),
+                expect.objectContaining({ approvedWrite: true })
             );
             expect(mockSaveQueryHistory).toHaveBeenCalledTimes(1);
         });

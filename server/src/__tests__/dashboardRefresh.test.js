@@ -12,6 +12,7 @@ jest.mock('../services/userDbPool', () => ({
 }));
 
 jest.mock('../services/queryExecutor', () => ({
+    ...jest.requireActual('../services/queryExecutor'),
     executePipeline: jest.fn().mockResolvedValue({
         results: [{ total: 100 }],
         executionTimeMs: 15,
@@ -68,7 +69,7 @@ describe('Dashboard Refresh & Scope Persistence Tests', () => {
         app.use('/api/dashboard', dashboardRouter);
     });
 
-    test('executePipeline accepts (db, collectionName, pipeline) correctly', async () => {
+    test('executePipeline guards then runs (db, collectionName, pipeline)', async () => {
         const mockToArray = jest.fn().mockResolvedValue([{ count: 42 }]);
         const mockAggregate = jest.fn().mockReturnValue({ toArray: mockToArray });
         const mockCollection = jest.fn().mockReturnValue({ aggregate: mockAggregate });
@@ -79,7 +80,10 @@ describe('Dashboard Refresh & Scope Persistence Tests', () => {
         const result = await realQueryExecutor.executePipeline(mockDb, 'orders', [{ $count: 'count' }]);
 
         expect(mockCollection).toHaveBeenCalledWith('orders');
-        expect(mockAggregate).toHaveBeenCalledWith([{ $count: 'count' }], expect.objectContaining({ maxTimeMS: 30000 }));
+        expect(mockAggregate).toHaveBeenCalledWith(
+            [{ $count: 'count' }, { $limit: 1000 }],
+            expect.objectContaining({ maxTimeMS: 30000 })
+        );
         expect(result.results).toEqual([{ count: 42 }]);
         expect(typeof result.executionTimeMs).toBe('number');
     });
@@ -120,7 +124,8 @@ describe('Dashboard Refresh & Scope Persistence Tests', () => {
         expect(executePipeline).toHaveBeenCalledWith(
             mockUserDb,
             'orders',
-            storedPin.pipeline
+            storedPin.pipeline,
+            { scope: ['orders'] }
         );
         expect(mockPinsCollection.updateOne).toHaveBeenCalledWith(
             { _id: new ObjectId(pinId) },

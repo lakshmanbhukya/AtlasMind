@@ -94,7 +94,8 @@ describe('B3: POST /api/query/approve security guards', () => {
         expect(executePipeline).toHaveBeenCalledWith(
             mockUserDb,
             'orders',
-            expect.any(Array)
+            expect.any(Array),
+            expect.objectContaining({ approvedWrite: true })
         );
     });
 

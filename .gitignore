@@ -6,3 +6,9 @@ evaluation/
 docs/AMBIGUITY_RESEARCH_EVALUATION.md
 eval2/models.json
 eval2/state/
+
+# Research material lives on the research/ambiguity-eval branch
+eval2/
+paper/
+evaluation_progress/
+RUN_LOG.md

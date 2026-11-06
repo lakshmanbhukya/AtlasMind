@@ -1,12 +1,6 @@
 const express = require('express');
-const { getMinifiedSchema } = require('../services/schemaProfiler');
-const { getSimilarExamples, addExample } = require('../services/fewShotRetriever');
-const { generateMQL } = require('../services/groqService');
-const { validatePipeline, validateCollectionName } = require('../services/safetyGuard');
-const { executePipeline, saveQueryHistory } = require('../services/queryExecutor');
-const { getUserDb } = require('../services/userDbPool');
+const { QueryExecutionEngine } = require('../services/queryExecutionEngine');
 const { getDb } = require('../db/connection');
-const { processNaturalLanguageQuery } = require('../services/queryPipelineService');
 
 const router = express.Router();
 
@@ -16,15 +10,12 @@ const router = express.Router();
 /**
  * POST /api/query
  *
- * Full NL → MQL → Execute pipeline.
+ * Full NL → MQL → Execute pipeline via QueryExecutionEngine.
  * Authentication: JWT cookie (set by requireAuth middleware in index.js)
  * req.connectionId is populated by the auth middleware.
  */
 router.post('/', async (req, res) => {
-    const startTime = Date.now();
-
     try {
-        // 1. Validate request body
         const {
             text,
             model,
@@ -34,242 +25,36 @@ router.post('/', async (req, res) => {
             clarifications,
             bypassAmbiguity,
             isEdit,
+            evalOptions,
         } = req.body;
-        const connectionId = req.connectionId; // Set by requireAuth middleware
+        const connectionId = req.connectionId;
 
-        if (!text || typeof text !== 'string' || text.trim().length === 0) {
-            return res.status(400).json({
-                success: false,
-                error: {
-                    code: 'validation_error',
-                    message: 'Request body must include a non-empty "text" field',
-                },
-            });
-        }
-
-        const query = text.trim();
-
-        if (query.length > 2000) {
-            return res.status(400).json({
-                success: false,
-                error: { code: 'validation_error', message: 'Query text must be under 2000 characters' },
-            });
-        }
-
-        // Try executing through query pipeline service (supporting collection scoping, ambiguity gating, etc.)
-        try {
-            if (typeof processNaturalLanguageQuery === 'function') {
-                const pipelineResult = await processNaturalLanguageQuery({
-                    connectionId,
-                    text: query,
-                    collections,
-                    workspaceId,
-                    dropMissing,
-                    model,
-                    clarifications,
-                    bypassAmbiguity,
-                    isEdit,
-                    startTime,
-                    source: 'query',
-                    evalOptions: req.body.evalOptions,
-                });
-                return res.status(pipelineResult.statusCode).json(pipelineResult.response);
-            }
-        } catch (pipelineErr) {
-            console.warn('⚠️ queryPipelineService failed, falling back to legacy execution pipeline:', pipelineErr.message);
-            // Fall through to existing execution logic
-        }
-
-        // 2. Get User DB (pooled connection — reused across requests)
-        const userDb = await getUserDb(connectionId);
-
-        // 4. Profile schema + retrieve few-shot examples (in parallel)
-        // forceRefresh: true avoids stale schema cache from a different DB connection
-        const [schemaContext, fewShotExamples] = await Promise.all([
-            getMinifiedSchema(userDb, { forceRefresh: true }),
-            getSimilarExamples(query, 3),
-        ]);
-
-        // Debug: verify what the LLM receives
-        console.log(`📋 Schema context for LLM (${userDb.databaseName}):\n${schemaContext.slice(0, 600)}...`);
-
-        const similarQueriesCount = fewShotExamples.length;
-
-        // 5. Generate MQL via Groq LLM with optional model parameter
-        const llmResult = await generateMQL(query, schemaContext, fewShotExamples, model);
-
-        // 6. Handle AI fallback (no pipeline generated)
-        if (llmResult.pipeline.length === 0) {
-            return res.json({
-                success: true,
-                naturalLanguage: query,
-                aiMessage: llmResult.explanation || "I couldn't generate a query for that request.",
-                pipeline: [],
-                mql: [],
-                collection: '',
-                chartType: 'table',
-                explanation: llmResult.explanation || "I couldn't generate a query for that request.",
-                safetyStatus: 'read-only',
-                results: [],
-                result: [],
-                meta: {
-                    resultCount: 0,
-                    executionTimeMs: 0,
-                    totalTimeMs: Date.now() - startTime,
-                    examplesUsed: similarQueriesCount,
-                    similarQueriesCount,
-                    confidenceScore: 0,
-                },
-                schemaContext,
-                executionTimeMs: 0,
-                confidenceScore: 0,
-                similarQueriesCount,
-            });
-        }
-
-        // 7. Safety validation
-        const collectionCheck = validateCollectionName(llmResult.collection);
-        if (!collectionCheck.safe) {
-            return res.status(422).json({
-                success: false,
-                error: { code: 'safety_violation', message: collectionCheck.reason },
-                naturalLanguage: query,
-                aiMessage: collectionCheck.reason,
-                explanation: llmResult.explanation,
-                safetyStatus: 'approval-required',
-                safetyBlocked: true,
-                similarQueriesCount,
-                schemaContext,
-            });
-        }
-
-        const pipelineCheck = validatePipeline(llmResult.pipeline);
-        if (!pipelineCheck.safe) {
-            // Check if this is a mutating write action that can be staged for Human-in-the-Loop approval
-            if (pipelineCheck.isWrite) {
-                const jwt = require('jsonwebtoken');
-                const crypto = require('crypto');
-                // Generate secure 10-minute token with draft operation payload
-                const approvalToken = jwt.sign(
-                    {
-                        jti: crypto.randomUUID(),
-                        connectionId,
-                        collection: llmResult.collection,
-                        pipeline: llmResult.pipeline,
-                        query,
-                        scope: (Array.isArray(collections) && collections.length > 0) ? collections : null,
-                        type: 'write-approval',
-                    },
-                    process.env.JWT_SECRET,
-                    { expiresIn: '10m' }
-                );
-
-                return res.json({
-                    success: true,
-                    naturalLanguage: query,
-                    aiMessage: `⚠️ Database Write Intercepted: This action will modify your collection "${llmResult.collection}". To execute this change, review and approve it.`,
-                    pipeline: llmResult.pipeline,
-                    mql: llmResult.pipeline,
-                    collection: llmResult.collection,
-                    chartType: llmResult.chartType || 'table',
-                    explanation: llmResult.explanation,
-                    safetyStatus: 'approval-required',
-                    safetyBlocked: false,
-                    approvalToken,
-                    results: [],
-                    result: [],
-                    meta: {
-                        resultCount: 0,
-                        executionTimeMs: 0,
-                        totalTimeMs: Date.now() - startTime,
-                        similarQueriesCount,
-                        confidenceScore: 100,
-                    },
-                });
-            }
-
-            return res.status(422).json({
-                success: false,
-                error: { code: 'safety_violation', message: pipelineCheck.reason },
-                naturalLanguage: query,
-                aiMessage: pipelineCheck.reason,
-                pipeline: llmResult.pipeline,
-                mql: llmResult.pipeline,
-                explanation: llmResult.explanation,
-                safetyStatus: 'approval-required',
-                safetyBlocked: true,
-                similarQueriesCount,
-                schemaContext,
-            });
-        }
-
-        // 8. Execute aggregation against USER DB
-        const { results, executionTimeMs } = await executePipeline(
-            userDb,
-            llmResult.collection,
-            pipelineCheck.pipeline
-        );
-
-        // 9. Compute confidence score
-        const CONFIDENCE_MAP = { 0: 60, 1: 75, 2: 85, 3: 92 };
-        const confidenceScore = CONFIDENCE_MAP[Math.min(similarQueriesCount, 3)] || 92;
-
-        // 10. Save to query_history and few-shot examples (fire-and-forget memory)
-        saveQueryHistory({
+        const outcome = await QueryExecutionEngine.executeNaturalLanguageQuery({
             connectionId,
-            naturalLanguage: query,
-            generatedPipeline: pipelineCheck.pipeline,
-            collection: llmResult.collection,
-            chartType: llmResult.chartType,
-            resultCount: results.length,
-            confidenceScore,
-            similarQueriesCount,
-            schemaContext,
-            results, // Include results snapshot array for state reconstruction
+            text,
+            model,
+            collections,
+            workspaceId,
+            dropMissing,
+            clarifications,
+            bypassAmbiguity,
+            isEdit,
+            evalOptions,
+            source: 'query',
         });
 
-        // Add to few-shot memory for future AI context learning
-        addExample({
-            naturalLanguage: query,
-            mqlPipeline: pipelineCheck.pipeline,
-            collection: llmResult.collection,
-        });
-
-        const totalTimeMs = Date.now() - startTime;
-
-        return res.json({
-            success: true,
-            naturalLanguage: query,
-            aiMessage: llmResult.explanation || `Generated pipeline for "${llmResult.collection}" collection.`,
-            explanation: llmResult.explanation,
-            pipeline: pipelineCheck.pipeline,
-            mql: pipelineCheck.pipeline,
-            collection: llmResult.collection,
-            chartType: llmResult.chartType,
-            safetyStatus: 'read-only',
-            safetyBlocked: false,
-            results,
-            result: results,
-            executionTimeMs,
-            confidenceScore,
-            similarQueriesCount,
-            schemaContext,
-            meta: {
-                resultCount: results.length,
-                executionTimeMs,
-                totalTimeMs,
-                examplesUsed: similarQueriesCount,
-                similarQueriesCount,
-                confidenceScore,
-            },
-        });
+        if (outcome.type === 'safety_blocked') {
+            return res.status(422).json(outcome.data);
+        }
+        return res.status(200).json(outcome.data);
     } catch (error) {
         console.error('❌ Query pipeline error:', error);
-        const statusCode = error.status || error.statusCode || 500;
+        const statusCode = error.statusCode || error.status || 500;
+        const code = error.code || (statusCode >= 500 ? 'query_error' : 'validation_error');
         return res.status(statusCode).json({
             success: false,
             error: {
-                code: 'query_error',
+                code,
                 message: error.message || 'Failed to process query',
             },
         });
@@ -488,161 +273,33 @@ router.delete('/history/:id', async (req, res) => {
     }
 });
 
-let approvalIndexesInitialized = false;
-async function ensureApprovalIndexes(db) {
-    if (approvalIndexesInitialized) return;
-    try {
-        const approvalTokens = db.collection('approval_tokens');
-        await approvalTokens.createIndex({ jti: 1 }, { unique: true });
-        await approvalTokens.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
-        approvalIndexesInitialized = true;
-    } catch (_) {}
-}
-
 /**
  * POST /api/query/approve
  *
  * Secure execution of mutating write/update aggregation pipelines.
- * Decrypts JWT approval token and executes transactions against USER DB.
+ * Delegates to QueryExecutionEngine.executeApprovedWrite.
  */
 router.post('/approve', async (req, res) => {
-    const startTime = Date.now();
-
     try {
         const { approvalToken } = req.body;
-        if (!approvalToken) {
-            return res.status(400).json({
-                success: false,
-                error: { code: 'validation_error', message: 'Missing "approvalToken" field in request body' },
-            });
-        }
+        const connectionId = req.connectionId;
 
-        const jwt = require('jsonwebtoken');
-        let decoded;
-        try {
-            decoded = jwt.verify(approvalToken, process.env.JWT_SECRET);
-        } catch (err) {
-            return res.status(401).json({
-                success: false,
-                error: { code: 'expired_token', message: 'Approval draft has expired or is invalid. Please resend query.' },
-            });
-        }
-
-        if (decoded.type !== 'write-approval') {
-            return res.status(400).json({
-                success: false,
-                error: { code: 'invalid_token', message: 'Invalid token signature type' },
-            });
-        }
-
-        const { connectionId, collection, pipeline, query, jti, scope } = decoded;
-
-        // B3.1: Ownership verification
-        if (connectionId !== req.connectionId) {
-            return res.status(403).json({
-                success: false,
-                error: { code: 'forbidden', message: 'Access denied: token connectionId does not match current session' },
-            });
-        }
-
-        // B3.2: Re-run validateCollectionName and validatePipeline
-        const collectionCheck = validateCollectionName(collection);
-        if (!collectionCheck.safe) {
-            return res.status(422).json({
-                success: false,
-                error: { code: 'safety_violation', message: collectionCheck.reason },
-            });
-        }
-
-        const pipelineCheck = validatePipeline(pipeline, {
-            allowedCollections: scope || null,
-            targetCollection: collection,
-        });
-
-        if (!pipelineCheck.safe && !pipelineCheck.isWrite) {
-            return res.status(422).json({
-                success: false,
-                error: { code: 'safety_violation', message: pipelineCheck.reason },
-            });
-        }
-
-        // B3.3: Atomic single-use jti via unique index in central DB
-        if (!jti) {
-            return res.status(400).json({
-                success: false,
-                error: { code: 'invalid_token', message: 'Token missing unique identifier (jti)' },
-            });
-        }
-
-        const centralDb = getDb();
-        await ensureApprovalIndexes(centralDb);
-        const approvalTokens = centralDb.collection('approval_tokens');
-
-        try {
-            await approvalTokens.insertOne({
-                jti,
-                connectionId,
-                usedAt: new Date(),
-                expiresAt: decoded.exp ? new Date(decoded.exp * 1000) : new Date(Date.now() + 10 * 60 * 1000),
-            });
-        } catch (err) {
-            if (err.code === 11000) {
-                return res.status(409).json({
-                    success: false,
-                    error: { code: 'token_already_used', message: 'Approval token has already been used' },
-                });
-            }
-            throw err;
-        }
-
-        // Get User DB (pooled connection — reused across requests)
-        const userDb = await getUserDb(connectionId);
-
-        // Run mutating aggregation pipeline directly on database collection
-        const { results, executionTimeMs } = await executePipeline(
-            userDb,
-            collection,
-            pipelineCheck.pipeline || pipeline
-        );
-
-        // Log transaction to central query history
-        saveQueryHistory({
+        const outcome = await QueryExecutionEngine.executeApprovedWrite({
+            approvalToken,
             connectionId,
-            naturalLanguage: query,
-            generatedPipeline: pipeline,
-            collection,
-            chartType: 'table',
-            resultCount: results.length,
-            confidenceScore: 100,
-            similarQueriesCount: 0,
-            schemaContext: 'Transaction Authorized (Human-in-the-Loop Approved Write)',
-            results,
         });
 
-        return res.json({
-            success: true,
-            naturalLanguage: query,
-            aiMessage: `✅ Transaction Authorized: Successfully executed approved write/update operation on database collection "${collection}".`,
-            pipeline,
-            mql: pipeline,
-            collection,
-            chartType: 'table',
-            results,
-            executionTimeMs,
-            safetyStatus: 'write-executed',
-            meta: {
-                resultCount: results.length,
-                executionTimeMs,
-                totalTimeMs: Date.now() - startTime,
-                similarQueriesCount: 0,
-                confidenceScore: 100,
-            },
-        });
+        return res.status(200).json(outcome.data);
     } catch (error) {
         console.error('❌ Approved write execution error:', error);
-        return res.status(500).json({
+        const statusCode = error.statusCode || error.status || 500;
+        const code = error.code || (statusCode >= 500 ? 'execution_error' : 'validation_error');
+        return res.status(statusCode).json({
             success: false,
-            error: { code: 'execution_error', message: error.message || 'Failed to apply approved write transaction' },
+            error: {
+                code,
+                message: error.message || 'Failed to apply approved write transaction',
+            },
         });
     }
 });

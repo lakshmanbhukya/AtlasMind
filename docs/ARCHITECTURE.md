@@ -36,12 +36,23 @@ flowchart TD
         AUTH["Auth & Session Middleware"]
         RL["Rate Limiters (Auth & API)"]
         WS_MW["Workspace Scope Middleware"]
-        ORCH["Unified Query Pipeline Orchestrator\n(queryPipelineService)"]
+        ROUTER_Q["POST /api/query (Thin Route Adapter)"]
+        ROUTER_V["POST /api/voice (Audio Intake Adapter)"]
+        ROUTER_A["POST /api/query/approve (Approval Adapter)"]
         API_C -->|HTTPS + Cookie| GW
         GW --> AUTH
         GW --> RL
         GW --> WS_MW
-        WS_MW --> ORCH
+        WS_MW --> ROUTER_Q
+        WS_MW --> ROUTER_V
+        WS_MW --> ROUTER_A
+    end
+
+    subgraph EngineTier["Deep Engine Tier (QueryExecutionEngine)"]
+        ENGINE["QueryExecutionEngine Core\n(executeNaturalLanguageQuery / executeApprovedWrite)"]
+        ROUTER_Q -->|"executeNaturalLanguageQuery(text, source: 'query')"| ENGINE
+        ROUTER_V -->|"executeNaturalLanguageQuery(text, source: 'voice')"| ENGINE
+        ROUTER_A -->|"executeApprovedWrite(approvalToken, connectionId)"| ENGINE
     end
 
     subgraph Grounding["Prompt Grounding & Ambiguity Tier"]
@@ -49,7 +60,7 @@ flowchart TD
         SP["Schema Profiler (Per-Connection Cache)"]
         FS["Few-Shot Matcher (Connection-Scoped)"]
         SS["Scope Suggestion Engine"]
-        ORCH <--> AG
+        ENGINE <--> AG
         AG <--> SP
         AG <--> FS
         WS_MW --> SS
@@ -59,28 +70,31 @@ flowchart TD
         GROQ["Groq LLM Service (DeepSeek/Llama 3.3)"]
         WHISPER["Groq Whisper STT (Large v3 Turbo)"]
         PROMPT["Dual-Mode System Prompt"]
-        ORCH -->|Dual-Mode Prompt| GROQ
-        GW -.->|Audio Buffer| WHISPER
-        WHISPER -.->|Transcript| ORCH
+        ENGINE -->|Dual-Mode Prompt| GROQ
+        ROUTER_V -.->|Audio Buffer| WHISPER
+        WHISPER -.->|Clean Transcript| ROUTER_V
         GROQ --- PROMPT
     end
 
     subgraph Safety["Safety & Query Execution Tier"]
         SG["Safety Guard (AST Inspector & Write Detector)"]
         HITL_SIGN["HITL JWT Signer (10m TTL Approval)"]
+        REPLAY["Atomic JTI Replay Prevention (approval_tokens)"]
         QE["Query Executor"]
         POOL["userDbPool Connection Manager"]
         GROQ -->|Raw MQL AST| SG
         SG -->|Mutating Write| HITL_SIGN
         SG -->|Safe Read-Only Pipeline| QE
-        HITL_SIGN -.->|approvalToken| GW
+        HITL_SIGN -.->|approvalToken| ENGINE
+        ENGINE --> REPLAY
         QE <--> POOL
     end
 
     subgraph Storage["Storage Tier (Dual MongoDB Model)"]
-        APP_DB[("AtlasMind Metadata DB\n(Connections, Workspaces, Pins, History)")]
+        APP_DB[("AtlasMind Metadata DB\n(Connections, Workspaces, Pins, History, approval_tokens)")]
         USER_DB[("User Target Database\n(Analytics Target Collections)")]
         CLEANUP["Cleanup Cron (30-day History TTL)"]
+        REPLAY <--> APP_DB
         GW <--> APP_DB
         CLEANUP --> APP_DB
         POOL <--> USER_DB
@@ -102,7 +116,7 @@ sequenceDiagram
     actor User as User
     participant Frontend as React UI (ClarificationCard)
     participant Gateway as Express Gateway (/api/query)
-    participant Orchestrator as Unified Orchestrator
+    participant Engine as QueryExecutionEngine
     participant Ambiguity as Ambiguity Gate
     participant Schema as Schema Profiler
     participant Groq as Groq LPU (DeepSeek/Llama)
@@ -113,41 +127,41 @@ sequenceDiagram
     %% Pass 1: Submission
     User->>Frontend: Enter vague query: "Show top sales"
     Frontend->>Gateway: POST /api/query { text, connectionId }
-    Gateway->>Orchestrator: processNaturalLanguageQuery()
-    Orchestrator->>Schema: profileSchema(connectionId)
-    Schema-->>Orchestrator: Cached collection & numeric fields
-    Orchestrator->>Ambiguity: checkDeterministicAmbiguity("Show top sales", schema)
+    Gateway->>Engine: executeNaturalLanguageQuery({ text, connectionId })
+    Engine->>Schema: profileSchema(connectionId)
+    Schema-->>Engine: Cached collection & numeric fields
+    Engine->>Ambiguity: checkDeterministicAmbiguity("Show top sales", schema)
     
     alt Deterministic Ambiguity Detected (2+ candidate metrics)
-        Ambiguity-->>Orchestrator: { needsClarification: true, questions: [...] }
-        Orchestrator-->>Gateway: Ambiguity response
+        Ambiguity-->>Engine: { needsClarification: true, questions: [...] }
+        Engine-->>Gateway: { type: "clarification_required", data }
         Gateway-->>Frontend: HTTP 200 { needsClarification: true, questions: [...] }
         Frontend-->>User: Render ClarificationCard (Pills: sales_amount, quantity, profit)
     else Clear Query or Single Metric
-        Orchestrator->>Groq: generateMQL(query, schema, examples, { isClarificationPass: false })
-        Groq-->>Orchestrator: Direct MQL output
+        Engine->>Groq: generateMQL(query, schema, examples, { isClarificationPass: false })
+        Groq-->>Engine: Direct MQL output
     end
 
     %% Pass 2: Clarification Response
     User->>Frontend: Selects "sales_amount" and clicks Continue
     Frontend->>Gateway: POST /api/query { text, clarifications: [{ id: "metric", value: "sales_amount" }], bypassAmbiguity: true }
-    Gateway->>Orchestrator: processNaturalLanguageQuery(clarifications)
-    Orchestrator->>Ambiguity: validateClarifications(clarifications, schema)
+    Gateway->>Engine: executeNaturalLanguageQuery(clarifications)
+    Engine->>Ambiguity: validateClarifications(clarifications, schema)
     Note over Ambiguity: Anti-Injection Verification:<br/>Validates values exist in real schema
-    Ambiguity-->>Orchestrator: { valid: true, sanitized: [...] }
-    Orchestrator->>Ambiguity: buildEnrichedQuery(text, sanitized)
-    Orchestrator->>Groq: generateMQL(enrichedQuery, schema, examples, { isClarificationPass: true })
-    Groq-->>Orchestrator: Final MQL Pipeline: [{ $group: ... }, { $sort: ... }, { $limit: ... }]
+    Ambiguity-->>Engine: { valid: true, sanitized: [...] }
+    Engine->>Ambiguity: buildEnrichedQuery(text, sanitized)
+    Engine->>Groq: generateMQL(enrichedQuery, schema, examples, { isClarificationPass: true })
+    Groq-->>Engine: Final MQL Pipeline: [{ $group: ... }, { $sort: ... }, { $limit: ... }]
     
     %% Execution
-    Orchestrator->>Safety: validatePipeline(pipeline)
+    Engine->>Safety: validatePipeline(pipeline)
     Note over Safety: Blocks write operators, injects limit cap
-    Safety-->>Orchestrator: { safe: true, pipeline: validatedPipeline }
-    Orchestrator->>Pool: getUserDb(connectionId)
-    Pool-->>Orchestrator: Cached MongoClient db instance
-    Orchestrator->>UserDB: db.collection.aggregate(validatedPipeline)
-    UserDB-->>Orchestrator: Query results (BSON -> JSON)
-    Orchestrator-->>Gateway: Aggregated response
+    Safety-->>Engine: { safe: true, pipeline: validatedPipeline }
+    Engine->>Pool: getUserDb(connectionId)
+    Pool-->>Engine: Cached MongoClient db instance
+    Engine->>UserDB: db.collection.aggregate(validatedPipeline)
+    UserDB-->>Engine: Query results (BSON -> JSON)
+    Engine-->>Gateway: { type: "success", data }
     Gateway-->>Frontend: HTTP 200 { results, pipeline, chartType, explanation }
     Frontend-->>User: Render Interactive Chart & Results Table
 ```
@@ -164,31 +178,34 @@ sequenceDiagram
     actor User as User
     participant Frontend as React UI (HITL Card)
     participant Gateway as Express Gateway (/api/query)
-    participant Orchestrator as Unified Orchestrator
+    participant Engine as QueryExecutionEngine
     participant Safety as Safety Guard
-    participant ApproveRoute as POST /api/query/approve
+    participant CentralDB as Central DB (approval_tokens)
     participant Pool as userDbPool
     participant UserDB as User Database
 
     User->>Frontend: "Delete inactive accounts from customers"
     Frontend->>Gateway: POST /api/query { text }
-    Gateway->>Orchestrator: processNaturalLanguageQuery()
-    Orchestrator->>Safety: validatePipeline(pipeline)
+    Gateway->>Engine: executeNaturalLanguageQuery({ text, connectionId })
+    Engine->>Safety: validatePipeline(pipeline)
     Note over Safety: Detects mutating write operation (isWrite: true)
-    Safety-->>Orchestrator: { safe: false, isWrite: true, collection: "customers" }
+    Safety-->>Engine: { safe: false, isWrite: true, collection: "customers" }
     
-    Note over Orchestrator: Cryptographic Signing:<br/>Signs JWT approvalToken (10-minute TTL)<br/>containing connectionId, collection, and MQL payload
-    Orchestrator-->>Gateway: { safetyStatus: "approval-required", approvalToken }
+    Note over Engine: Cryptographic Signing:<br/>Signs JWT approvalToken (10-minute TTL)<br/>containing connectionId, collection, and MQL payload
+    Engine-->>Gateway: { type: "approval_required", approvalToken, data }
     Gateway-->>Frontend: HTTP 200 { safetyStatus: "approval-required", approvalToken, pipeline }
     Frontend-->>User: Renders amber HITL Approval Card with MQL Diff & Confirm button
 
     User->>Frontend: Clicks "Approve & Execute"
-    Frontend->>ApproveRoute: POST /api/query/approve { approvalToken }
-    Note over ApproveRoute: Cryptographic Verification:<br/>1. Verifies JWT signature & expiration<br/>2. Validates connectionId matches active session<br/>3. Confirms token type === "write-approval"
-    ApproveRoute->>Pool: getUserDb(connectionId)
-    ApproveRoute->>UserDB: Execute mutation transaction
-    UserDB-->>ApproveRoute: { acknowledged: true, deletedCount: 14 }
-    ApproveRoute-->>Frontend: HTTP 200 { success: true, result: [...] }
+    Frontend->>Gateway: POST /api/query/approve { approvalToken }
+    Gateway->>Engine: executeApprovedWrite({ approvalToken, connectionId })
+    Note over Engine: Cryptographic & Replay Verification:<br/>1. Verifies JWT signature & expiration<br/>2. Validates connectionId matches active session<br/>3. Inserts unique jti into approval_tokens (prevents replay)<br/>4. Re-validates AST safety on approved pipeline
+    Engine->>CentralDB: insertOne({ jti, connectionId, usedAt, expiresAt })
+    Engine->>Pool: getUserDb(connectionId)
+    Engine->>UserDB: Execute mutation transaction
+    UserDB-->>Engine: { acknowledged: true, deletedCount: 14 }
+    Engine-->>Gateway: { type: "success", data: { safetyStatus: "write-executed", ... } }
+    Gateway-->>Frontend: HTTP 200 { success: true, result: [...] }
     Frontend-->>User: Displays green Success Confirmation & Execution Audit
 ```
 
@@ -204,15 +221,15 @@ sequenceDiagram
     actor User as User
     participant Frontend as React UI (ScopeInsufficientCard)
     participant Gateway as Express Gateway (/api/query)
-    participant Orchestrator as Unified Orchestrator
+    participant Engine as QueryExecutionEngine
     participant Safety as Safety Guard
 
     User->>Frontend: "Join orders with customer names" (Active scope: ["orders"])
     Frontend->>Gateway: POST /api/query { text, collections: ["orders"] }
-    Gateway->>Orchestrator: processNaturalLanguageQuery()
-    Orchestrator->>Safety: validatePipeline(pipeline, { allowedCollections: ["orders"] })
-    Safety-->>Orchestrator: { safe: false, code: "scope_violation", violatingCollections: ["customers"] }
-    Orchestrator-->>Gateway: { safetyStatus: "scope-insufficient", suggestedCollections: ["customers"] }
+    Gateway->>Engine: executeNaturalLanguageQuery({ text, collections: ["orders"] })
+    Engine->>Safety: validatePipeline(pipeline, { allowedCollections: ["orders"] })
+    Safety-->>Engine: { safe: false, code: "scope_violation", violatingCollections: ["customers"] }
+    Engine-->>Gateway: { type: "success", data: { safetyStatus: "scope-insufficient", suggestedCollections: ["customers"] } }
     Gateway-->>Frontend: HTTP 200 { safetyStatus: "scope-insufficient", suggestedCollections: ["customers"] }
     Frontend-->>User: Renders ScopeInsufficientCard ("Scope Expansion Required")
     
@@ -231,9 +248,12 @@ sequenceDiagram
 
 ## 3. Subsystem Breakdown & Implementation Details
 
-### 3.1 Unified Query Pipeline Orchestrator (`server/src/services/queryPipelineService.js`)
-The central transaction coordinator for AtlasMind:
-- **Single Ingestion Gateway**: Powers both `POST /api/query` and `POST /api/voice`, guaranteeing exact parity in validation, scoping, prompt enrichment, safety checks, and history logging.
+### 3.1 Deep Query Execution Engine (`server/src/services/queryExecutionEngine.js`)
+The central deep domain engine for AtlasMind:
+- **Unified Domain Core**: Replaces legacy duplicate orchestration across HTTP routes. Powers both text (`POST /api/query`) and voice (`POST /api/voice`) through a single transport-agnostic interface:
+  - `executeNaturalLanguageQuery(context, input)`: Complete natural language query lifecycle returning typed domain outcomes (`success`, `clarification_required`, `approval_required`, `safety_blocked`).
+  - `executeApprovedWrite(context, input)`: Encapsulated Human-in-the-Loop mutating write validation, single-use `jti` replay prevention, and database execution.
+- **Strongly-Typed Domain Errors**: Throws deterministic domain error classes (`ValidationError`, `ScopeError`, `TokenExpiredError`, `UnauthorizedTokenError`, `TokenAlreadyUsedError`, `SafetyViolationError`, `ExecutionError`) mapped to HTTP status codes by thin route adapters.
 - **Phased Pipeline Stages**:
   1. Connection pool acquisition (`userDbPool`).
   2. Workspace collection scope resolution and schema filtering.
@@ -244,6 +264,7 @@ The central transaction coordinator for AtlasMind:
   7. AST safety validation and write interception.
   8. MongoDB aggregation execution with timeout cap.
   9. Telemetry recording and persistent query history save.
+- **Backwards-Compatibility Shim (`server/src/services/queryPipelineService.js`)**: Preserved as a lightweight delegator ensuring zero breakage for evaluation benchmarks (`eval2`) and legacy test suites.
 
 ### 3.2 Ambiguity Gate Service (`server/src/services/ambiguityGate.js`)
 Protects against hallucinated business logic:
@@ -251,10 +272,11 @@ Protects against hallucinated business logic:
 - **Anti-Injection Validator (`validateClarifications`)**: Ensures clarification choices from the client match real schema fields. Discards hallucinated or malicious string injections.
 - **Telemetry Observability Engine**: Records granular events (`ambiguity_asked`, `ambiguity_skipped`, `ambiguity_resolved`, `ambiguity_bypassed`, `clarification_edit`) to calculate empirical KPIs (Ask Rate, Resolution Rate, Edit-after-Result Rate).
 
-### 3.3 Cryptographic Human-in-the-Loop Write Guard (`server/src/routes/query.js`)
-- **Mutating Write Interception**: Inspects collection names and aggregation stages. Any pipeline containing `$out`, `$merge`, or collection mutating commands (`deleteMany`, `updateMany`, `insertOne`) is intercepted.
-- **Signed Approval Tokens**: Generates an HMAC-SHA256 signed JWT (`approvalToken`) with a 10-minute expiration containing the exact payload and tenant scope.
-- **Verification Endpoint (`POST /api/query/approve`)**: Safely executes write commands only upon presentation of a valid, unexpired token matching the active session's `connectionId`.
+### 3.3 Cryptographic Human-in-the-Loop Write Guard (`QueryExecutionEngine.executeApprovedWrite`)
+- **Mutating Write Interception**: Inspects collection names and aggregation stages. Any pipeline containing `$out`, `$merge`, or collection mutating commands (`deleteMany`, `updateMany`, `insertOne`) is intercepted during query execution.
+- **Signed Approval Tokens**: Generates an HMAC-SHA256 signed JWT (`approvalToken`) with a 10-minute expiration containing `jti` (UUID), `connectionId`, `collection`, `pipeline`, and `scope`.
+- **Atomic Replay Prevention**: Write execution atomically inserts the token's `jti` into the central database's `approval_tokens` unique collection index. Duplicate submissions fail fast with `TokenAlreadyUsedError` (HTTP 409).
+- **Execution Endpoint (`POST /api/query/approve`)**: Thin route adapter delegating directly to `QueryExecutionEngine.executeApprovedWrite`. Validates connection ownership, re-runs safety AST checks, and applies mutating transactions to the user database.
 
 ### 3.4 Dynamic Workspace Scoping & Suggestion (`server/src/routes/workspaces.js`, `server/src/routes/scopeSuggest.js`)
 - **Workspace Scoping**: Restricts query context to curated collection subsets, reducing LLM prompt size and preventing cross-domain confusion.
@@ -274,7 +296,7 @@ Protects against hallucinated business logic:
 - **Two-Mode Prompting**:
   - *Pass 1 (Exploration)*: Model may return `{ needsClarification: true, questions: [...] }` or final MQL.
   - *Pass 2 (Execution)*: Clarification mode is disabled; model must output a valid MQL pipeline.
-- **Multimodal STT (Whisper Large v3 Turbo)**: Transcribes audio buffers from `POST /api/voice` and routes transcripts directly into the unified orchestrator.
+- **Multimodal STT (Whisper Large v3 Turbo)**: Transcribes audio buffers at the `POST /api/voice` intake boundary and hands normalized transcripts to `QueryExecutionEngine` with `source: 'voice'`.
 
 ### 3.8 AST Safety Guard (`server/src/services/safetyGuard.js`)
 - Rejects destructive stages: `$out`, `$merge`, `$writeConcern`, `$collStats`.
@@ -300,8 +322,11 @@ Protects against hallucinated business logic:
 | **Frontend** | HITL Approval Card | `AtlasChatPanel.jsx` | 2-step write verification modal |
 | **Frontend** | Workspace Selector | `ScopeWorkspaceSelector.jsx` | Active collection scoping & switching |
 | **Frontend** | Visualizations | Recharts (`ChartRenderer.jsx`) | Interactive Bar, Line, Area, Pie, Radar charts |
-| **Frontend** | Voice Input | `VoiceButton.jsx`, `VoiceInputBar.jsx` | MediaRecorder WebM audio streaming |
-| **Backend** | Query Orchestrator | `queryPipelineService.js` | Unified lifecycle coordination |
+| **Frontend** | Voice Input | `AtlasChatPanel.jsx`, `useVoice.js` | MediaRecorder WebM audio streaming |
+| **Backend** | Query Route Adapter | `routes/query.js` | Thin HTTP adapter for `/api/query` and `/api/query/approve` |
+| **Backend** | Voice Route Adapter | `routes/voice.js` | Audio intake boundary & Whisper transcription adapter |
+| **Backend** | Deep Query Engine | `queryExecutionEngine.js` | Unified deep domain execution & write approval |
+| **Backend** | Pipeline Compatibility Shim | `queryPipelineService.js` | Backwards-compatible delegator for evaluation suites |
 | **Backend** | Ambiguity Gate | `ambiguityGate.js` | Deterministic checks, prompt injection defense |
 | **Backend** | Schema Profiler | `schemaProfiler.js` | Per-connection schema cache and document sampler |
 | **Backend** | Few-Shot Matcher | `fewShotRetriever.js` | Connection-isolated vector memory |

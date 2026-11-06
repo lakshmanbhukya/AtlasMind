@@ -1,12 +1,7 @@
 const express = require('express');
 const multer = require('multer');
 const { transcribeAudio } = require('../services/groqService');
-const { getMinifiedSchema } = require('../services/schemaProfiler');
-const { getSimilarExamples } = require('../services/fewShotRetriever');
-const { generateMQL } = require('../services/groqService');
-const { validatePipeline, validateCollectionName } = require('../services/safetyGuard');
-const { executePipeline, saveQueryHistory } = require('../services/queryExecutor');
-const { getUserDb } = require('../services/userDbPool');
+const { QueryExecutionEngine } = require('../services/queryExecutionEngine');
 
 const router = express.Router();
 
@@ -34,15 +29,12 @@ const upload = multer({
 /**
  * POST /api/voice
  *
- * Speech-to-Query pipeline:
- * 1. Transcribes uploaded audio using Groq Whisper
- * 2. Connects to USER's database via JWT cookie connectionId
- * 3. Profiles schema, generates MQL, executes pipeline
- * 4. Returns same structured response as POST /api/query
+ * Speech-to-Query adapter:
+ * 1. Transcribes uploaded audio using Groq Whisper at the intake seam
+ * 2. Delegates normalized transcript to QueryExecutionEngine with source: 'voice'
+ * 3. Enriches outcome with voice transcription metadata for client backwards-compatibility
  */
 router.post('/', upload.single('audio'), async (req, res) => {
-    const startTime = Date.now();
-
     try {
         if (!req.file) {
             return res.status(400).json({
@@ -54,6 +46,8 @@ router.post('/', upload.single('audio'), async (req, res) => {
         const { buffer, originalname, size } = req.file;
         const connectionId = req.connectionId;
         const model = req.body?.model;
+        const collections = req.body?.collections;
+        const workspaceId = req.body?.workspaceId;
 
         console.log(`🎙️ Transcribing audio: ${originalname} (${(size / 1024).toFixed(1)} KB)`);
 
@@ -65,108 +59,46 @@ router.post('/', upload.single('audio'), async (req, res) => {
             return res.status(400).json({
                 success: false,
                 error: { code: 'transcription_empty', message: 'Could not extract text from audio. Please try again.' },
-                transcript: '', text: '',
+                transcript: '',
+                text: '',
             });
         }
 
         console.log(`📝 Transcribed: "${queryText}" (Model: ${model || 'default'})`);
 
-        // Step 2: Get User DB (pooled connection — reused across requests)
-        const userDb = await getUserDb(connectionId);
-
-        // Step 3: Profile schema + retrieve examples (in parallel)
-        const [schemaContext, fewShotExamples] = await Promise.all([
-            getMinifiedSchema(userDb, { forceRefresh: true }),
-            getSimilarExamples(queryText, 3),
-        ]);
-
-        const similarQueriesCount = fewShotExamples.length;
-        const llmResult = await generateMQL(queryText, schemaContext, fewShotExamples, model);
-
-        // Empty pipeline fallback
-        if (llmResult.pipeline.length === 0) {
-            return res.json({
-                success: true,
-                transcript: queryText, text: queryText, naturalLanguage: queryText,
-                aiMessage: llmResult.explanation || "I couldn't generate a query for that request.",
-                pipeline: [], mql: [], collection: '', chartType: 'table',
-                safetyStatus: 'read-only', safetyBlocked: false,
-                results: [], result: [],
-                executionTimeMs: 0, confidenceScore: 0, similarQueriesCount,
-                schemaContext,
-                meta: {
-                    resultCount: 0, executionTimeMs: 0,
-                    totalTimeMs: Date.now() - startTime, similarQueriesCount, confidenceScore: 0,
-                    transcriptionMeta: { filename: originalname, sizeBytes: size, language: transcription.language },
-                },
-            });
-        }
-
-        // Safety validation
-        const collectionCheck = validateCollectionName(llmResult.collection);
-        if (!collectionCheck.safe) {
-            return res.status(422).json({
-                success: false,
-                error: { code: 'safety_violation', message: collectionCheck.reason },
-                transcript: queryText, text: queryText, naturalLanguage: queryText,
-                aiMessage: collectionCheck.reason,
-                safetyStatus: 'approval-required', safetyBlocked: true, similarQueriesCount,
-            });
-        }
-
-        const pipelineCheck = validatePipeline(llmResult.pipeline);
-        if (!pipelineCheck.safe) {
-            return res.status(422).json({
-                success: false,
-                error: { code: 'safety_violation', message: pipelineCheck.reason },
-                transcript: queryText, text: queryText, naturalLanguage: queryText,
-                aiMessage: pipelineCheck.reason,
-                pipeline: llmResult.pipeline, mql: llmResult.pipeline,
-                safetyStatus: 'approval-required', safetyBlocked: true, similarQueriesCount,
-            });
-        }
-
-        // Execute pipeline against USER DB
-        const { results, executionTimeMs } = await executePipeline(
-            userDb,
-            llmResult.collection,
-            pipelineCheck.pipeline
-        );
-
-        const CONFIDENCE_MAP = { 0: 60, 1: 75, 2: 85, 3: 92 };
-        const confidenceScore = CONFIDENCE_MAP[Math.min(similarQueriesCount, 3)] || 92;
-
-        // Save history
-        saveQueryHistory({
+        // Step 2: Delegate to deep QueryExecutionEngine with source: 'voice'
+        const outcome = await QueryExecutionEngine.executeNaturalLanguageQuery({
             connectionId,
-            naturalLanguage: queryText,
-            generatedPipeline: pipelineCheck.pipeline,
-            collection: llmResult.collection,
-            chartType: llmResult.chartType,
-            resultCount: results.length,
-            executionTimeMs, confidenceScore, similarQueriesCount,
-            schemaContext,
+            text: queryText,
+            model,
+            collections,
+            workspaceId,
             source: 'voice',
         });
 
-        return res.json({
-            success: true,
-            transcript: queryText, text: queryText, language: transcription.language,
-            duration: transcription.duration, naturalLanguage: queryText,
-            aiMessage: llmResult.explanation || `Generated pipeline for "${llmResult.collection}" from your voice query.`,
-            explanation: llmResult.explanation,
-            pipeline: pipelineCheck.pipeline, mql: pipelineCheck.pipeline,
-            collection: llmResult.collection, chartType: llmResult.chartType,
-            safetyStatus: 'read-only', safetyBlocked: false,
-            results, result: results,
-            executionTimeMs, confidenceScore, similarQueriesCount,
-            schemaContext,
+        // Step 3: Attach voice transcription metadata for client compatibility
+        const voiceData = {
+            ...outcome.data,
+            transcript: queryText,
+            text: queryText,
+            ...(transcription.language ? { language: transcription.language } : {}),
+            ...(transcription.duration !== undefined ? { duration: transcription.duration } : {}),
             meta: {
-                resultCount: results.length, executionTimeMs,
-                totalTimeMs: Date.now() - startTime, similarQueriesCount, confidenceScore,
-                transcriptionMeta: { filename: originalname, sizeBytes: size, language: transcription.language, duration: transcription.duration },
+                ...(outcome.data.meta || {}),
+                transcriptionMeta: {
+                    filename: originalname,
+                    sizeBytes: size,
+                    language: transcription.language,
+                    duration: transcription.duration,
+                },
             },
-        });
+        };
+
+        if (outcome.type === 'safety_blocked') {
+            return res.status(422).json(voiceData);
+        }
+
+        return res.status(200).json(voiceData);
     } catch (error) {
         console.error('❌ Voice pipeline error:', error);
         if (error instanceof multer.MulterError) {
@@ -178,9 +110,14 @@ router.post('/', upload.single('audio'), async (req, res) => {
                 },
             });
         }
-        return res.status(500).json({
+        const statusCode = error.statusCode || error.status || 500;
+        const code = error.code || (statusCode >= 500 ? 'voice_pipeline_error' : 'validation_error');
+        return res.status(statusCode).json({
             success: false,
-            error: { code: 'voice_pipeline_error', message: error.message || 'Failed to process voice query' },
+            error: {
+                code,
+                message: error.message || 'Failed to process voice query',
+            },
         });
     }
 });

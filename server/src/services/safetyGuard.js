@@ -12,6 +12,8 @@
  */
 
 // Analytical stages permitted for read-only aggregation execution
+// Note: $set (alias for $addFields) and $unset (projection exclusion) operate
+// as in-memory document reshaping stages in aggregation pipelines and are permitted.
 const ALLOWED_STAGES = new Set([
     '$match',
     '$group',
@@ -21,6 +23,8 @@ const ALLOWED_STAGES = new Set([
     '$project',
     '$unwind',
     '$addFields',
+    '$set',
+    '$unset',
     '$count',
     '$lookup',
     '$facet',
@@ -33,15 +37,14 @@ const ALLOWED_STAGES = new Set([
     '$graphLookup',
 ]);
 
-// Stages that can write or mutate data
+// Stages that persistently write or mutate database data on disk
 const BLOCKED_STAGES = new Set([
     '$out',
     '$merge',
     '$delete',
     '$drop',
     '$update',
-    '$set',             // $set at top-level can mutate; we block it as a stage
-    '$unset',           // $unset as a stage removes fields permanently
+    // NOTE: $set and $unset are read-only reshaping stages in aggregation pipelines and are intentionally permitted
     // NOTE: $replaceRoot and $replaceWith are read-only and are intentionally NOT blocked
 ]);
 

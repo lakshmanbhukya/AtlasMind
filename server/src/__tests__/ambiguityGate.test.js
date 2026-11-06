@@ -157,12 +157,12 @@ describe('A2: ambiguityGate diagnostics and refinements', () => {
             ],
         };
 
-        test('plain name like "price" in query does NOT suppress ambiguity unless "by price"', () => {
-            // "top price items" has vague term "top", and "price" is NOT by price
+        test('plain name like "price" in query suppresses ambiguity via inline proximity or "by price"', () => {
+            // "top price items" has vague term "top" followed directly by leaf metric "price"
             const res = analyzeAmbiguity('top price items', schemaWithPlainAndCompound);
-            expect(res.diagnostics.reason).toBe('asked');
+            expect(res.diagnostics.reason).toBe('explicit_binding');
 
-            // With "by price", it does suppress
+            // With "by price", it also suppresses
             const byRes = analyzeAmbiguity('top items by price', schemaWithPlainAndCompound);
             expect(byRes.diagnostics.reason).toBe('explicit_binding');
         });
@@ -215,6 +215,81 @@ describe('A2: ambiguityGate diagnostics and refinements', () => {
             );
             expect(res.valid).toBe(true);
             expect(res.sanitized[0].value).toBe('discount');
+        });
+    });
+
+    // 6. Enhanced binding heuristic (C2+BindFix)
+    describe('enhanced binding heuristic (C2+BindFix)', () => {
+        const mflixSchema = {
+            collections: [
+                {
+                    name: 'movies',
+                    fields: [
+                        { name: 'runtime', type: 'number' },
+                        { name: 'tomatoes.rotten', type: 'number' },
+                        { name: 'tomatoes.fresh', type: 'number' },
+                        { name: 'imdb.rating', type: 'number' },
+                        { name: 'imdb.votes', type: 'number' },
+                        { name: 'awards.wins', type: 'number' },
+                    ],
+                },
+            ],
+        };
+
+        const suppliesSchema = {
+            collections: [
+                {
+                    name: 'sales',
+                    fields: [
+                        { name: 'items.price', type: 'number' },
+                        { name: 'items.quantity', type: 'number' },
+                        { name: 'customer.age', type: 'number' },
+                        { name: 'customer.satisfaction', type: 'number' },
+                    ],
+                },
+            ],
+        };
+
+        test('handles "at least" without falsely matching vague term "least"', () => {
+            // "at least" is an idiomatic collocation, so "least" is stripped or resolved to null
+            const res = analyzeAmbiguity('Show transactions with at least one item priced at 40.01.', suppliesSchema, { enableBindFix: true });
+            expect(res.result).toBeNull();
+            expect(res.diagnostics.reason === 'no_vague_term' || res.diagnostics.explicitBindingFound === true).toBe(true);
+        });
+
+        test('handles compound field tomatoes.rotten via spaced and reversed names', () => {
+            const res1 = analyzeAmbiguity('Find films with highest Rotten Tomatoes rotten count', mflixSchema, { enableBindFix: true });
+            expect(res1.result).toBeNull();
+            expect(res1.diagnostics.reason).toBe('explicit_binding');
+
+            const res2 = analyzeAmbiguity('Find movies with highest rotten tomatoes count', mflixSchema, { enableBindFix: true });
+            expect(res2.result).toBeNull();
+            expect(res2.diagnostics.reason).toBe('explicit_binding');
+        });
+
+        test('handles explicit bounds on numeric fields (e.g., rating of 4, aged 42)', () => {
+            const res1 = analyzeAmbiguity('Retrieve transactions with a customer satisfaction rating of 4.', suppliesSchema, { enableBindFix: true });
+            expect(res1.result).toBeNull();
+
+            const res2 = analyzeAmbiguity('Show purchases made by male customers who are 42 years old.', suppliesSchema, { enableBindFix: true });
+            expect(res2.result).toBeNull();
+        });
+
+        test('handles leaf token with metric descriptor (e.g., quantity purchased, price values)', () => {
+            const res1 = analyzeAmbiguity('Find the 3 items with the highest quantity purchased.', suppliesSchema, { enableBindFix: true });
+            expect(res1.result).toBeNull();
+            expect(res1.diagnostics.reason).toBe('explicit_binding');
+
+            const res2 = analyzeAmbiguity('Identify the 3 items with the largest price values.', suppliesSchema, { enableBindFix: true });
+            expect(res2.result).toBeNull();
+            expect(res2.diagnostics.reason).toBe('explicit_binding');
+        });
+
+        test('preserves genuine ambiguity when no explicit field or bound is provided', () => {
+            const res = analyzeAmbiguity('Which items have the highest sales?', suppliesSchema, { enableBindFix: true });
+            expect(res.result).not.toBeNull();
+            expect(res.result.needsClarification).toBe(true);
+            expect(res.diagnostics.reason).toBe('asked');
         });
     });
 });

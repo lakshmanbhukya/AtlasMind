@@ -7,7 +7,7 @@ const {
     recordAmbiguityMetric,
     getAmbiguityMetrics,
     resetAmbiguityMetrics,
-} = require('../services/ambiguityGate');
+} = require('../services/ambiguityGate').internals;
 
 describe('Ambiguity-Aware Query Generation — Complete Test Suite (Tests 1–10)', () => {
     const multiMetricSchema = {

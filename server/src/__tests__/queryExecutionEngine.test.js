@@ -245,6 +245,38 @@ describe('QueryExecutionEngine Interface Tests', () => {
             ).rejects.toThrow(ScopeError);
         });
 
+        test('shows schema-valid LLM clarification questions', async () => {
+            mockGenerateMQL.mockResolvedValueOnce({
+                needsClarification: true,
+                pipeline: [],
+                collection: '',
+                questions: [{ id: 'metric', question: 'Which metric?', options: [{ value: 'amount' }, { value: 'units' }] }],
+            });
+            const outcome = await QueryExecutionEngine.executeNaturalLanguageQuery({
+                connectionId: testConnectionId,
+                text: 'show orders over 100',
+            });
+            expect(outcome.type).toBe('clarification_required');
+            expect(outcome.data.clarificationSource).toBe('llm');
+            expect(outcome.data.questions[0].options.map((o) => o.value)).toEqual(['amount', 'units', '__other__']);
+        });
+
+        test('discards LLM clarification options that are not schema fields', async () => {
+            mockGenerateMQL.mockResolvedValueOnce({
+                needsClarification: true,
+                pipeline: [],
+                collection: '',
+                questions: [{ id: 'metric', question: 'Which metric?', options: [{ value: 'amount' }, { value: 'password_hash' }] }],
+            });
+            const outcome = await QueryExecutionEngine.executeNaturalLanguageQuery({
+                connectionId: testConnectionId,
+                text: 'show orders over 100',
+            });
+            expect(outcome.type).toBe('success');
+            expect(outcome.data.needsClarification).toBe(false);
+            expect(mockExecutePipeline).not.toHaveBeenCalled();
+        });
+
         test('wraps unexpected infrastructure failures in ExecutionError', async () => {
             mockGetUserDb.mockRejectedValueOnce(new Error('connection refused'));
             const err = await QueryExecutionEngine.executeNaturalLanguageQuery({

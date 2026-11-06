@@ -6,7 +6,7 @@ const {
     validateClarifications,
     extractNumericFields,
     DEFAULT_VAGUE_TERMS,
-} = require('../services/ambiguityGate');
+} = require('../services/ambiguityGate').internals;
 
 describe('A2: ambiguityGate diagnostics and refinements', () => {
     const multiMetricSchema = {

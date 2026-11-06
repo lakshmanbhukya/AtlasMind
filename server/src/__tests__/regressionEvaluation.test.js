@@ -1,5 +1,5 @@
 const regressionData = require('../data/ambiguity-regression.json');
-const { hasWriteIntent, checkDeterministicAmbiguity } = require('../services/ambiguityGate');
+const { decide } = require('../services/ambiguityGate');
 
 describe('Ambiguity Regression Evaluation Dataset Tests', () => {
     // Representative schema with multiple numerical fields
@@ -25,36 +25,27 @@ describe('Ambiguity Regression Evaluation Dataset Tests', () => {
         expect(regressionData.length).toBeGreaterThanOrEqual(50);
     });
 
-    test('Regression evaluation against ambiguity detector', () => {
+    test('Regression evaluation through the gate interface (decide)', () => {
         let correctCount = 0;
-        let totalEvaluated = 0;
 
         for (const item of regressionData) {
-            totalEvaluated++;
-            const isWrite = hasWriteIntent(item.query);
+            const decision = decide({ query: item.query, schema: mockSchema });
 
             if (item.expected === 'WRITE') {
-                expect(isWrite).toBe(true);
+                expect(decision.diagnostics.reason).toBe('write_intent');
+                expect(decision.isClarificationPass).toBe(true);
                 correctCount++;
             } else if (item.expected === 'AMBIGUOUS') {
-                // Ambiguous queries should NOT have write intent
-                expect(isWrite).toBe(false);
-                const ambiguityResult = checkDeterministicAmbiguity(item.query, mockSchema);
-                if (ambiguityResult && ambiguityResult.needsClarification) {
-                    correctCount++;
-                }
+                expect(decision.diagnostics.reason).not.toBe('write_intent');
+                if (decision.action === 'ask') correctCount++;
             } else if (item.expected === 'CLEAR') {
-                expect(isWrite).toBe(false);
-                // Clear queries should not trigger false positives
-                const ambiguityResult = checkDeterministicAmbiguity(item.query, mockSchema);
-                if (!ambiguityResult) {
-                    correctCount++;
-                }
+                expect(decision.diagnostics.reason).not.toBe('write_intent');
+                if (decision.action === 'proceed') correctCount++;
             }
         }
 
-        const accuracy = (correctCount / totalEvaluated) * 100;
-        console.log(`📊 Ambiguity Regression Suite Accuracy: ${accuracy.toFixed(1)}% (${correctCount}/${totalEvaluated})`);
+        const accuracy = (correctCount / regressionData.length) * 100;
+        console.log(`📊 Ambiguity Regression Suite Accuracy: ${accuracy.toFixed(1)}% (${correctCount}/${regressionData.length})`);
         expect(accuracy).toBeGreaterThanOrEqual(90);
     });
 });

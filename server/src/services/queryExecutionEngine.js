@@ -11,13 +11,7 @@ const queryHistoryStore = require('../stores/queryHistoryStore');
 const { getUserDb } = require('./userDbPool');
 const { listUserCollections } = require('./tenantSchema');
 const { getDb } = require('../db/connection');
-const {
-    hasWriteIntent,
-    analyzeAmbiguity,
-    validateClarifications,
-    buildEnrichedQuery,
-    recordAmbiguityMetric,
-} = require('./ambiguityGate');
+const ambiguityGate = require('./ambiguityGate');
 const { verifyInterpretationCompliance } = require('./interpretationComplianceVerifier');
 const { resolveExperiment } = require('./experiment');
 
@@ -311,6 +305,17 @@ async function runNaturalLanguageQuery(params) {
         return payload;
     };
 
+    const clarificationOutcome = (questions) => ({
+        type: 'clarification_required',
+        data: buildOutcomePayload({
+            success: true,
+            needsClarification: true,
+            naturalLanguage: query,
+            questions,
+            scope: effectiveScope,
+        }),
+    });
+
     // 1. Get User DB from pool (an experiment may supply its own)
     const userDb = evalOpts.db || await getUserDb(connectionId);
 
@@ -376,73 +381,39 @@ async function runNaturalLanguageQuery(params) {
         : formatMinifiedSchema(rawSchema);
 
     const similarQueriesCount = fewShotExamples.length;
-    recordAmbiguityMetric('query_evaluated', { connectionId, source });
 
-    // 4. Ambiguity Resolution & Prompt Enrichment
-    let queryForGeneration = query;
-    let sanitizedClarifications = null;
-    const isWriteQuery = hasWriteIntent(query);
-    let isClarificationPass = bypassAmbiguity === true || isWriteQuery;
+    // 4. Ambiguity Gate: clarification validation, prompt enrichment, deterministic check
+    const gateContext = { connectionId, source };
+    const gate = ambiguityGate.decide({
+        query,
+        schema: rawSchema,
+        clarifications,
+        bypass: bypassAmbiguity === true,
+        isEdit: Boolean(isEdit),
+        disabled: Boolean(evalOpts.disableGate),
+        gateOptions: {
+            mode: evalOpts.ambiguityMode,
+            vagueTerms: evalOpts.vagueTerms,
+            enableBindFix: !evalOpts.disableBindFix,
+        },
+        context: gateContext,
+    });
+    gateInfo = gate.diagnostics;
+    gateMs = gate.gateMs;
+    const sanitizedClarifications = gate.clarifications;
 
-    if (clarifications !== undefined && clarifications !== null) {
-        const valResult = validateClarifications(clarifications, rawSchema);
-        if (!valResult.valid) {
-            throw new ValidationError('Invalid clarification value provided.', 'validation_error');
-        }
-        sanitizedClarifications = valResult.sanitized;
-        queryForGeneration = buildEnrichedQuery(query, sanitizedClarifications);
-        isClarificationPass = true;
-        gateInfo = { reason: 'clarified', matchedTerms: [] };
-        if (isEdit) {
-            recordAmbiguityMetric('clarification_edit', { connectionId, source });
-        } else {
-            recordAmbiguityMetric('ambiguity_resolved', { connectionId, source });
-        }
-    } else if (bypassAmbiguity === true) {
-        recordAmbiguityMetric('ambiguity_bypassed', { connectionId, source });
-        gateInfo = { reason: 'bypassed', matchedTerms: [] };
-    } else if (isWriteQuery) {
-        gateInfo = { reason: 'write_intent', matchedTerms: [] };
-    } else if (evalOpts.disableGate) {
-        gateInfo = { reason: 'gate_disabled', matchedTerms: [] };
-    } else {
-        try {
-            const tGateStart = hrNow();
-            const ambiguityAnalysis = analyzeAmbiguity(query, rawSchema, {
-                mode: evalOpts.ambiguityMode,
-                vagueTerms: evalOpts.vagueTerms,
-                enableBindFix: !evalOpts.disableBindFix,
-            });
-            gateMs = toMs(tGateStart);
-
-            gateInfo = {
-                reason: ambiguityAnalysis.diagnostics.reason,
-                matchedTerms: ambiguityAnalysis.diagnostics.matchedTerms,
-            };
-
-            if (ambiguityAnalysis.result && ambiguityAnalysis.result.needsClarification) {
-                clarificationSource = 'gate';
-                recordAmbiguityMetric('ambiguity_asked', { connectionId, source });
-                return {
-                    type: 'clarification_required',
-                    data: buildOutcomePayload({
-                        success: true,
-                        needsClarification: true,
-                        naturalLanguage: query,
-                        questions: ambiguityAnalysis.result.questions,
-                        scope: effectiveScope,
-                    }),
-                };
-            }
-        } catch (ambErr) {
-            console.warn(`⚠️ Deterministic ambiguity gate error (${source}, failing open):`, ambErr.message);
-        }
+    if (gate.action === 'reject') {
+        throw new ValidationError('Invalid clarification value provided.', 'validation_error');
+    }
+    if (gate.action === 'ask') {
+        clarificationSource = 'gate';
+        return clarificationOutcome(gate.questions);
     }
 
     // 5. Generate MQL via Groq LLM
     const targetModel = evalOpts.model || model;
     const llmGenOptions = {
-        isClarificationPass,
+        isClarificationPass: gate.isClarificationPass,
         disableClarificationMode: Boolean(evalOpts.disableClarificationMode),
         forceFinalQueryMode: Boolean(evalOpts.forceFinalQueryMode),
         rawSchema,
@@ -453,7 +424,7 @@ async function runNaturalLanguageQuery(params) {
 
     const tLlmStart = hrNow();
     const llmResult = await generateMQL(
-        queryForGeneration,
+        gate.queryForGeneration,
         schemaContext,
         fewShotExamples,
         targetModel,
@@ -462,24 +433,11 @@ async function runNaturalLanguageQuery(params) {
     llmMs = llmResult.timings?.llmMs !== undefined ? llmResult.timings.llmMs : toMs(tLlmStart);
     currentLlmResult = llmResult;
 
-    // If LLM indicates clarification is needed
-    if (llmResult.needsClarification === true && !isClarificationPass) {
+    // The LLM may ask for clarification; the gate only shows schema-valid questions
+    const modelReview = ambiguityGate.reviewModelQuestions(gate, llmResult, rawSchema, gateContext);
+    if (modelReview.action === 'ask') {
         clarificationSource = 'llm';
-        recordAmbiguityMetric('ambiguity_asked', { connectionId, source });
-        return {
-            type: 'clarification_required',
-            data: buildOutcomePayload({
-                success: true,
-                needsClarification: true,
-                naturalLanguage: query,
-                questions: llmResult.questions,
-                scope: effectiveScope,
-            }),
-        };
-    }
-
-    if (!sanitizedClarifications && !bypassAmbiguity) {
-        recordAmbiguityMetric('ambiguity_skipped', { connectionId, source });
+        return clarificationOutcome(modelReview.questions);
     }
 
     // 6. Check for LLM-signaled missing collections (scope-insufficient)
@@ -721,9 +679,7 @@ async function runNaturalLanguageQuery(params) {
     const CONFIDENCE_MAP = { 0: 60, 1: 75, 2: 85, 3: 92 };
     const confidenceScore = CONFIDENCE_MAP[Math.min(similarQueriesCount, 3)] || 92;
 
-    if (sanitizedClarifications || bypassAmbiguity) {
-        recordAmbiguityMetric('generation_after_clarification', { connectionId, source });
-    }
+    ambiguityGate.recordGeneration(gate, gateContext);
 
     // 11. Save to query_history and few-shot examples
     queryHistoryStore.record({

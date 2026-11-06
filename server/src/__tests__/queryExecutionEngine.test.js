@@ -288,6 +288,18 @@ describe('QueryExecutionEngine Interface Tests', () => {
             expect(err.message).toBe('connection refused');
         });
 
+        test('maps a missing connection record to 404 connection_not_found', async () => {
+            mockGetUserDb.mockRejectedValueOnce(
+                Object.assign(new Error('Connection not found or inactive'), { statusCode: 404 })
+            );
+            const err = await QueryExecutionEngine.executeNaturalLanguageQuery({
+                connectionId: testConnectionId,
+                text: 'show orders',
+            }).catch((e) => e);
+            expect(err.statusCode).toBe(404);
+            expect(err.code).toBe('connection_not_found');
+        });
+
         test('maps an upstream LLM 429 to RateLimitError', async () => {
             const upstream = Object.assign(new Error('Rate limit reached'), { status: 429 });
             mockGenerateMQL.mockRejectedValueOnce(upstream);

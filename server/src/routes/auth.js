@@ -2,8 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { requireAuth } = require('../middleware/auth');
 const { getConnectionById } = require('../models/UserConnection');
-
-const COOKIE_NAME = 'am_token';
+const { clearSession } = require('../auth/session');
 
 /**
  * GET /api/auth/me
@@ -22,13 +21,7 @@ router.get('/me', requireAuth, async (req, res) => {
 
         if (!conn) {
             // Connection was deleted from DB but cookie still valid — clear it
-            const isProd = process.env.NODE_ENV === 'production';
-            res.clearCookie(COOKIE_NAME, { 
-                httpOnly: true, 
-                secure: isProd,
-                sameSite: isProd ? 'none' : 'lax',
-                path: '/' 
-            });
+            clearSession(res);
             return res.status(401).json({
                 success: false,
                 error: { code: 'connection_not_found', message: 'Session is invalid. Please reconnect.' },
@@ -55,13 +48,7 @@ router.get('/me', requireAuth, async (req, res) => {
  * The frontend will redirect to the landing page after this call.
  */
 router.post('/logout', (_req, res) => {
-    const isProd = process.env.NODE_ENV === 'production';
-    res.clearCookie(COOKIE_NAME, { 
-        httpOnly: true, 
-        secure: isProd,
-        sameSite: isProd ? 'none' : 'lax',
-        path: '/' 
-    });
+    clearSession(res);
     return res.json({ success: true, message: 'Logged out' });
 });
 

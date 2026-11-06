@@ -70,15 +70,7 @@ async function closeConnection() {
     }
 }
 
-// Graceful shutdown handlers
-process.on('SIGINT', async () => {
-    await closeConnection();
-    process.exit(0);
-});
-
-process.on('SIGTERM', async () => {
-    await closeConnection();
-    process.exit(0);
-});
+// Shutdown is owned by index.js, which closes the user DB pool first and then
+// calls closeConnection(); registering exit handlers here raced that sequence.
 
 module.exports = { connectToDatabase, getDb, getClient, closeConnection };

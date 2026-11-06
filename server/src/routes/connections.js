@@ -3,11 +3,9 @@ const { MongoClient } = require('mongodb');
 const router = express.Router();
 const { encrypt, hashString } = require('../utils/encryption');
 const { upsertConnection } = require('../models/UserConnection');
-const { signToken } = require('../utils/jwt');
+const { issueSession } = require('../auth/session');
 const { requireAuth } = require('../middleware/auth');
-
-const COOKIE_NAME = 'am_token';
-const COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days
+const { evictUserDb } = require('../services/userDbPool');
 
 /**
  * POST /api/connections/connect
@@ -96,20 +94,10 @@ router.post('/connect', async (req, res) => {
             label: label || 'My Database',
         });
 
-        // Issue JWT cookie
-        const token = signToken(connectionId);
-        
-        // Cookie options for production vs local
-        const isProd = process.env.NODE_ENV === 'production';
-        const cookieOpts = {
-            httpOnly: true,
-            secure: isProd, // Must be true on Render (HTTPS)
-            sameSite: isProd ? 'none' : 'lax', // 'none' for cross-site (Render), 'lax' for local
-            maxAge: COOKIE_MAX_AGE,
-            path: '/',
-        };
+        // The stored dbName may have changed: drop any pooled handle to the old one
+        await evictUserDb(connectionId);
 
-        res.cookie(COOKIE_NAME, token, cookieOpts);
+        issueSession(res, connectionId);
 
         return res.json({
             success: true,

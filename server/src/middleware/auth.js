@@ -1,39 +1,22 @@
-const { verifyToken } = require('../utils/jwt');
-
-const COOKIE_NAME = 'am_token';
+const { readSession, clearSession, SessionError } = require('../auth/session');
 
 /**
- * Auth middleware — reads the httpOnly `am_token` cookie, verifies the JWT,
- * and attaches `req.connectionId` for downstream route handlers.
+ * Auth middleware: verifies the session cookie and sets `req.connectionId`
+ * for downstream route handlers.
  *
- * Returns 401 if the cookie is missing or the token is invalid/expired.
+ * Returns 401 `unauthenticated` when there is no session, or 401
+ * `session_expired` (and clears the cookie) when it is invalid or expired.
  */
 function requireAuth(req, res, next) {
-    const token = req.cookies?.[COOKIE_NAME];
-
-    if (!token) {
-        return res.status(401).json({
-            success: false,
-            error: { code: 'unauthenticated', message: 'No session found. Please connect your database.' },
-        });
-    }
-
     try {
-        const payload = verifyToken(token);
-        req.connectionId = payload.connectionId;
-        next();
+        req.connectionId = readSession(req);
+        return next();
     } catch (err) {
-        // Token expired or tampered
-        const isProd = process.env.NODE_ENV === 'production';
-        res.clearCookie(COOKIE_NAME, { 
-            httpOnly: true, 
-            secure: isProd,
-            sameSite: isProd ? 'none' : 'lax',
-            path: '/' 
-        });
+        if (!(err instanceof SessionError)) return next(err);
+        if (err.code === 'session_expired') clearSession(res);
         return res.status(401).json({
             success: false,
-            error: { code: 'session_expired', message: 'Session expired. Please reconnect.' },
+            error: { code: err.code, message: err.message },
         });
     }
 }

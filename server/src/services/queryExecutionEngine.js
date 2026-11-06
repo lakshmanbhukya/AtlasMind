@@ -1,7 +1,6 @@
 'use strict';
 
-const crypto = require('crypto');
-const jwt = require('jsonwebtoken');
+const { signApprovalToken, verifyApprovalToken, APPROVAL_TOKEN_TYPE } = require('../auth/session');
 const { formatMinifiedSchema, formatFieldNamesOnly, profileSchema } = require('./schemaProfiler');
 const { getSimilarExamples, addExample } = require('./fewShotRetriever');
 const { generateMQL } = require('./groqService');
@@ -79,6 +78,11 @@ class RateLimitError extends QueryEngineError {
  */
 function toEngineError(err) {
     if (err instanceof QueryEngineError) return err;
+    if (err && err.statusCode === 404) {
+        const notFound = new QueryEngineError(err.message || 'Connection not found', 'connection_not_found', 404);
+        notFound.cause = err;
+        return notFound;
+    }
     const isRateLimited = err && (err.status === 429 || err.code === 'QUOTA_EXHAUSTED');
     const wrapped = isRateLimited
         ? new RateLimitError(err.message || undefined)
@@ -596,19 +600,13 @@ async function runNaturalLanguageQuery(params) {
 
             // Mutating write intercepted for human approval
             if (pipelineCheck.isWrite) {
-                const approvalToken = jwt.sign(
-                    {
-                        jti: crypto.randomUUID(),
-                        connectionId,
-                        collection: llmResult.collection,
-                        pipeline: llmResult.pipeline,
-                        query,
-                        scope: effectiveScope,
-                        type: 'write-approval',
-                    },
-                    process.env.JWT_SECRET,
-                    { expiresIn: '10m' }
-                );
+                const approvalToken = signApprovalToken({
+                    connectionId,
+                    collection: llmResult.collection,
+                    pipeline: llmResult.pipeline,
+                    query,
+                    scope: effectiveScope,
+                });
 
                 const payloadData = buildOutcomePayload({
                     success: true,
@@ -760,12 +758,12 @@ async function runApprovedWrite(params) {
 
     let decoded;
     try {
-        decoded = jwt.verify(approvalToken, process.env.JWT_SECRET);
+        decoded = verifyApprovalToken(approvalToken);
     } catch (err) {
         throw new TokenExpiredError('Approval draft has expired or is invalid. Please resend query.');
     }
 
-    if (decoded.type !== 'write-approval') {
+    if (decoded.type !== APPROVAL_TOKEN_TYPE) {
         throw new ValidationError('Invalid token signature type', 'invalid_token');
     }
 

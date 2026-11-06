@@ -27,6 +27,10 @@ const IDLE_TTL_MS = Number(process.env.USER_DB_IDLE_TTL_MS) || 5 * 60 * 1000;   
 const MAX_CACHED_CLIENTS = Number(process.env.USER_DB_MAX_CLIENTS) || 50;
 const EVICTION_INTERVAL_MS = 60 * 1000; // Check every 60 seconds
 
+/** In-flight client creations, so concurrent cache misses share one client. */
+/** @type {Map<string, Promise<import('mongodb').Db>>} */
+const pending = new Map();
+
 /** @type {NodeJS.Timeout|null} */
 let evictionTimer = null;
 
@@ -57,8 +61,16 @@ async function getUserDb(connectionId) {
         }
     }
 
-    // ── Cache miss — create new client ─────────────────────────────────────
+    // ── Cache miss — create new client (once, even for concurrent callers) ──
+    if (pending.has(connectionId)) {
+        return pending.get(connectionId);
+    }
+    const creation = createEntry(connectionId, now).finally(() => pending.delete(connectionId));
+    pending.set(connectionId, creation);
+    return creation;
+}
 
+async function createEntry(connectionId, now) {
     // Enforce max-client cap: evict least-recently-used entry if at capacity.
     if (pool.size >= MAX_CACHED_CLIENTS) {
         evictLRU();
@@ -189,6 +201,18 @@ async function cleanupPool() {
 }
 
 /**
+ * Close and forget the pooled client for one connection (e.g. after the
+ * stored connection was re-saved with a different dbName).
+ * @param {string} connectionId
+ */
+async function evictUserDb(connectionId) {
+    const entry = pool.get(connectionId);
+    if (!entry) return;
+    pool.delete(connectionId);
+    await safeClose(entry.client);
+}
+
+/**
  * Get the current pool size (useful for health checks / diagnostics).
  * @returns {number}
  */
@@ -196,4 +220,4 @@ function getPoolSize() {
     return pool.size;
 }
 
-module.exports = { getUserDb, cleanupPool, getPoolSize };
+module.exports = { getUserDb, evictUserDb, cleanupPool, getPoolSize };

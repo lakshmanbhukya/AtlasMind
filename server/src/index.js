@@ -5,7 +5,7 @@ const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const path = require("path");
-const { connectToDatabase } = require("./db/connection");
+const { connectToDatabase, closeConnection } = require("./db/connection");
 const { initializeCollection } = require("./models/UserConnection");
 const { initializeCollection: initializeWorkspaceCollection } = require("./models/Workspace");
 const { initializeCleanupIndexes, startCleanupCron } = require("./services/cleanupService");
@@ -161,11 +161,17 @@ async function startServer() {
       console.log(`   Health:      http://localhost:${PORT}/api/health\n`);
     });
 
-    // Graceful shutdown: close user DB pool alongside the central DB connection
+    // Graceful shutdown (the only signal handler): stop accepting requests,
+    // close the user DB pool, then the central DB connection.
+    let shuttingDown = false;
     const shutdown = async () => {
+      if (shuttingDown) return;
+      shuttingDown = true;
       console.log("\n🛑 Shutting down gracefully...");
-      await cleanupPool();
       server.close();
+      await cleanupPool();
+      await closeConnection();
+      process.exit(0);
     };
     process.on("SIGINT", shutdown);
     process.on("SIGTERM", shutdown);

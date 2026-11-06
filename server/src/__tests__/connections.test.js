@@ -5,7 +5,9 @@ const request = require('supertest');
 const cookieParser = require('cookie-parser');
 const connectionRouter = require('../routes/connections');
 const userConnectionModel = require('../models/UserConnection');
-const { signToken } = require('../utils/jwt');
+const jwt = require('jsonwebtoken');
+
+const signToken = (connectionId) => jwt.sign({ connectionId }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
 describe('B2: routes/connections.js GET /:connectionId authorization', () => {
     let app;

@@ -218,7 +218,6 @@ export default function AtlasChatPanel({
   selectedCollections = [],
   onSetCollections,
   onChangeScopeMode,
-  onSelectWorkspace,
 }) {
   const { 
     messages, 

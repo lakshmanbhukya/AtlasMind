@@ -30,27 +30,19 @@ function getBucket(modelId) {
 }
 
 function resolveModelsFilePath() {
-    const candidatePaths = [
-        path.resolve(process.cwd(), 'eval2/models.json'),
-        path.resolve(__dirname, '../../../eval2/models.json'),
-        path.resolve(__dirname, '../../eval2/models.json'),
-    ];
-    for (const p of candidatePaths) {
-        if (fs.existsSync(p)) return p;
-    }
-    return candidatePaths[0];
+    const rootPath = path.resolve(__dirname, '../../../eval2/models.json');
+    if (fs.existsSync(rootPath)) return rootPath;
+    const cwdPath = path.resolve(process.cwd(), 'eval2/models.json');
+    if (fs.existsSync(cwdPath)) return cwdPath;
+    return rootPath;
 }
 
 function resolveStateFilePath() {
-    const candidateDirs = [
-        path.resolve(process.cwd(), 'eval2/state'),
-        path.resolve(__dirname, '../../../eval2/state'),
-        path.resolve(__dirname, '../../eval2/state'),
-    ];
-    for (const d of candidateDirs) {
-        if (fs.existsSync(d)) return path.join(d, 'usage.json');
-    }
-    return path.join(candidateDirs[0], 'usage.json');
+    const rootDir = path.resolve(__dirname, '../../../eval2/state');
+    if (fs.existsSync(rootDir)) return path.join(rootDir, 'usage.json');
+    const cwdDir = path.resolve(process.cwd(), 'eval2/state');
+    if (fs.existsSync(cwdDir)) return path.join(cwdDir, 'usage.json');
+    return path.join(rootDir, 'usage.json');
 }
 
 function loadModelsConfig() {

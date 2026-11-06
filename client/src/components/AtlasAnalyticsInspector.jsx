@@ -3,7 +3,7 @@ import { Clock, Brain, Search, Download, ChevronLeft, BarChart2, ChevronDown, Fi
 import { Button } from "./ui/button";
 import { cn } from "../lib/utils";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line, PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
-import { exportQueryResults, fetchSchema } from "../services/api";
+import { exportQueryResults } from "../services/api";
 import { useSchema } from "../hooks/useSchema";
 
 /**
@@ -174,14 +174,14 @@ export default function AtlasAnalyticsInspector({ lastMessage }) {
     toggleCollection 
   } = useSchema();
 
-  const collections = schema?.collections || [];
   const [schemaSearch, setSchemaSearch] = useState("");
 
   const filteredSchema = useMemo(() => {
+    const collections = schema?.collections || [];
     if (!schemaSearch.trim()) return collections;
     const q = schemaSearch.toLowerCase();
     return collections.filter(c => c.name.toLowerCase().includes(q));
-  }, [collections, schemaSearch]);
+  }, [schema?.collections, schemaSearch]);
 
   // Export: POST to /api/query/export
   const handleExport = async () => {

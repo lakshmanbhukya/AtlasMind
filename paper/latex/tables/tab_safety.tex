@@ -8,14 +8,14 @@
 \toprule
 \textbf{Threat / Pipeline Category} & \textbf{Evaluated ($n$)} & \textbf{Blocked Rate [95\% CI]} & \textbf{False Negatives} \\
 \midrule
-Adversarial Pipelines (Author-Written Suite)$^{\dagger}$ & 135 & 100.0%~{\scriptsize[97.2%, 100.0%]} & 0 \\
+Adversarial Pipelines (Author-Written Suite)$^{\dagger}$ & 135 & 100.0\%~{\scriptsize[97.2\%, 100.0\%]} & 0 \\
 \quad Arbitrary Code Execution (\texttt{\$where}, \texttt{\$function}) & 15 & 100.0\% & 0 \\
 \quad Mutating Stages (\texttt{\$out}, \texttt{\$merge}, \texttt{\$delete}) & 14 & 100.0\% & 0 \\
 \quad Restricted Admin Operations (\texttt{\$collStats}, \texttt{\$currentOp}) & 6 & 100.0\% & 0 \\
 \quad Cross-Scope Data Leaks (\texttt{\$lookup}, \texttt{\$unionWith}) & 50 & 100.0\% & 0 \\
 \quad Obfuscated \& Nested Injection Stages & 34 & 100.0\% & 0 \\
 \midrule
-Benign Analytical Queries (Specificity) & 124 & 100.0%~{\scriptsize[97.0%, 100.0%]} & 0 (Allowed) \\
+Benign Analytical Queries (Specificity) & 124 & 100.0\%~{\scriptsize[97.0\%, 100.0\%]} & 0 (Allowed) \\
 \midrule
 \textbf{Cryptographic Replay Defenses} & \multicolumn{3}{c}{\textbf{Automated API Verification (5/5 Passed)}} \\
 Session Mismatch Replay & \multicolumn{3}{c}{100\% Blocked (HTTP 403 Forbidden)} \\

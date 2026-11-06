@@ -1,0 +1,18 @@
+{
+  "source": "https://groq.com/pricing",
+  "retrievedAt": "2026-10-13",
+  "models": {
+    "openai/gpt-oss-120b": {
+      "promptPerMillion": 0.15,
+      "completionPerMillion": 0.75
+    },
+    "openai/gpt-oss-20b": {
+      "promptPerMillion": 0.075,
+      "completionPerMillion": 0.30
+    },
+    "qwen/qwen3.8-27b": {
+      "promptPerMillion": 0.10,
+      "completionPerMillion": 0.40
+    }
+  }
+}

@@ -20,7 +20,6 @@ import { Badge } from './ui/badge';
 export default function ScopeInsufficientCard({
     naturalLanguage,
     suggestedCollections = [],
-    currentScope = [],
     onAddAndRerun,
     onRunAll,
     isLoading = false,

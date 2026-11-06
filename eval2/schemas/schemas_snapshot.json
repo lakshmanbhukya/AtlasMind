@@ -1,0 +1,1288 @@
+{
+  "sample_supplies": {
+    "database": "sample_supplies",
+    "collections": [
+      {
+        "name": "sales",
+        "documentCount": 1,
+        "fields": [
+          {
+            "name": "saleDate",
+            "type": "date",
+            "sample": "2015-03-23T21:06:49.506Z"
+          },
+          {
+            "name": "items",
+            "type": "array",
+            "sample": [
+              {
+                "name": "printer paper",
+                "tags": [
+                  "office",
+                  "stationary"
+                ],
+                "price": {
+                  "val": "40.01",
+                  "_bsontype": "Decimal128"
+                },
+                "quantity": 2
+              },
+              {
+                "name": "envelopes",
+                "tags": [
+                  "office",
+                  "stationary"
+                ],
+                "price": {
+                  "val": "19.95",
+                  "_bsontype": "Decimal128"
+                },
+                "quantity": 8
+              }
+            ]
+          },
+          {
+            "name": "items[].name",
+            "type": "string",
+            "sample": "printer paper",
+            "isArrayItem": true,
+            "parentArray": "items"
+          },
+          {
+            "name": "items[].tags",
+            "type": "array",
+            "sample": "[\"office\",\"stationary\"]",
+            "isArrayItem": true,
+            "parentArray": "items"
+          },
+          {
+            "name": "items[].price",
+            "type": "decimal",
+            "sample": "{\"val\":\"40.01\",\"_bsontype\":\"Decimal128\"}",
+            "isArrayItem": true,
+            "parentArray": "items"
+          },
+          {
+            "name": "items[].quantity",
+            "type": "number",
+            "sample": 2,
+            "isArrayItem": true,
+            "parentArray": "items"
+          },
+          {
+            "name": "storeLocation",
+            "type": "string",
+            "sample": "Denver"
+          },
+          {
+            "name": "customer",
+            "type": "object",
+            "sample": "{\"gender\":\"M\",\"age\":42,\"email\":\"customer@example.c"
+          },
+          {
+            "name": "customer.gender",
+            "type": "string",
+            "sample": "M"
+          },
+          {
+            "name": "customer.age",
+            "type": "number",
+            "sample": 42
+          },
+          {
+            "name": "customer.email",
+            "type": "string",
+            "sample": "customer@example.com"
+          },
+          {
+            "name": "customer.satisfaction",
+            "type": "number",
+            "sample": 4
+          },
+          {
+            "name": "couponUsed",
+            "type": "boolean",
+            "sample": true
+          },
+          {
+            "name": "purchaseMethod",
+            "type": "string",
+            "sample": "Online"
+          }
+        ],
+        "sampleDocumentCount": 1
+      }
+    ],
+    "profiledAt": "2026-10-13T17:04:22.194Z",
+    "minified": "Database: sample_supplies\n\nCollection: sales (1 docs)\nFields:\n  - saleDate (date) e.g. 2015-03-23T21:06:49.506Z\n  - items (array) e.g. [{\"name\":\"printer paper\",\"tags\":[\"office\",\"stationary\"],\"price\":{\"val\":\"40.01\",\"_bsontype\":\"Decimal128\"},\"quantity\":2},{\"name\":\"envelopes\",\"tags\":[\"office\",\"stationary\"],\"price\":{\"val\":\"19.95\",\"_bsontype\":\"Decimal128\"},\"quantity\":8}]\n  - storeLocation (string) e.g. Denver\n  - customer (object) e.g. {\"gender\":\"M\",\"age\":42,\"email\":\"customer@example.c\n  - customer.gender (string) e.g. M\n  - customer.age (number) e.g. 42\n  - customer.email (string) e.g. customer@example.com\n  - customer.satisfaction (number) e.g. 4\n  - couponUsed (boolean) e.g. true\n  - purchaseMethod (string) e.g. Online\n  Array sub-fields (use $unwind on parent array before grouping):\n    - items[].name (string) e.g. printer paper\n    - items[].tags (array) e.g. [\"office\",\"stationary\"]\n    - items[].price (decimal) e.g. {\"val\":\"40.01\",\"_bsontype\":\"Decimal128\"}\n    - items[].quantity (number) e.g. 2",
+    "numericCandidatesByCollection": {
+      "sales": {
+        "allFields": [
+          {
+            "name": "saleDate",
+            "type": "date",
+            "sample": "2015-03-23T21:06:49.506Z",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "items",
+            "type": "array",
+            "sample": [
+              {
+                "name": "printer paper",
+                "tags": [
+                  "office",
+                  "stationary"
+                ],
+                "price": {
+                  "val": "40.01",
+                  "_bsontype": "Decimal128"
+                },
+                "quantity": 2
+              },
+              {
+                "name": "envelopes",
+                "tags": [
+                  "office",
+                  "stationary"
+                ],
+                "price": {
+                  "val": "19.95",
+                  "_bsontype": "Decimal128"
+                },
+                "quantity": 8
+              }
+            ],
+            "isMetricCandidate": true
+          },
+          {
+            "name": "items[].name",
+            "type": "string",
+            "sample": "printer paper",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "items[].tags",
+            "type": "array",
+            "sample": "[\"office\",\"stationary\"]",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "items[].price",
+            "type": "decimal",
+            "sample": "{\"val\":\"40.01\",\"_bsontype\":\"Decimal128\"}",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "items[].quantity",
+            "type": "number",
+            "sample": 2,
+            "isMetricCandidate": true
+          },
+          {
+            "name": "storeLocation",
+            "type": "string",
+            "sample": "Denver",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "customer",
+            "type": "object",
+            "sample": "{\"gender\":\"M\",\"age\":42,\"email\":\"customer@example.c",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "customer.gender",
+            "type": "string",
+            "sample": "M",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "customer.age",
+            "type": "number",
+            "sample": 42,
+            "isMetricCandidate": true
+          },
+          {
+            "name": "customer.email",
+            "type": "string",
+            "sample": "customer@example.com",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "customer.satisfaction",
+            "type": "number",
+            "sample": 4,
+            "isMetricCandidate": true
+          },
+          {
+            "name": "couponUsed",
+            "type": "boolean",
+            "sample": true,
+            "isMetricCandidate": true
+          },
+          {
+            "name": "purchaseMethod",
+            "type": "string",
+            "sample": "Online",
+            "isMetricCandidate": true
+          }
+        ],
+        "numericCandidates": [
+          "items[].price",
+          "items[].quantity",
+          "customer.age",
+          "customer.satisfaction"
+        ]
+      }
+    }
+  },
+  "sample_analytics": {
+    "database": "sample_analytics",
+    "collections": [
+      {
+        "name": "accounts",
+        "documentCount": 1,
+        "fields": [
+          {
+            "name": "account_id",
+            "type": "number",
+            "sample": 371138
+          },
+          {
+            "name": "limit",
+            "type": "number",
+            "sample": 9000
+          },
+          {
+            "name": "products",
+            "type": "array",
+            "sample": [
+              "Derivatives",
+              "Commodity",
+              "InvestmentStock"
+            ]
+          }
+        ],
+        "sampleDocumentCount": 1
+      },
+      {
+        "name": "customers",
+        "documentCount": 1,
+        "fields": [
+          {
+            "name": "username",
+            "type": "string",
+            "sample": "fmiller"
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "sample": "Elizabeth Ray"
+          },
+          {
+            "name": "address",
+            "type": "string",
+            "sample": "9286 Quentin Road, North Sharon, CA 95230"
+          },
+          {
+            "name": "birthdate",
+            "type": "date",
+            "sample": "1977-03-02T02:20:31.000Z"
+          },
+          {
+            "name": "email",
+            "type": "string",
+            "sample": "elizray@yahoo.com"
+          },
+          {
+            "name": "accounts",
+            "type": "array",
+            "sample": [
+              371138
+            ]
+          },
+          {
+            "name": "tier_and_details",
+            "type": "object",
+            "sample": "{\"tier\":\"Bronze\",\"active\":true,\"benefits\":[\"airlin"
+          },
+          {
+            "name": "tier_and_details.tier",
+            "type": "string",
+            "sample": "Bronze"
+          },
+          {
+            "name": "tier_and_details.active",
+            "type": "boolean",
+            "sample": true
+          },
+          {
+            "name": "tier_and_details.benefits",
+            "type": "array",
+            "sample": "[\"airline lounge access\"]"
+          }
+        ],
+        "sampleDocumentCount": 1
+      },
+      {
+        "name": "transactions",
+        "documentCount": 1,
+        "fields": [
+          {
+            "name": "account_id",
+            "type": "number",
+            "sample": 371138
+          },
+          {
+            "name": "transaction_count",
+            "type": "number",
+            "sample": 4
+          },
+          {
+            "name": "bucket_start_date",
+            "type": "date",
+            "sample": "2011-09-08T00:00:00.000Z"
+          },
+          {
+            "name": "bucket_end_date",
+            "type": "date",
+            "sample": "2016-12-14T00:00:00.000Z"
+          },
+          {
+            "name": "transactions",
+            "type": "array",
+            "sample": [
+              {
+                "date": "2011-09-08T00:00:00.000Z",
+                "amount": 7434,
+                "transaction_code": "buy",
+                "symbol": "ebay",
+                "price": "14.004456900742194",
+                "total": "104109.132599717468"
+              },
+              {
+                "date": "2012-04-12T00:00:00.000Z",
+                "amount": 2100,
+                "transaction_code": "sell",
+                "symbol": "team",
+                "price": "25.50",
+                "total": "53550.00"
+              }
+            ]
+          },
+          {
+            "name": "transactions[].date",
+            "type": "date",
+            "sample": "2011-09-08T00:00:00.000Z",
+            "isArrayItem": true,
+            "parentArray": "transactions"
+          },
+          {
+            "name": "transactions[].amount",
+            "type": "number",
+            "sample": 7434,
+            "isArrayItem": true,
+            "parentArray": "transactions"
+          },
+          {
+            "name": "transactions[].transaction_code",
+            "type": "string",
+            "sample": "buy",
+            "isArrayItem": true,
+            "parentArray": "transactions"
+          },
+          {
+            "name": "transactions[].symbol",
+            "type": "string",
+            "sample": "ebay",
+            "isArrayItem": true,
+            "parentArray": "transactions"
+          },
+          {
+            "name": "transactions[].price",
+            "type": "string",
+            "sample": "14.004456900742194",
+            "isArrayItem": true,
+            "parentArray": "transactions"
+          },
+          {
+            "name": "transactions[].total",
+            "type": "string",
+            "sample": "104109.132599717468",
+            "isArrayItem": true,
+            "parentArray": "transactions"
+          }
+        ],
+        "sampleDocumentCount": 1
+      }
+    ],
+    "profiledAt": "2026-10-13T17:04:22.196Z",
+    "minified": "Database: sample_analytics\n\nCollection: accounts (1 docs)\nFields:\n  - account_id (number) e.g. 371138\n  - limit (number) e.g. 9000\n  - products (array) e.g. [\"Derivatives\",\"Commodity\",\"InvestmentStock\"]\n\nCollection: customers (1 docs)\nFields:\n  - username (string) e.g. fmiller\n  - name (string) e.g. Elizabeth Ray\n  - address (string) e.g. 9286 Quentin Road, North Sharon, CA 95230\n  - birthdate (date) e.g. 1977-03-02T02:20:31.000Z\n  - email (string) e.g. elizray@yahoo.com\n  - accounts (array) e.g. [371138]\n  - tier_and_details (object) e.g. {\"tier\":\"Bronze\",\"active\":true,\"benefits\":[\"airlin\n  - tier_and_details.tier (string) e.g. Bronze\n  - tier_and_details.active (boolean) e.g. true\n  - tier_and_details.benefits (array) e.g. [\"airline lounge access\"]\n\nCollection: transactions (1 docs)\nFields:\n  - account_id (number) e.g. 371138\n  - transaction_count (number) e.g. 4\n  - bucket_start_date (date) e.g. 2011-09-08T00:00:00.000Z\n  - bucket_end_date (date) e.g. 2016-12-14T00:00:00.000Z\n  - transactions (array) e.g. [{\"date\":\"2011-09-08T00:00:00.000Z\",\"amount\":7434,\"transaction_code\":\"buy\",\"symbol\":\"ebay\",\"price\":\"14.004456900742194\",\"total\":\"104109.132599717468\"},{\"date\":\"2012-04-12T00:00:00.000Z\",\"amount\":2100,\"transaction_code\":\"sell\",\"symbol\":\"team\",\"price\":\"25.50\",\"total\":\"53550.00\"}]\n  Array sub-fields (use $unwind on parent array before grouping):\n    - transactions[].date (date) e.g. 2011-09-08T00:00:00.000Z\n    - transactions[].amount (number) e.g. 7434\n    - transactions[].transaction_code (string) e.g. buy\n    - transactions[].symbol (string) e.g. ebay\n    - transactions[].price (string) e.g. 14.004456900742194\n    - transactions[].total (string) e.g. 104109.132599717468\n\nLikely relationships (inferred hints, not facts):\n- transactions.account_id -> accounts._id",
+    "numericCandidatesByCollection": {
+      "accounts": {
+        "allFields": [
+          {
+            "name": "account_id",
+            "type": "number",
+            "sample": 371138,
+            "isMetricCandidate": false
+          },
+          {
+            "name": "limit",
+            "type": "number",
+            "sample": 9000,
+            "isMetricCandidate": true
+          },
+          {
+            "name": "products",
+            "type": "array",
+            "sample": [
+              "Derivatives",
+              "Commodity",
+              "InvestmentStock"
+            ],
+            "isMetricCandidate": true
+          }
+        ],
+        "numericCandidates": [
+          "limit"
+        ]
+      },
+      "customers": {
+        "allFields": [
+          {
+            "name": "username",
+            "type": "string",
+            "sample": "fmiller",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "sample": "Elizabeth Ray",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "address",
+            "type": "string",
+            "sample": "9286 Quentin Road, North Sharon, CA 95230",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "birthdate",
+            "type": "date",
+            "sample": "1977-03-02T02:20:31.000Z",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "email",
+            "type": "string",
+            "sample": "elizray@yahoo.com",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "accounts",
+            "type": "array",
+            "sample": [
+              371138
+            ],
+            "isMetricCandidate": true
+          },
+          {
+            "name": "tier_and_details",
+            "type": "object",
+            "sample": "{\"tier\":\"Bronze\",\"active\":true,\"benefits\":[\"airlin",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "tier_and_details.tier",
+            "type": "string",
+            "sample": "Bronze",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "tier_and_details.active",
+            "type": "boolean",
+            "sample": true,
+            "isMetricCandidate": true
+          },
+          {
+            "name": "tier_and_details.benefits",
+            "type": "array",
+            "sample": "[\"airline lounge access\"]",
+            "isMetricCandidate": true
+          }
+        ],
+        "numericCandidates": []
+      },
+      "transactions": {
+        "allFields": [
+          {
+            "name": "account_id",
+            "type": "number",
+            "sample": 371138,
+            "isMetricCandidate": false
+          },
+          {
+            "name": "transaction_count",
+            "type": "number",
+            "sample": 4,
+            "isMetricCandidate": true
+          },
+          {
+            "name": "bucket_start_date",
+            "type": "date",
+            "sample": "2011-09-08T00:00:00.000Z",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "bucket_end_date",
+            "type": "date",
+            "sample": "2016-12-14T00:00:00.000Z",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "transactions",
+            "type": "array",
+            "sample": [
+              {
+                "date": "2011-09-08T00:00:00.000Z",
+                "amount": 7434,
+                "transaction_code": "buy",
+                "symbol": "ebay",
+                "price": "14.004456900742194",
+                "total": "104109.132599717468"
+              },
+              {
+                "date": "2012-04-12T00:00:00.000Z",
+                "amount": 2100,
+                "transaction_code": "sell",
+                "symbol": "team",
+                "price": "25.50",
+                "total": "53550.00"
+              }
+            ],
+            "isMetricCandidate": true
+          },
+          {
+            "name": "transactions[].date",
+            "type": "date",
+            "sample": "2011-09-08T00:00:00.000Z",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "transactions[].amount",
+            "type": "number",
+            "sample": 7434,
+            "isMetricCandidate": true
+          },
+          {
+            "name": "transactions[].transaction_code",
+            "type": "string",
+            "sample": "buy",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "transactions[].symbol",
+            "type": "string",
+            "sample": "ebay",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "transactions[].price",
+            "type": "string",
+            "sample": "14.004456900742194",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "transactions[].total",
+            "type": "string",
+            "sample": "104109.132599717468",
+            "isMetricCandidate": true
+          }
+        ],
+        "numericCandidates": [
+          "transaction_count",
+          "transactions[].amount"
+        ]
+      }
+    }
+  },
+  "sample_mflix": {
+    "database": "sample_mflix",
+    "collections": [
+      {
+        "name": "movies",
+        "documentCount": 1,
+        "fields": [
+          {
+            "name": "title",
+            "type": "string",
+            "sample": "The Great Train Robbery"
+          },
+          {
+            "name": "year",
+            "type": "number",
+            "sample": 1903
+          },
+          {
+            "name": "runtime",
+            "type": "number",
+            "sample": 11
+          },
+          {
+            "name": "cast",
+            "type": "array",
+            "sample": [
+              "A.C. Abadie",
+              "Gilbert M. Anderson"
+            ]
+          },
+          {
+            "name": "num_mflix_comments",
+            "type": "number",
+            "sample": 1
+          },
+          {
+            "name": "poster",
+            "type": "string",
+            "sample": "https://m.media-amazon.com/images/M/poster.jpg"
+          },
+          {
+            "name": "plot",
+            "type": "string",
+            "sample": "A group of bandits stage a brazen train hold-up."
+          },
+          {
+            "name": "fullplot",
+            "type": "string",
+            "sample": "A group of bandits stage a brazen train hold-up, only for a ..."
+          },
+          {
+            "name": "lastupdated",
+            "type": "string",
+            "sample": "2015-08-13 00:30:59.000000000"
+          },
+          {
+            "name": "type",
+            "type": "string",
+            "sample": "movie"
+          },
+          {
+            "name": "directors",
+            "type": "array",
+            "sample": [
+              "Edwin S. Porter"
+            ]
+          },
+          {
+            "name": "rated",
+            "type": "string",
+            "sample": "TV-G"
+          },
+          {
+            "name": "awards",
+            "type": "object",
+            "sample": "{\"wins\":1,\"nominations\":0,\"text\":\"1 win.\"}"
+          },
+          {
+            "name": "awards.wins",
+            "type": "number",
+            "sample": 1
+          },
+          {
+            "name": "awards.nominations",
+            "type": "number",
+            "sample": 0
+          },
+          {
+            "name": "awards.text",
+            "type": "string",
+            "sample": "1 win."
+          },
+          {
+            "name": "imdb",
+            "type": "object",
+            "sample": "{\"rating\":7.4,\"votes\":9847,\"id\":439}"
+          },
+          {
+            "name": "imdb.rating",
+            "type": "number",
+            "sample": 7.4
+          },
+          {
+            "name": "imdb.votes",
+            "type": "number",
+            "sample": 9847
+          },
+          {
+            "name": "imdb.id",
+            "type": "number",
+            "sample": 439
+          },
+          {
+            "name": "countries",
+            "type": "array",
+            "sample": [
+              "USA"
+            ]
+          },
+          {
+            "name": "genres",
+            "type": "array",
+            "sample": [
+              "Short",
+              "Western"
+            ]
+          },
+          {
+            "name": "metacritic",
+            "type": "number",
+            "sample": 75
+          },
+          {
+            "name": "tomatoes",
+            "type": "object",
+            "sample": "{\"viewer\":{\"rating\":3.7,\"numReviews\":2559,\"meter\":"
+          },
+          {
+            "name": "tomatoes.viewer",
+            "type": "object",
+            "sample": "{\"rating\":3.7,\"numReviews\":2559,\"meter\":73}"
+          },
+          {
+            "name": "tomatoes.viewer.rating",
+            "type": "number",
+            "sample": 3.7
+          },
+          {
+            "name": "tomatoes.viewer.numReviews",
+            "type": "number",
+            "sample": 2559
+          },
+          {
+            "name": "tomatoes.viewer.meter",
+            "type": "number",
+            "sample": 73
+          },
+          {
+            "name": "tomatoes.critic",
+            "type": "object",
+            "sample": "{\"rating\":7.6,\"numReviews\":6,\"meter\":100}"
+          },
+          {
+            "name": "tomatoes.critic.rating",
+            "type": "number",
+            "sample": 7.6
+          },
+          {
+            "name": "tomatoes.critic.numReviews",
+            "type": "number",
+            "sample": 6
+          },
+          {
+            "name": "tomatoes.critic.meter",
+            "type": "number",
+            "sample": 100
+          },
+          {
+            "name": "tomatoes.fresh",
+            "type": "number",
+            "sample": 6
+          },
+          {
+            "name": "tomatoes.rotten",
+            "type": "number",
+            "sample": 0
+          },
+          {
+            "name": "tomatoes.consensus",
+            "type": "string",
+            "sample": "A landmark in early narrative filmmaking."
+          },
+          {
+            "name": "tomatoes.lastUpdated",
+            "type": "date",
+            "sample": "2015-08-08T19:16:10.000Z"
+          }
+        ],
+        "sampleDocumentCount": 1
+      },
+      {
+        "name": "comments",
+        "documentCount": 1,
+        "fields": [
+          {
+            "name": "name",
+            "type": "string",
+            "sample": "[REDACTED_PRIVACY_LIMITATION]"
+          },
+          {
+            "name": "email",
+            "type": "string",
+            "sample": "[REDACTED_PRIVACY_LIMITATION]"
+          },
+          {
+            "name": "movie_id",
+            "type": "string",
+            "sample": "573a1390f29313caabcd4135"
+          },
+          {
+            "name": "text",
+            "type": "string",
+            "sample": "Eius veritatis cupiditate laboriosam..."
+          },
+          {
+            "name": "date",
+            "type": "date",
+            "sample": "2002-08-18T04:56:07.000Z"
+          }
+        ],
+        "sampleDocumentCount": 1
+      },
+      {
+        "name": "theaters",
+        "documentCount": 1,
+        "fields": [
+          {
+            "name": "theaterId",
+            "type": "number",
+            "sample": 1000
+          },
+          {
+            "name": "location",
+            "type": "object",
+            "sample": "{\"address\":{\"street1\":\"340 W University Dr\",\"city\""
+          },
+          {
+            "name": "location.address",
+            "type": "object",
+            "sample": "{\"street1\":\"340 W University Dr\",\"city\":\"Tempe\",\"s"
+          },
+          {
+            "name": "location.address.street1",
+            "type": "string",
+            "sample": "340 W University Dr"
+          },
+          {
+            "name": "location.address.city",
+            "type": "string",
+            "sample": "Tempe"
+          },
+          {
+            "name": "location.address.state",
+            "type": "string",
+            "sample": "AZ"
+          },
+          {
+            "name": "location.address.zipcode",
+            "type": "string",
+            "sample": "85281"
+          },
+          {
+            "name": "location.geo",
+            "type": "object",
+            "sample": "{\"type\":\"Point\",\"coordinates\":[-111.9442,33.4223]}"
+          },
+          {
+            "name": "location.geo.type",
+            "type": "string",
+            "sample": "Point"
+          },
+          {
+            "name": "location.geo.coordinates",
+            "type": "array",
+            "sample": "[-111.9442,33.4223]"
+          }
+        ],
+        "sampleDocumentCount": 1
+      },
+      {
+        "name": "users",
+        "documentCount": 1,
+        "fields": [
+          {
+            "name": "name",
+            "type": "string",
+            "sample": "[REDACTED_PRIVACY_LIMITATION]"
+          },
+          {
+            "name": "email",
+            "type": "string",
+            "sample": "[REDACTED_PRIVACY_LIMITATION]"
+          }
+        ],
+        "sampleDocumentCount": 1
+      }
+    ],
+    "profiledAt": "2026-10-13T17:04:22.199Z",
+    "minified": "Database: sample_mflix\n\nCollection: movies (1 docs)\nFields:\n  - title (string) e.g. The Great Train Robbery\n  - year (number) e.g. 1903\n  - runtime (number) e.g. 11\n  - cast (array) e.g. [\"A.C. Abadie\",\"Gilbert M. Anderson\"]\n  - num_mflix_comments (number) e.g. 1\n  - poster (string) e.g. https://m.media-amazon.com/images/M/poster.jpg\n  - plot (string) e.g. A group of bandits stage a brazen train hold-up.\n  - fullplot (string) e.g. A group of bandits stage a brazen train hold-up, only for a ...\n  - lastupdated (string) e.g. 2015-08-13 00:30:59.000000000\n  - type (string) e.g. movie\n  - directors (array) e.g. [\"Edwin S. Porter\"]\n  - rated (string) e.g. TV-G\n  - awards (object) e.g. {\"wins\":1,\"nominations\":0,\"text\":\"1 win.\"}\n  - awards.wins (number) e.g. 1\n  - awards.nominations (number) e.g. 0\n  - awards.text (string) e.g. 1 win.\n  - imdb (object) e.g. {\"rating\":7.4,\"votes\":9847,\"id\":439}\n  - imdb.rating (number) e.g. 7.4\n  - imdb.votes (number) e.g. 9847\n  - imdb.id (number) e.g. 439\n  - countries (array) e.g. [\"USA\"]\n  - genres (array) e.g. [\"Short\",\"Western\"]\n  - metacritic (number) e.g. 75\n  - tomatoes (object) e.g. {\"viewer\":{\"rating\":3.7,\"numReviews\":2559,\"meter\":\n  - tomatoes.viewer (object) e.g. {\"rating\":3.7,\"numReviews\":2559,\"meter\":73}\n  - tomatoes.viewer.rating (number) e.g. 3.7\n  - tomatoes.viewer.numReviews (number) e.g. 2559\n  - tomatoes.viewer.meter (number) e.g. 73\n  - tomatoes.critic (object) e.g. {\"rating\":7.6,\"numReviews\":6,\"meter\":100}\n  - tomatoes.critic.rating (number) e.g. 7.6\n  - tomatoes.critic.numReviews (number) e.g. 6\n  - tomatoes.critic.meter (number) e.g. 100\n  - tomatoes.fresh (number) e.g. 6\n  - tomatoes.rotten (number) e.g. 0\n  - tomatoes.consensus (string) e.g. A landmark in early narrative filmmaking.\n  - tomatoes.lastUpdated (date) e.g. 2015-08-08T19:16:10.000Z\n\nCollection: comments (1 docs)\nFields:\n  - name (string) e.g. [REDACTED_PRIVACY_LIMITATION]\n  - email (string) e.g. [REDACTED_PRIVACY_LIMITATION]\n  - movie_id (string) e.g. 573a1390f29313caabcd4135\n  - text (string) e.g. Eius veritatis cupiditate laboriosam...\n  - date (date) e.g. 2002-08-18T04:56:07.000Z\n\nCollection: theaters (1 docs)\nFields:\n  - theaterId (number) e.g. 1000\n  - location (object) e.g. {\"address\":{\"street1\":\"340 W University Dr\",\"city\"\n  - location.address (object) e.g. {\"street1\":\"340 W University Dr\",\"city\":\"Tempe\",\"s\n  - location.address.street1 (string) e.g. 340 W University Dr\n  - location.address.city (string) e.g. Tempe\n  - location.address.state (string) e.g. AZ\n  - location.address.zipcode (string) e.g. 85281\n  - location.geo (object) e.g. {\"type\":\"Point\",\"coordinates\":[-111.9442,33.4223]}\n  - location.geo.type (string) e.g. Point\n  - location.geo.coordinates (array) e.g. [-111.9442,33.4223]\n\nCollection: users (1 docs)\nFields:\n  - name (string) e.g. [REDACTED_PRIVACY_LIMITATION]\n  - email (string) e.g. [REDACTED_PRIVACY_LIMITATION]\n\nLikely relationships (inferred hints, not facts):\n- comments.movie_id -> movies._id",
+    "numericCandidatesByCollection": {
+      "movies": {
+        "allFields": [
+          {
+            "name": "title",
+            "type": "string",
+            "sample": "The Great Train Robbery",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "year",
+            "type": "number",
+            "sample": 1903,
+            "isMetricCandidate": false
+          },
+          {
+            "name": "runtime",
+            "type": "number",
+            "sample": 11,
+            "isMetricCandidate": true
+          },
+          {
+            "name": "cast",
+            "type": "array",
+            "sample": [
+              "A.C. Abadie",
+              "Gilbert M. Anderson"
+            ],
+            "isMetricCandidate": true
+          },
+          {
+            "name": "num_mflix_comments",
+            "type": "number",
+            "sample": 1,
+            "isMetricCandidate": true
+          },
+          {
+            "name": "poster",
+            "type": "string",
+            "sample": "https://m.media-amazon.com/images/M/poster.jpg",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "plot",
+            "type": "string",
+            "sample": "A group of bandits stage a brazen train hold-up.",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "fullplot",
+            "type": "string",
+            "sample": "A group of bandits stage a brazen train hold-up, only for a ...",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "lastupdated",
+            "type": "string",
+            "sample": "2015-08-13 00:30:59.000000000",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "type",
+            "type": "string",
+            "sample": "movie",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "directors",
+            "type": "array",
+            "sample": [
+              "Edwin S. Porter"
+            ],
+            "isMetricCandidate": true
+          },
+          {
+            "name": "rated",
+            "type": "string",
+            "sample": "TV-G",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "awards",
+            "type": "object",
+            "sample": "{\"wins\":1,\"nominations\":0,\"text\":\"1 win.\"}",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "awards.wins",
+            "type": "number",
+            "sample": 1,
+            "isMetricCandidate": true
+          },
+          {
+            "name": "awards.nominations",
+            "type": "number",
+            "sample": 0,
+            "isMetricCandidate": true
+          },
+          {
+            "name": "awards.text",
+            "type": "string",
+            "sample": "1 win.",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "imdb",
+            "type": "object",
+            "sample": "{\"rating\":7.4,\"votes\":9847,\"id\":439}",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "imdb.rating",
+            "type": "number",
+            "sample": 7.4,
+            "isMetricCandidate": true
+          },
+          {
+            "name": "imdb.votes",
+            "type": "number",
+            "sample": 9847,
+            "isMetricCandidate": true
+          },
+          {
+            "name": "imdb.id",
+            "type": "number",
+            "sample": 439,
+            "isMetricCandidate": false
+          },
+          {
+            "name": "countries",
+            "type": "array",
+            "sample": [
+              "USA"
+            ],
+            "isMetricCandidate": true
+          },
+          {
+            "name": "genres",
+            "type": "array",
+            "sample": [
+              "Short",
+              "Western"
+            ],
+            "isMetricCandidate": true
+          },
+          {
+            "name": "metacritic",
+            "type": "number",
+            "sample": 75,
+            "isMetricCandidate": true
+          },
+          {
+            "name": "tomatoes",
+            "type": "object",
+            "sample": "{\"viewer\":{\"rating\":3.7,\"numReviews\":2559,\"meter\":",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "tomatoes.viewer",
+            "type": "object",
+            "sample": "{\"rating\":3.7,\"numReviews\":2559,\"meter\":73}",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "tomatoes.viewer.rating",
+            "type": "number",
+            "sample": 3.7,
+            "isMetricCandidate": true
+          },
+          {
+            "name": "tomatoes.viewer.numReviews",
+            "type": "number",
+            "sample": 2559,
+            "isMetricCandidate": true
+          },
+          {
+            "name": "tomatoes.viewer.meter",
+            "type": "number",
+            "sample": 73,
+            "isMetricCandidate": true
+          },
+          {
+            "name": "tomatoes.critic",
+            "type": "object",
+            "sample": "{\"rating\":7.6,\"numReviews\":6,\"meter\":100}",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "tomatoes.critic.rating",
+            "type": "number",
+            "sample": 7.6,
+            "isMetricCandidate": true
+          },
+          {
+            "name": "tomatoes.critic.numReviews",
+            "type": "number",
+            "sample": 6,
+            "isMetricCandidate": true
+          },
+          {
+            "name": "tomatoes.critic.meter",
+            "type": "number",
+            "sample": 100,
+            "isMetricCandidate": true
+          },
+          {
+            "name": "tomatoes.fresh",
+            "type": "number",
+            "sample": 6,
+            "isMetricCandidate": true
+          },
+          {
+            "name": "tomatoes.rotten",
+            "type": "number",
+            "sample": 0,
+            "isMetricCandidate": true
+          },
+          {
+            "name": "tomatoes.consensus",
+            "type": "string",
+            "sample": "A landmark in early narrative filmmaking.",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "tomatoes.lastUpdated",
+            "type": "date",
+            "sample": "2015-08-08T19:16:10.000Z",
+            "isMetricCandidate": true
+          }
+        ],
+        "numericCandidates": [
+          "runtime",
+          "num_mflix_comments",
+          "awards.wins",
+          "awards.nominations",
+          "imdb.rating",
+          "imdb.votes",
+          "metacritic",
+          "tomatoes.viewer.rating",
+          "tomatoes.viewer.numReviews",
+          "tomatoes.viewer.meter",
+          "tomatoes.critic.rating",
+          "tomatoes.critic.numReviews",
+          "tomatoes.critic.meter",
+          "tomatoes.fresh",
+          "tomatoes.rotten"
+        ]
+      },
+      "comments": {
+        "allFields": [
+          {
+            "name": "name",
+            "type": "string",
+            "sample": "Mercedes Tyler",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "email",
+            "type": "string",
+            "sample": "mercedes_tyler@fakegmail.com",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "movie_id",
+            "type": "string",
+            "sample": "573a1390f29313caabcd4135",
+            "isMetricCandidate": false
+          },
+          {
+            "name": "text",
+            "type": "string",
+            "sample": "Eius veritatis cupiditate laboriosam...",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "date",
+            "type": "date",
+            "sample": "2002-08-18T04:56:07.000Z",
+            "isMetricCandidate": true
+          }
+        ],
+        "numericCandidates": []
+      },
+      "theaters": {
+        "allFields": [
+          {
+            "name": "theaterId",
+            "type": "number",
+            "sample": 1000,
+            "isMetricCandidate": false
+          },
+          {
+            "name": "location",
+            "type": "object",
+            "sample": "{\"address\":{\"street1\":\"340 W University Dr\",\"city\"",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "location.address",
+            "type": "object",
+            "sample": "{\"street1\":\"340 W University Dr\",\"city\":\"Tempe\",\"s",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "location.address.street1",
+            "type": "string",
+            "sample": "340 W University Dr",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "location.address.city",
+            "type": "string",
+            "sample": "Tempe",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "location.address.state",
+            "type": "string",
+            "sample": "AZ",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "location.address.zipcode",
+            "type": "string",
+            "sample": "85281",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "location.geo",
+            "type": "object",
+            "sample": "{\"type\":\"Point\",\"coordinates\":[-111.9442,33.4223]}",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "location.geo.type",
+            "type": "string",
+            "sample": "Point",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "location.geo.coordinates",
+            "type": "array",
+            "sample": "[-111.9442,33.4223]",
+            "isMetricCandidate": true
+          }
+        ],
+        "numericCandidates": []
+      },
+      "users": {
+        "allFields": [
+          {
+            "name": "name",
+            "type": "string",
+            "sample": "Ned Stark",
+            "isMetricCandidate": true
+          },
+          {
+            "name": "email",
+            "type": "string",
+            "sample": "ned_stark@gameofthron.es",
+            "isMetricCandidate": true
+          }
+        ],
+        "numericCandidates": []
+      }
+    }
+  }
+}

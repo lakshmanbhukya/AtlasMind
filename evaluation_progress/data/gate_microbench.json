@@ -1,0 +1,18 @@
+{
+  "iterations": 10000,
+  "warmup": 1000,
+  "unit": "microseconds",
+  "mean": 34.78,
+  "p50": 28.5,
+  "p95": 57.2,
+  "p99": 83.8,
+  "max": 3619.7,
+  "hardware": {
+    "cpuModel": "AMD Ryzen 5 5600H with Radeon Graphics         ",
+    "cores": 12,
+    "arch": "x64",
+    "platform": "win32",
+    "totalMemoryGb": "7.34"
+  },
+  "recordedAt": "2026-10-13T17:08:24.380Z"
+}

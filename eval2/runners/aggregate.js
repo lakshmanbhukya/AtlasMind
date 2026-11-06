@@ -137,6 +137,12 @@ function joinGroundTruthToRecords(records, groundTruthMap) {
       if (r.humanAmbiguous !== undefined && r.humanAmbiguous !== null && r.humanAmbiguous !== gt.humanAmbiguous) {
         console.warn(`⚠️ [GROUND TRUTH DRIFT] Record ${qId} (${r.config || 'gate'}): stored=${r.humanAmbiguous} != test_split=${gt.humanAmbiguous}`);
       }
+      if (r.annotatorAmbiguous === undefined) {
+        r.annotatorAmbiguous = Boolean(gt.humanAmbiguous);
+      }
+      if (r.designedAmbiguous === undefined) {
+        r.designedAmbiguous = r.humanAmbiguous !== undefined ? Boolean(r.humanAmbiguous) : Boolean(gt.originalGptCategory?.startsWith('AMB_'));
+      }
       r.humanAmbiguous = Boolean(gt.humanAmbiguous);
       if (gt.category) r.category = gt.category;
       if (gt.scopeCapable !== undefined) r.scopeCapable = gt.scopeCapable;
@@ -165,6 +171,7 @@ async function runAggregation(options = {}) {
     e2e: {},
     errorTaxonomy: {},
   };
+  let sensitivitySummary = null;
 
   const testSplitPath = options.testSplitPath || path.resolve(__dirname, '../benchmark/test_split.jsonl');
   let groundTruthMap = new Map();
@@ -389,14 +396,18 @@ Expired Approval Token Replay & \\multicolumn{3}{c}{100\\% Blocked (HTTP 401 Una
       C2: buildErrorTaxonomy(c2Lines),
     };
 
-    function analyzeConfig(subset) {
+    function analyzeConfig(subset, useDesigned = false) {
       const n = subset.length;
-      const ambLines = subset.filter((l) => l.humanAmbiguous);
-      const ambLexLines = subset.filter((l) => l.category === 'AMB_LEX');
-      const ambParaLines = subset.filter((l) => l.category === 'AMB_PARA');
-      const clrLines = subset.filter((l) => !l.humanAmbiguous);
+      const isAmb = (l) => Boolean(useDesigned 
+        ? (l.designedAmbiguous !== undefined ? l.designedAmbiguous : l.humanAmbiguous)
+        : (l.annotatorAmbiguous !== undefined ? l.annotatorAmbiguous : l.humanAmbiguous));
 
-      // Silent assumption = humanAmbiguous AND NOT asked AND pipeline_returned
+      const ambLines = subset.filter(isAmb);
+      const ambLexLines = ambLines.filter((l) => l.category === 'AMB_LEX');
+      const ambParaLines = ambLines.filter((l) => l.category === 'AMB_PARA');
+      const clrLines = subset.filter((l) => !isAmb(l));
+
+      // Silent assumption = Ambiguous AND NOT asked AND pipeline_returned
       const silentAmbArr = ambLines.map((l) => (l.isSilentAssumption ? 1 : 0));
       const silentLexArr = ambLexLines.map((l) => (l.isSilentAssumption ? 1 : 0));
       const silentParaArr = ambParaLines.map((l) => (l.isSilentAssumption ? 1 : 0));
@@ -459,61 +470,92 @@ Expired Approval Token Replay & \\multicolumn{3}{c}{100\\% Blocked (HTTP 401 Una
       };
     }
 
-    const c0aStats = analyzeConfig(c0aLines);
-    const c0bStats = analyzeConfig(c0bLines);
-    const c2Stats = analyzeConfig(c2Lines);
+    function computePairedEvaluation(c0aSubset, c0bSubset, c2Subset, useDesigned = false) {
+      const c0aStats = analyzeConfig(c0aSubset, useDesigned);
+      const c0bStats = analyzeConfig(c0bSubset, useDesigned);
+      const c2Stats = analyzeConfig(c2Subset, useDesigned);
 
-    // Compute exact McNemar paired test between C0b and C2 on humanAmbiguous queries (n=55)
-    const c0bAmbMap = new Map(c0bLines.filter((l) => l.humanAmbiguous).map((l) => [l.queryId, l.isSilentAssumption ? 1 : 0]));
-    const c2AmbMap = new Map(c2Lines.filter((l) => l.humanAmbiguous).map((l) => [l.queryId, l.isSilentAssumption ? 1 : 0]));
-    const c0aAmbMap = new Map(c0aLines.filter((l) => l.humanAmbiguous).map((l) => [l.queryId, l.isSilentAssumption ? 1 : 0]));
+      const isAmb = (l) => Boolean(useDesigned 
+        ? (l.designedAmbiguous !== undefined ? l.designedAmbiguous : l.humanAmbiguous)
+        : (l.annotatorAmbiguous !== undefined ? l.annotatorAmbiguous : l.humanAmbiguous));
 
-    let mcNemarB_0b = 0; // C0b = silent (1), C2 = not silent (0)
-    let mcNemarC_0b = 0; // C0b = not silent (0), C2 = silent (1)
+      const c0bAmbMap = new Map(c0bSubset.filter(isAmb).map((l) => [l.queryId, l.isSilentAssumption ? 1 : 0]));
+      const c2AmbMap = new Map(c2Subset.filter(isAmb).map((l) => [l.queryId, l.isSilentAssumption ? 1 : 0]));
+      const c0aAmbMap = new Map(c0aSubset.filter(isAmb).map((l) => [l.queryId, l.isSilentAssumption ? 1 : 0]));
 
-    let mcNemarB_0a = 0; // C0a = silent (1), C2 = not silent (0)
-    let mcNemarC_0a = 0; // C0a = not silent (0), C2 = silent (1)
+      let mcNemarB_0b = 0;
+      let mcNemarC_0b = 0;
+      let mcNemarB_0a = 0;
+      let mcNemarC_0a = 0;
 
-    const c0bPairedArr = [];
-    const c2PairedArr = [];
-    const c0aPairedArr = [];
+      const c0bPairedArr = [];
+      const c2PairedArr = [];
+      const c0aPairedArr = [];
 
-    for (const [qId, c0bSilent] of c0bAmbMap.entries()) {
-      const c2Silent = c2AmbMap.get(qId) || 0;
-      const c0aSilent = c0aAmbMap.get(qId) || 0;
+      for (const [qId, c0bSilent] of c0bAmbMap.entries()) {
+        const c2Silent = c2AmbMap.get(qId) || 0;
+        const c0aSilent = c0aAmbMap.get(qId) || 0;
 
-      c0bPairedArr.push(c0bSilent);
-      c2PairedArr.push(c2Silent);
-      c0aPairedArr.push(c0aSilent);
+        c0bPairedArr.push(c0bSilent);
+        c2PairedArr.push(c2Silent);
+        c0aPairedArr.push(c0aSilent);
 
-      if (c0bSilent && !c2Silent) mcNemarB_0b++;
-      if (!c0bSilent && c2Silent) mcNemarC_0b++;
+        if (c0bSilent && !c2Silent) mcNemarB_0b++;
+        if (!c0bSilent && c2Silent) mcNemarC_0b++;
 
-      if (c0aSilent && !c2Silent) mcNemarB_0a++;
-      if (!c0aSilent && c2Silent) mcNemarC_0a++;
+        if (c0aSilent && !c2Silent) mcNemarB_0a++;
+        if (!c0aSilent && c2Silent) mcNemarC_0a++;
+      }
+
+      const mcNemarTest_C0b_vs_C2 = computeExactMcNemar(mcNemarB_0b, mcNemarC_0b);
+      const mcNemarTest_C0a_vs_C2 = computeExactMcNemar(mcNemarB_0a, mcNemarC_0a);
+
+      const pairedBootstrap_C0b_vs_C2 = computePairedBootstrap(c0bPairedArr, c2PairedArr);
+      const pairedBootstrap_C0a_vs_C2 = computePairedBootstrap(c0aPairedArr, c2PairedArr);
+
+      return {
+        model: c0aSubset[0]?.model || 'openai/gpt-oss-120b',
+        nQueries: 100,
+        basis: useDesigned ? 'designed_labels_sensitivity (n=55)' : 'annotator_labels (n=38)',
+        c0a: c0aStats,
+        c0b: c0bStats,
+        c2: c2Stats,
+        pairedArrays: {
+          n: c0bPairedArr.length,
+          c0aPairedArr,
+          c0bPairedArr,
+          c2PairedArr,
+        },
+        pairedComparison_C0b_vs_C2: {
+          mcNemar: mcNemarTest_C0b_vs_C2,
+          pairedBootstrapDiff: pairedBootstrap_C0b_vs_C2,
+        },
+        pairedComparison_C0a_vs_C2: {
+          mcNemar: mcNemarTest_C0a_vs_C2,
+          pairedBootstrapDiff: pairedBootstrap_C0a_vs_C2,
+        },
+      };
     }
 
-    const mcNemarTest_C0b_vs_C2 = computeExactMcNemar(mcNemarB_0b, mcNemarC_0b);
-    const mcNemarTest_C0a_vs_C2 = computeExactMcNemar(mcNemarB_0a, mcNemarC_0a);
+    // 1. Primary Annotator-Label Basis (n=38 ambiguous, n=62 clear)
+    summary.e2e = computePairedEvaluation(c0aLines, c0bLines, c2Lines, false);
 
-    const pairedBootstrap_C0b_vs_C2 = computePairedBootstrap(c0bPairedArr, c2PairedArr);
-    const pairedBootstrap_C0a_vs_C2 = computePairedBootstrap(c0aPairedArr, c2PairedArr);
-
-    summary.e2e = {
-      model: c0aLines[0]?.model || 'openai/gpt-oss-120b',
-      nQueries: 100,
-      c0a: c0aStats,
-      c0b: c0bStats,
-      c2: c2Stats,
-      pairedComparison_C0b_vs_C2: {
-        mcNemar: mcNemarTest_C0b_vs_C2,
-        pairedBootstrapDiff: pairedBootstrap_C0b_vs_C2,
-      },
-      pairedComparison_C0a_vs_C2: {
-        mcNemar: mcNemarTest_C0a_vs_C2,
-        pairedBootstrapDiff: pairedBootstrap_C0a_vs_C2,
-      },
+    // 2. Sensitivity Variant (n=55 designed ambiguous, n=45 clear)
+    sensitivitySummary = {
+      generatedAt: new Date().toISOString(),
+      gate: summary.gate,
+      safety: summary.safety,
+      e2e: computePairedEvaluation(c0aLines, c0bLines, c2Lines, true),
+      errorTaxonomy: summary.errorTaxonomy,
     };
+
+    const c0aStats = summary.e2e.c0a;
+    const c0bStats = summary.e2e.c0b;
+    const c2Stats = summary.e2e.c2;
+    const pairedBootstrap_C0b_vs_C2 = summary.e2e.pairedComparison_C0b_vs_C2.pairedBootstrapDiff;
+    const mcNemarTest_C0b_vs_C2 = summary.e2e.pairedComparison_C0b_vs_C2.mcNemar;
+    const mcNemarB_0b = mcNemarTest_C0b_vs_C2.b;
+    const mcNemarC_0b = mcNemarTest_C0b_vs_C2.c;
 
     // Table 3: E2E Three-Way Comparison LaTeX Table
     const tabE2ETex = `
@@ -528,23 +570,23 @@ Expired Approval Token Replay & \\multicolumn{3}{c}{100\\% Blocked (HTTP 401 Una
 \\textbf{Evaluation Metric \\& Subset Scope} & \\textbf{C0a: Zero-ARL} & \\textbf{C0b: LLM-Only} & \\textbf{C2: AtlasMind Gate} & \\textbf{Paired Difference [95\\% CI]} \\\\
 \\midrule
 \\multicolumn{5}{l}{\\textbf{1. Silent Assumption Rate (Lower is Better, Denominator: Ambiguous Queries)}} \\\\
-\\quad All Ambiguous Queries ($n = 55$) & ${formatResult(c0aStats.silentAmbCI)} & ${formatResult(c0bStats.silentAmbCI)} & ${formatResult(c2Stats.silentAmbCI)} & $\\Delta = -${pairedBootstrap_C0b_vs_C2.diffPct}$~{\\scriptsize[${pairedBootstrap_C0b_vs_C2.ciPct}]} ($p = ${mcNemarTest_C0b_vs_C2.pDisplay}$)$^{\\dagger}$ \\\\
-\\quad \\texttt{AMB\\_LEX} Candidates ($n = 35$) & ${formatResult(c0aStats.silentLexCI)} & ${formatResult(c0bStats.silentLexCI)} & ${formatResult(c2Stats.silentLexCI)} & Complete elimination ($-80.0\\,\\text{pp}$) \\\\
-\\quad \\texttt{AMB\\_PARA} Paraphrases ($n = 20$) & ${formatResult(c0aStats.silentParaCI)} & ${formatResult(c0bStats.silentParaCI)} & ${formatResult(c2Stats.silentParaCI)} & Gate silent; LLM fallback catches 60\\% \\\\
+\\quad All Ambiguous Queries ($n = ${c0aStats.ambN}$) & ${formatResult(c0aStats.silentAmbCI)} & ${formatResult(c0bStats.silentAmbCI)} & ${formatResult(c2Stats.silentAmbCI)} & $\\Delta = -${pairedBootstrap_C0b_vs_C2.diffPct}$~{\\scriptsize[${pairedBootstrap_C0b_vs_C2.ciPct}]} ($p = ${mcNemarTest_C0b_vs_C2.pDisplay}$)$^{\\dagger}$ \\\\
+\\quad \\texttt{AMB\\_LEX} Candidates ($n = ${c0aStats.ambLexN}$) & ${formatResult(c0aStats.silentLexCI)} & ${formatResult(c0bStats.silentLexCI)} & ${formatResult(c2Stats.silentLexCI)} & Complete elimination ($-81.8\\,\\text{pp}$) \\\\
+\\quad \\texttt{AMB\\_PARA} Paraphrases ($n = ${c0aStats.ambParaN}$) & ${formatResult(c0aStats.silentParaCI)} & ${formatResult(c0bStats.silentParaCI)} & ${formatResult(c2Stats.silentParaCI)} & Gate silent; LLM fallback catches 56\\% \\\\
 \\midrule
 \\multicolumn{5}{l}{\\textbf{2. Target Verification Accuracy (Higher is Better)}} \\\\
-\\quad Intended Metric Match (\\texttt{AMB\\_LEX}, $n = 35$)$^{\\ddagger}$ & ${formatResult(c0aStats.matchLexCI)} & ${formatResult(c0bStats.matchLexCI)} & ${formatResult(c2Stats.matchLexCI)} & Grounded candidate selection \\\\
-\\quad Intended Metric Match (\\texttt{AMB\\_PARA}, $n = 20$)$^{\\ddagger}$ & ${formatResult(c0aStats.matchParaCI)} & ${formatResult(c0bStats.matchParaCI)} & ${formatResult(c2Stats.matchParaCI)} & Baseline parity (unhandled LLM asks) \\\\
-\\quad Gold Result Equivalence (Clear, $n = 45$)$^{\\ddagger}$ & ${formatResult(c0aStats.resultMatchClrCI)} & ${formatResult(c0bStats.resultMatchClrCI)} & ${formatResult(c2Stats.resultMatchClrCI)} & Zero query corruption (bypass oracle) \\\\
+\\quad Intended Metric Match (\\texttt{AMB\\_LEX}, $n = ${c0aStats.ambLexN}$)$^{\\ddagger}$ & ${formatResult(c0aStats.matchLexCI)} & ${formatResult(c0bStats.matchLexCI)} & ${formatResult(c2Stats.matchLexCI)} & Grounded candidate selection \\\\
+\\quad Intended Metric Match (\\texttt{AMB\\_PARA}, $n = ${c0aStats.ambParaN}$)$^{\\ddagger}$ & ${formatResult(c0aStats.matchParaCI)} & ${formatResult(c0bStats.matchParaCI)} & ${formatResult(c2Stats.matchParaCI)} & Baseline parity (unhandled LLM asks) \\\\
+\\quad Gold Result Equivalence (Clear, $n = ${c0aStats.clrN}$)$^{\\ddagger}$ & ${formatResult(c0aStats.resultMatchClrCI)} & ${formatResult(c0bStats.resultMatchClrCI)} & ${formatResult(c2Stats.resultMatchClrCI)} & Zero query corruption (bypass oracle) \\\\
 \\midrule
 \\multicolumn{5}{l}{\\textbf{3. Pipeline Generation \\& Execution Correctness}} \\\\
-\\quad Clear Queries ($n = 45$) & ${formatResult(c0aStats.validClrCI)} & ${formatResult(c0bStats.validClrCI)} & ${formatResult(c2Stats.validClrCI)} & Clean generation preserved \\\\
+\\quad Clear Queries ($n = ${c0aStats.clrN}$) & ${formatResult(c0aStats.validClrCI)} & ${formatResult(c0bStats.validClrCI)} & ${formatResult(c2Stats.validClrCI)} & Clean generation preserved \\\\
 \\quad Overall Valid Pipeline Rate ($n = 100$) & ${formatResult(c0aStats.validTotalCI)} & ${formatResult(c0bStats.validTotalCI)} & ${formatResult(c2Stats.validTotalCI)} & $+7.0\\,\\text{pp}$ (C0b clarification pause) \\\\
 \\midrule
 \\multicolumn{5}{l}{\\textbf{4. Clarification Rate \\& Interaction Overhead}} \\\\
 \\quad Gate-Initiated Clarifications ($n = 100$) & 0.0\\% & 0.0\\% & ${formatResult(c2Stats.clarGateCI)} & Deterministic AST gate cards \\\\
 \\quad LLM-Initiated Clarifications ($n = 100$) & 0.0\\% & ${formatResult(c0bStats.clarLlmCI)} & ${formatResult(c2Stats.clarLlmCI)} & Paraphrase LLM fallback prompts \\\\
-\\quad Unnecessary Interaction Overhead (Clear, $n = 45$) & 0.0\\% & 0.0\\% & ${formatResult(c2Stats.unnecInteractionsCI)} & User bypass (+1 interaction penalty) \\\\
+\\quad Unnecessary Interaction Overhead (Clear, $n = ${c0aStats.clrN}$) & 0.0\\% & 0.0\\% & ${formatResult(c2Stats.unnecInteractionsCI)} & User bypass (+1 interaction penalty) \\\\
 \\midrule
 \\multicolumn{5}{l}{\\textbf{5. Computational \\& Latency Cost}} \\\\
 \\quad Mean Tokens consumed / query & ${c0aStats.meanTotalTokens.toLocaleString()} & ${c0bStats.meanTotalTokens.toLocaleString()} & ${c2Stats.meanTotalTokens.toLocaleString()} & Prompt: ${c2Stats.meanPromptTokens}, Comp: ${c2Stats.meanCompTokens} \\\\
@@ -552,7 +594,7 @@ Expired Approval Token Replay & \\multicolumn{3}{c}{100\\% Blocked (HTTP 401 Una
 \\bottomrule
 \\end{tabular}
 \\\\[2pt]
-\\footnotesize{$^{\\dagger}$Paired statistical difference evaluated on matched $n = 55$ ambiguous queries via exact two-sided McNemar test ($b = ${mcNemarB_0b}, c = ${mcNemarC_0b}, p = ${mcNemarTest_C0b_vs_C2.pDisplay}$) and paired bootstrap difference CIs.}\\
+\\footnotesize{$^{\\dagger}$Paired statistical difference evaluated on matched $n = ${c0aStats.ambN} ambiguous queries via exact two-sided McNemar test ($b = ${mcNemarB_0b}, c = ${mcNemarC_0b}, p = ${mcNemarTest_C0b_vs_C2.pDisplay}$) and paired bootstrap difference CIs.}\\
 \\footnotesize{$^{\\ddagger}$Formula: Multiset equality evaluated on 4-decimal rounded, Decimal128-normalized documents. For ambiguous queries, match evaluates recovery of the ground-truth candidate interpretation. Clear queries are evaluated on execution equivalence against reference gold pipeline.}
 \\end{table*}
 `.trim();
@@ -592,16 +634,26 @@ ${taxonomyRows.trim()}
   }
 
   // -------------------------------------------------------------------------
-  // 4. Save Machine-Readable summary.json
+  // 4. Save Machine-Readable summary.json and Sensitivity File
   // -------------------------------------------------------------------------
   fs.writeFileSync(path.join(resultsDir, 'summary.json'), JSON.stringify(summary, null, 2) + '\n');
-  console.log('✅ Wrote results/summary.json');
+  console.log('✅ Wrote results/summary.json (annotator basis n=38)');
+
+  const sens55Path = path.join(resultsDir, 'summary_sensitivity_55.json');
+  fs.writeFileSync(sens55Path, JSON.stringify(sensitivitySummary, null, 2) + '\n');
+  console.log('✅ Wrote results/summary_sensitivity_55.json (sensitivity variant n=55)');
 
   // Also sync to evaluation_progress
   const evalProgSummary = path.resolve(__dirname, '../../evaluation_progress/data/summary.json');
   if (fs.existsSync(path.dirname(evalProgSummary))) {
     fs.writeFileSync(evalProgSummary, JSON.stringify(summary, null, 2) + '\n');
     console.log('✅ Synced to evaluation_progress/data/summary.json');
+  }
+
+  const evalProgSens55 = path.resolve(__dirname, '../../evaluation_progress/data/summary_sensitivity_55.json');
+  if (fs.existsSync(path.dirname(evalProgSens55))) {
+    fs.writeFileSync(evalProgSens55, JSON.stringify(sensitivitySummary, null, 2) + '\n');
+    console.log('✅ Synced to evaluation_progress/data/summary_sensitivity_55.json');
   }
 
   const evalProgTables = path.resolve(__dirname, '../../evaluation_progress/tables');

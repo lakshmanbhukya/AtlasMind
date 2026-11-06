@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Architecture Review for AtlasMind</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose" });
+    </script>
+    <style>
+      .seam { stroke-dasharray: 4 4; border-style: dashed; }
+      .leak { stroke: #dc2626; color: #dc2626; }
+      .deep-card { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #f8fafc; }
+    </style>
+  </head>
+  <body class="bg-stone-50 text-slate-900 font-sans antialiased selection:bg-amber-100 selection:text-amber-900">
+    <main class="max-w-6xl mx-auto px-6 py-12 space-y-12">
+
+      <!-- Header & Compact Legend -->
+      <header class="border-b border-slate-200 pb-8 space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-2">
+          <div>
+            <h1 class="text-3xl font-bold tracking-tight text-slate-950 font-serif">Architecture Review: AtlasMind</h1>
+            <p class="text-xs uppercase tracking-wider text-slate-500 font-mono mt-1">Repository Hotspot Analysis & Deepening Candidates</p>
+          </div>
+          <div class="text-sm font-mono text-slate-500">2026-10-29</div>
+        </div>
+
+        <!-- Legend (No introductory text) -->
+        <div class="flex flex-wrap items-center gap-6 pt-3 text-xs font-mono text-slate-600 bg-white p-3 rounded-lg border border-slate-200">
+          <span class="font-semibold text-slate-900 uppercase tracking-wider">Legend:</span>
+          <span class="inline-flex items-center gap-1.5">
+            <span class="w-3.5 h-3.5 border border-slate-400 bg-slate-50 rounded"></span> Solid Box = Module
+          </span>
+          <span class="inline-flex items-center gap-1.5">
+            <span class="w-4 border-b-2 border-dashed border-slate-600"></span> Dashed Line = Seam
+          </span>
+          <span class="inline-flex items-center gap-1.5">
+            <span class="w-4 h-0.5 bg-rose-600 inline-block"></span> Red Arrow = Leakage Across Seam
+          </span>
+          <span class="inline-flex items-center gap-1.5">
+            <span class="w-3.5 h-3.5 bg-slate-900 border border-slate-950 rounded"></span> Dark Box = Deep Module
+          </span>
+        </div>
+      </header>
+
+      <!-- Candidates Section -->
+      <section id="candidates" class="space-y-10">
+
+        <!-- Candidate 1 -->
+        <article id="candidate-1" class="rounded-xl border border-slate-200 bg-white p-6 shadow-sm space-y-5">
+          <div class="space-y-2">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <h2 class="text-xl font-bold text-slate-900">1. Collapse the Natural Language Query Execution Seam</h2>
+              <div class="flex items-center gap-2">
+                <span class="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">Strong</span>
+                <span class="px-2.5 py-0.5 text-xs font-mono rounded-full bg-slate-100 text-slate-700 border border-slate-200">ports & adapters</span>
+              </div>
+            </div>
+            <div class="font-mono text-xs text-slate-500 break-all">
+              server/src/routes/query.js · server/src/routes/voice.js · server/src/services/queryPipelineService.js · server/src/services/queryExecutor.js
+            </div>
+          </div>
+
+          <!-- Side-by-side diagrams -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4 flex flex-col justify-between">
+              <div class="text-xs font-mono uppercase tracking-wider text-slate-500 mb-2 font-semibold">Before: Shallow Routes with Duplicate Zombie Pipelines & Leakage</div>
+              <pre class="mermaid">
+flowchart TD
+  subgraph HTTP["HTTP Routes (Leaky Implementations)"]
+    Q["routes/query.js\n(Try/Catch Fallback)"]
+    V["routes/voice.js\n(Full Zombie Pipeline)"]
+    A["routes/query.js /approve\n(Inline Write Execution)"]
+  end
+  subgraph Eng["Pipeline Module"]
+    ENG["queryPipelineService.js"]
+  end
+  subgraph Sub["Execution & Storage"]
+    FS["fewShotRetriever"]
+    SG["safetyGuard"]
+    QE["queryExecutor"]
+  end
+  Q -->|calls| ENG
+  Q -.leak fallback.-> FS
+  Q -.leak fallback.-> SG
+  Q -.leak fallback.-> QE
+  V -.leak bypasses gate.-> FS
+  V -.leak bypasses gate.-> SG
+  V -.leak bypasses gate.-> QE
+  A -.leak inline auth.-> QE
+  classDef leak stroke:#dc2626,stroke-width:2px,stroke-dasharray: 4 2;
+  classDef shallow fill:#fef2f2,stroke:#ef4444;
+  class Q,V,A shallow;
+              </pre>
+            </div>
+
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4 flex flex-col justify-between">
+              <div class="text-xs font-mono uppercase tracking-wider text-slate-500 mb-2 font-semibold">After: Deep QueryExecutionEngine Module with Narrow Interface</div>
+              <pre class="mermaid">
+flowchart TD
+  subgraph HTTP["Thin HTTP Intake Adapters"]
+    Q["POST /api/query\n(5 lines)"]
+    V["POST /api/voice\n(Audio adapter)"]
+    A["POST /api/query/approve\n(Token adapter)"]
+  end
+  subgraph SEAM["Clean Seam"]
+    ENGINE["QueryExecutionEngine (Deep Module)\n• executeNaturalLanguageQuery()\n• executeApprovedWrite()"]
+  end
+  subgraph Internals["Private Implementations Behind Seam"]
+    AG["Ambiguity Gate"]
+    FS["Few-Shot Memory"]
+    SG["Safety Guard AST"]
+    QE["Mongo Aggregator"]
+  end
+  Q -->|intake| ENGINE
+  V -->|audio intake| ENGINE
+  A -->|token intake| ENGINE
+  ENGINE --> AG
+  ENGINE --> FS
+  ENGINE --> SG
+  ENGINE --> QE
+  classDef deep fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#f8fafc;
+  class ENGINE deep;
+              </pre>
+            </div>
+          </div>
+
+          <div class="space-y-3 pt-2">
+            <div>
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 font-mono">Problem</span>
+              <p class="text-sm text-slate-800 mt-0.5">Natural language query orchestration leaks across the HTTP seam into route handlers, causing voice queries to execute an unmaintained duplicate pipeline that bypasses ambiguity gating and multi-tenant isolation.</p>
+            </div>
+            <div>
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 font-mono">Solution</span>
+              <p class="text-sm text-slate-800 mt-0.5">Collapse voice transcription, query execution, and write approval into a single deep module behind a two-method interface, reducing route handlers to thin HTTP adapters.</p>
+            </div>
+            <div>
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 font-mono">Wins</span>
+              <ul class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1 text-sm text-slate-700">
+                <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><strong>locality:</strong> execution logic in one module</li>
+                <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><strong>leverage:</strong> text and voice share engine</li>
+                <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Delete 280 lines of duplicate pipelines</li>
+                <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Voice queries gain tenant isolation</li>
+                <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Tests exercise engine without HTTP mock</li>
+              </ul>
+            </div>
+          </div>
+        </article>
+
+        <!-- Candidate 2 -->
+        <article id="candidate-2" class="rounded-xl border border-slate-200 bg-white p-6 shadow-sm space-y-5">
+          <div class="space-y-2">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <h2 class="text-xl font-bold text-slate-900">2. Deepen Ambiguity Disambiguation Behind an Intake Seam</h2>
+              <div class="flex items-center gap-2">
+                <span class="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">Strong</span>
+                <span class="px-2.5 py-0.5 text-xs font-mono rounded-full bg-slate-100 text-slate-700 border border-slate-200">in-process</span>
+              </div>
+            </div>
+            <div class="font-mono text-xs text-slate-500 break-all">
+              server/src/services/ambiguityGate.js · server/src/services/schemaProfiler.js · server/src/services/queryPipelineService.js
+            </div>
+          </div>
+
+          <!-- Side-by-side diagrams: Mass Diagram Visual -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4 flex flex-col justify-between">
+              <div class="text-xs font-mono uppercase tracking-wider text-slate-500 mb-2 font-semibold">Before: Shallow Module with Wide 12-Member Interface</div>
+              <div class="h-64 flex flex-col justify-center items-center gap-3">
+                <div class="w-11/12 border-2 border-rose-400 bg-rose-50 rounded p-2 text-center text-xs font-mono text-rose-950">
+                  <div class="font-bold border-b border-rose-200 pb-1 mb-1">Wide Interface Surface (12 Exports)</div>
+                  <div class="grid grid-cols-2 gap-1 text-[11px] text-slate-700">
+                    <div>hasWriteIntent()</div>
+                    <div>checkDeterministic()</div>
+                    <div>validateClarifications()</div>
+                    <div>buildEnrichedQuery()</div>
+                    <div>recordAmbiguityMetric()</div>
+                    <div>extractNumericFields()</div>
+                  </div>
+                </div>
+                <div class="text-rose-600 text-xs font-mono">↓ Callers must coordinate 5-step dance</div>
+                <div class="w-11/12 h-20 border-2 border-slate-300 bg-white rounded p-2 text-center text-xs font-mono text-slate-600 flex items-center justify-center">
+                  Implementation: pure functions only; state & sequence leak to caller
+                </div>
+              </div>
+            </div>
+
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4 flex flex-col justify-between">
+              <div class="text-xs font-mono uppercase tracking-wider text-slate-500 mb-2 font-semibold">After: Deep Module with 1-Method Interface & High Leverage</div>
+              <div class="h-64 flex flex-col justify-center items-center gap-2">
+                <div class="w-11/12 border-2 border-sky-500 bg-sky-50 rounded py-1.5 px-3 text-center text-xs font-mono text-sky-950 font-bold">
+                  Small Interface: evaluate(query, schema, options)
+                </div>
+                <div class="w-11/12 flex-1 deep-card rounded-lg p-3 text-xs font-mono space-y-1.5 border border-slate-800 shadow-inner">
+                  <div class="text-sky-300 font-bold border-b border-slate-700 pb-1">Deep Implementation (Hidden Behind Seam)</div>
+                  <div class="text-[11px] text-slate-300">• Automatic write-intent bypass</div>
+                  <div class="text-[11px] text-slate-300">• Deterministic & LLM ambiguity detection</div>
+                  <div class="text-[11px] text-slate-300">• Clarification anti-injection validation</div>
+                  <div class="text-[11px] text-slate-300">• Prompt enrichment & formatting</div>
+                  <div class="text-[11px] text-slate-300">• Internal metrics recording</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="space-y-3 pt-2">
+            <div>
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 font-mono">Problem</span>
+              <p class="text-sm text-slate-800 mt-0.5">The ambiguity gate is shallow with an interface spanning 12 granular functions and constants, forcing callers to coordinate detection, validation, formatting, and metric recording.</p>
+            </div>
+            <div>
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 font-mono">Solution</span>
+              <p class="text-sm text-slate-800 mt-0.5">Encapsulate detection, clarification sanitization, prompt enrichment, and metrics recording behind a single evaluation interface.</p>
+            </div>
+            <div>
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 font-mono">Wins</span>
+              <ul class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1 text-sm text-slate-700">
+                <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><strong>interface:</strong> shrinks from 12 exports to 1</li>
+                <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><strong>depth:</strong> prompt enrichment hidden inside</li>
+                <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><strong>locality:</strong> metric logging stays inside module</li>
+                <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><strong>leverage:</strong> one call site in orchestrator</li>
+                <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Deletion test: complexity vanishes from callers</li>
+              </ul>
+            </div>
+          </div>
+        </article>
+
+        <!-- Candidate 3 -->
+        <article id="candidate-3" class="rounded-xl border border-slate-200 bg-white p-6 shadow-sm space-y-5">
+          <div class="space-y-2">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <h2 class="text-xl font-bold text-slate-900">3. Consolidate Query History into a Dedicated State Module</h2>
+              <div class="flex items-center gap-2">
+                <span class="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-amber-100 text-amber-800 border border-amber-300">Worth exploring</span>
+                <span class="px-2.5 py-0.5 text-xs font-mono rounded-full bg-slate-100 text-slate-700 border border-slate-200">local-substitutable</span>
+              </div>
+            </div>
+            <div class="font-mono text-xs text-slate-500 break-all">
+              server/src/services/queryExecutor.js · server/src/routes/query.js · server/src/services/queryPipelineService.js
+            </div>
+          </div>
+
+          <!-- Side-by-side diagrams -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4 flex flex-col justify-between">
+              <div class="text-xs font-mono uppercase tracking-wider text-slate-500 mb-2 font-semibold">Before: History Smeared Across Executor and Route Handlers</div>
+              <pre class="mermaid">
+flowchart TD
+  subgraph Route["routes/query.js"]
+    H_GET["GET /history\n(raw Mongo .find + projection)"]
+    H_PATCH["PATCH /history/:id\n(raw Mongo .updateOne)"]
+    H_DEL["DELETE /history/:id\n(raw Mongo .deleteOne)"]
+  end
+  subgraph Exec["services/queryExecutor.js"]
+    QE["executePipeline()\n(user target DB)"]
+    QH["saveQueryHistory()\n(central metadata DB)"]
+  end
+  QE -.unrelated concern.-> QH
+  H_GET --> MDB[("query_history collection")]
+  H_PATCH --> MDB
+  H_DEL --> MDB
+  QH --> MDB
+  classDef leak stroke:#dc2626,stroke-width:2px;
+  class QH,H_GET,H_PATCH,H_DEL leak;
+              </pre>
+            </div>
+
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4 flex flex-col justify-between">
+              <div class="text-xs font-mono uppercase tracking-wider text-slate-500 mb-2 font-semibold">After: Clean Seam Separating Query Execution from History</div>
+              <pre class="mermaid">
+flowchart TD
+  subgraph Exec["Pure Query Executor"]
+    QE["executePipeline()\n(Target User DB Only)"]
+  end
+  subgraph Hist["QueryHistoryStore (Deep Module)"]
+    HS["• record(entry)\n• list(connectionId, limit)\n• rename(id, connectionId, name)\n• delete(id, connectionId)"]
+  end
+  subgraph Adapters["Adapters at Seam"]
+    PROD["MongoMetadataAdapter\n(Prod Central DB)"]
+    TEST["InMemoryHistoryAdapter\n(Fast Unit Tests)"]
+  end
+  HS --> PROD
+  HS -.substitutable.-> TEST
+  classDef deep fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#f8fafc;
+  class HS deep;
+              </pre>
+            </div>
+          </div>
+
+          <div class="space-y-3 pt-2">
+            <div>
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 font-mono">Problem</span>
+              <p class="text-sm text-slate-800 mt-0.5">Query history persistence has no module seam, mixing write side-effects into the query executor while history retrieval, relative-time formatting, and deletion live as raw database queries inside the route handler.</p>
+            </div>
+            <div>
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 font-mono">Solution</span>
+              <p class="text-sm text-slate-800 mt-0.5">Extract a deep history module that encapsulates projection, snapshot truncation, relative-time computation, and multi-tenant filtering behind a clean seam.</p>
+            </div>
+            <div>
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 font-mono">Wins</span>
+              <ul class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1 text-sm text-slate-700">
+                <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><strong>locality:</strong> query logging confined to module</li>
+                <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><strong>interface:</strong> callers invoke clean semantic methods</li>
+                <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Separates user DB execution from metadata DB</li>
+                <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Two adapters justify seam (Mongo & fake)</li>
+                <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Eliminates raw queries from routes</li>
+              </ul>
+            </div>
+          </div>
+        </article>
+
+        <!-- Candidate 4 -->
+        <article id="candidate-4" class="rounded-xl border border-slate-200 bg-white p-6 shadow-sm space-y-5">
+          <div class="space-y-2">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <h2 class="text-xl font-bold text-slate-900">4. Unify Few-Shot Memory and Search Adapters Behind a Scoped Seam</h2>
+              <div class="flex items-center gap-2">
+                <span class="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-amber-100 text-amber-800 border border-amber-300">Worth exploring</span>
+                <span class="px-2.5 py-0.5 text-xs font-mono rounded-full bg-slate-100 text-slate-700 border border-slate-200">ports & adapters</span>
+              </div>
+            </div>
+            <div class="font-mono text-xs text-slate-500 break-all">
+              server/src/services/fewShotRetriever.js · server/src/services/queryPipelineService.js · server/src/routes/query.js
+            </div>
+          </div>
+
+          <!-- Side-by-side diagrams -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4 flex flex-col justify-between">
+              <div class="text-xs font-mono uppercase tracking-wider text-slate-500 mb-2 font-semibold">Before: Leaky Memory Search & Inconsistent Tenant Boundaries</div>
+              <pre class="mermaid">
+flowchart TD
+  CALLER["Caller (queryPipelineService)"]
+  subgraph FSR["fewShotRetriever.js"]
+    VS["attemptVectorSearch()\n(MISSING connectionId Filter!)"]
+    TS["textFallbackSearch()\n(Has connectionId Filter)"]
+  end
+  CALLER -->|checks result count & flags| CALLER
+  CALLER -.writes example.-> ADD["addExample()"]
+  CALLER --> VS
+  VS -.leak across tenants.-> LEAK[("Global Vector Index")]
+  classDef leak stroke:#dc2626,stroke-width:2px;
+  class VS,LEAK leak;
+              </pre>
+            </div>
+
+            <div class="rounded-lg border border-slate-200 bg-stone-50 p-4 flex flex-col justify-between">
+              <div class="text-xs font-mono uppercase tracking-wider text-slate-500 mb-2 font-semibold">After: Deep FewShotStore Guaranteeing Multi-Tenant Isolation</div>
+              <pre class="mermaid">
+flowchart TD
+  CALLER["Caller"] -->|findRelevant(query, ctx)| FSS["FewShotStore (Deep Module)\n• findRelevant()\n• recordSuccess()"]
+  subgraph ADAPTERS["Adapters Behind Seam"]
+    V_ADAPTER["VectorSearchAdapter\n(Enforces connectionId)"]
+    T_ADAPTER["TextRegexAdapter\n(Enforces connectionId)"]
+  end
+  FSS --> V_ADAPTER
+  FSS --> T_ADAPTER
+  classDef deep fill:#0f172a,stroke:#38bdf8,stroke-width:2px,color:#f8fafc;
+  class FSS deep;
+              </pre>
+            </div>
+          </div>
+
+          <div class="space-y-3 pt-2">
+            <div>
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 font-mono">Problem</span>
+              <p class="text-sm text-slate-800 mt-0.5">Few-shot memory leaks retrieval mechanics to callers, while its vector search implementation omits tenant isolation filters that are only applied in regex fallback search.</p>
+            </div>
+            <div>
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 font-mono">Solution</span>
+              <p class="text-sm text-slate-800 mt-0.5">Deepen the few-shot module to encapsulate search strategy selection, query scoring, write admission criteria, and guaranteed multi-tenant scoping across both adapters.</p>
+            </div>
+            <div>
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 font-mono">Wins</span>
+              <ul class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1 text-sm text-slate-700">
+                <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><strong>locality:</strong> tenant filtering applied universally</li>
+                <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Vector search cannot leak across tenants</li>
+                <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Write admission logic leaves caller</li>
+                <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Two adapters cleanly satisfy interface</li>
+                <li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Caller needs only two methods</li>
+              </ul>
+            </div>
+          </div>
+        </article>
+
+      </section>
+
+      <!-- Top Recommendation Section -->
+      <section id="top-recommendation">
+        <div class="rounded-xl border-2 border-slate-900 bg-slate-900 text-white p-8 shadow-md space-y-4">
+          <div class="flex items-center gap-2 text-xs font-mono uppercase tracking-wider text-amber-400 font-bold">
+            <span>★</span> Top Recommendation
+          </div>
+          <h2 class="text-2xl font-bold font-serif text-white">
+            <a href="#candidate-1" class="hover:text-amber-300 transition-colors">
+              Collapse the Natural Language Query Execution Seam
+            </a>
+          </h2>
+          <p class="text-slate-300 text-sm leading-relaxed">
+            This refactor eliminates active architectural leakage where voice queries bypass ambiguity gating and tenant isolation, removes over 280 lines of duplicate zombie pipeline code from route handlers, and establishes high leverage for testing the execution engine without an HTTP server.
+          </p>
+          <div class="pt-2">
+            <a href="#candidate-1" class="inline-flex items-center gap-2 text-xs font-mono font-semibold text-slate-900 bg-amber-400 hover:bg-amber-300 px-4 py-2 rounded-lg transition-colors">
+              View Candidate 1 Details →
+            </a>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </body>
+</html>

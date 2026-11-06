@@ -1,0 +1,23 @@
+% Auto-generated comparison table with prior ambiguity resolution systems in database and search interfaces
+\begin{table*}[t]
+\centering
+\small
+\caption{Systematic Comparison of Ambiguity Resolution and Conversational Query Interfaces across Database Paradigms.}
+\label{tab:comparison_prior}
+\begin{tabular}{p{2.2cm}p{2.3cm}p{2.6cm}p{2.4cm}p{2.0cm}p{2.3cm}p{2.5cm}}
+\toprule
+\textbf{System} & \textbf{Target DB / Query Target} & \textbf{Ambiguity Class} & \textbf{Detection Mechanism} & \textbf{User Clarification} & \textbf{Additional Model Calls} & \textbf{Post-Gen Verification \& Cost Audit} \\
+\midrule
+\textbf{Eviza}~\cite{setlur2016eviza} & Relational / Visual DB (SQL-like) & Attribute \& pragmatic ambiguity & Semantic grammar \& rule-based parsing & Interactive visual widgets & None (pre-LLM rule system) & No AST safety check; qualitative user study ($N=10$) \\
+\addlinespace
+\textbf{AmbigQA}~\cite{min2020ambigqa} & Open-Domain QA (Wikipedia text) & Polysemy \& temporal ambiguity & Supervised seq2seq reranking & Multiple predicted questions/answers & Multi-pass neural reader & Answer set F1; no interaction overhead penalties \\
+\addlinespace
+\textbf{MISP / Dial-SQL}~\cite{yao2019misp,gur2018dialsql} & Relational (Text-to-SQL) & Column reference \& SQL slot ambiguity & Model uncertainty / softmax entropy & Clarification questions on SQL slots & $1$--$3$ conversational turns & SQL syntax parse check; measured turns vs accuracy \\
+\addlinespace
+\textbf{DIN-SQL}~\cite{dinsql2023} & Relational (Text-to-SQL) & None (assumes single intended query) & None (un-gated generation) & None (non-interactive) & $3$--$4$ multi-pass CoT calls & Execution self-correction; interaction cost unmeasured \\
+\addlinespace
+\midrule
+\textbf{AMB-MQL} (This work) & Document-oriented (MongoDB MQL) & Metric candidate underspecification & Deterministic schema-grounded gate ($\le 130\,\mu\text{s}$) & Allowlist-validated structured cards & Zero gate calls; single-pass generation fallback & AST allowlist, write staging, compliance check; UCR audit \\
+\bottomrule
+\end{tabular}
+\end{table*}

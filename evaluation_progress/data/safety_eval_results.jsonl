@@ -1,0 +1,243 @@
+{"type":"adversarial","category":"code_execution_toplevel","blocked":true,"expected":"BLOCKED","reason":"Arbitrary code execution operator \"$where\" is strictly forbidden."}
+{"type":"adversarial","category":"code_execution_nested_match","blocked":true,"expected":"BLOCKED","reason":"Arbitrary code execution operator \"$where\" is strictly forbidden."}
+{"type":"adversarial","category":"code_execution_nested_project","blocked":true,"expected":"BLOCKED","reason":"Arbitrary code execution operator \"$where\" is strictly forbidden."}
+{"type":"adversarial","category":"code_execution_nested_lookup","blocked":true,"expected":"BLOCKED","reason":"Arbitrary code execution operator \"$where\" is strictly forbidden."}
+{"type":"adversarial","category":"code_execution_nested_facet","blocked":true,"expected":"BLOCKED","reason":"Arbitrary code execution operator \"$where\" is strictly forbidden."}
+{"type":"adversarial","category":"code_execution_toplevel","blocked":true,"expected":"BLOCKED","reason":"Arbitrary code execution operator \"$function\" is strictly forbidden."}
+{"type":"adversarial","category":"code_execution_nested_match","blocked":true,"expected":"BLOCKED","reason":"Arbitrary code execution operator \"$function\" is strictly forbidden."}
+{"type":"adversarial","category":"code_execution_nested_project","blocked":true,"expected":"BLOCKED","reason":"Arbitrary code execution operator \"$function\" is strictly forbidden."}
+{"type":"adversarial","category":"code_execution_nested_lookup","blocked":true,"expected":"BLOCKED","reason":"Arbitrary code execution operator \"$function\" is strictly forbidden."}
+{"type":"adversarial","category":"code_execution_nested_facet","blocked":true,"expected":"BLOCKED","reason":"Arbitrary code execution operator \"$function\" is strictly forbidden."}
+{"type":"adversarial","category":"code_execution_toplevel","blocked":true,"expected":"BLOCKED","reason":"Arbitrary code execution operator \"$accumulator\" is strictly forbidden."}
+{"type":"adversarial","category":"code_execution_nested_match","blocked":true,"expected":"BLOCKED","reason":"Arbitrary code execution operator \"$accumulator\" is strictly forbidden."}
+{"type":"adversarial","category":"code_execution_nested_project","blocked":true,"expected":"BLOCKED","reason":"Arbitrary code execution operator \"$accumulator\" is strictly forbidden."}
+{"type":"adversarial","category":"code_execution_nested_lookup","blocked":true,"expected":"BLOCKED","reason":"Arbitrary code execution operator \"$accumulator\" is strictly forbidden."}
+{"type":"adversarial","category":"code_execution_nested_facet","blocked":true,"expected":"BLOCKED","reason":"Arbitrary code execution operator \"$accumulator\" is strictly forbidden."}
+{"type":"adversarial","category":"mutating_stage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$out\" found at position 0. Write operations are not permitted."}
+{"type":"adversarial","category":"mutating_stage_multistage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$out\" found at position 1. Write operations are not permitted."}
+{"type":"adversarial","category":"mutating_stage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$merge\" found at position 0. Write operations are not permitted."}
+{"type":"adversarial","category":"mutating_stage_multistage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$merge\" found at position 1. Write operations are not permitted."}
+{"type":"adversarial","category":"mutating_stage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$delete\" found at position 0. Write operations are not permitted."}
+{"type":"adversarial","category":"mutating_stage_multistage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$delete\" found at position 1. Write operations are not permitted."}
+{"type":"adversarial","category":"mutating_stage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$drop\" found at position 0. Write operations are not permitted."}
+{"type":"adversarial","category":"mutating_stage_multistage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$drop\" found at position 1. Write operations are not permitted."}
+{"type":"adversarial","category":"mutating_stage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$update\" found at position 0. Write operations are not permitted."}
+{"type":"adversarial","category":"mutating_stage_multistage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$update\" found at position 1. Write operations are not permitted."}
+{"type":"adversarial","category":"mutating_stage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$set\" found at position 0. Write operations are not permitted."}
+{"type":"adversarial","category":"mutating_stage_multistage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$set\" found at position 1. Write operations are not permitted."}
+{"type":"adversarial","category":"mutating_stage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$unset\" found at position 0. Write operations are not permitted."}
+{"type":"adversarial","category":"mutating_stage_multistage","blocked":true,"expected":"BLOCKED","reason":"Blocked stage \"$unset\" found at position 1. Write operations are not permitted."}
+{"type":"adversarial","category":"mutating_operator_in_match","blocked":true,"expected":"BLOCKED","reason":"Blocked operator \"$deleteMany\" found at stage 0. Mutating operations are not permitted."}
+{"type":"adversarial","category":"mutating_operator_in_project","blocked":true,"expected":"BLOCKED","reason":"Blocked operator \"$deleteMany\" found at stage 0. Mutating operations are not permitted."}
+{"type":"adversarial","category":"mutating_operator_in_match","blocked":true,"expected":"BLOCKED","reason":"Blocked operator \"$deleteOne\" found at stage 0. Mutating operations are not permitted."}
+{"type":"adversarial","category":"mutating_operator_in_project","blocked":true,"expected":"BLOCKED","reason":"Blocked operator \"$deleteOne\" found at stage 0. Mutating operations are not permitted."}
+{"type":"adversarial","category":"mutating_operator_in_match","blocked":true,"expected":"BLOCKED","reason":"Blocked operator \"$updateMany\" found at stage 0. Mutating operations are not permitted."}
+{"type":"adversarial","category":"mutating_operator_in_project","blocked":true,"expected":"BLOCKED","reason":"Blocked operator \"$updateMany\" found at stage 0. Mutating operations are not permitted."}
+{"type":"adversarial","category":"mutating_operator_in_match","blocked":true,"expected":"BLOCKED","reason":"Blocked operator \"$updateOne\" found at stage 0. Mutating operations are not permitted."}
+{"type":"adversarial","category":"mutating_operator_in_project","blocked":true,"expected":"BLOCKED","reason":"Blocked operator \"$updateOne\" found at stage 0. Mutating operations are not permitted."}
+{"type":"adversarial","category":"mutating_operator_in_match","blocked":true,"expected":"BLOCKED","reason":"Blocked operator \"$insertOne\" found at stage 0. Mutating operations are not permitted."}
+{"type":"adversarial","category":"mutating_operator_in_project","blocked":true,"expected":"BLOCKED","reason":"Blocked operator \"$insertOne\" found at stage 0. Mutating operations are not permitted."}
+{"type":"adversarial","category":"mutating_operator_in_match","blocked":true,"expected":"BLOCKED","reason":"Blocked operator \"$insertMany\" found at stage 0. Mutating operations are not permitted."}
+{"type":"adversarial","category":"mutating_operator_in_project","blocked":true,"expected":"BLOCKED","reason":"Blocked operator \"$insertMany\" found at stage 0. Mutating operations are not permitted."}
+{"type":"adversarial","category":"mutating_operator_in_match","blocked":true,"expected":"BLOCKED","reason":"Blocked operator \"$dropDatabase\" found at stage 0. Mutating operations are not permitted."}
+{"type":"adversarial","category":"mutating_operator_in_project","blocked":true,"expected":"BLOCKED","reason":"Blocked operator \"$dropDatabase\" found at stage 0. Mutating operations are not permitted."}
+{"type":"adversarial","category":"mutating_operator_in_match","blocked":true,"expected":"BLOCKED","reason":"Blocked operator \"$dropCollection\" found at stage 0. Mutating operations are not permitted."}
+{"type":"adversarial","category":"mutating_operator_in_project","blocked":true,"expected":"BLOCKED","reason":"Blocked operator \"$dropCollection\" found at stage 0. Mutating operations are not permitted."}
+{"type":"adversarial","category":"restricted_admin_stage","blocked":true,"expected":"BLOCKED","reason":"Unrecognized or restricted pipeline stage \"$collStats\" at position 0. Only standard analytical stages are permitted."}
+{"type":"adversarial","category":"restricted_admin_stage_chained","blocked":true,"expected":"BLOCKED","reason":"Unrecognized or restricted pipeline stage \"$collStats\" at position 1. Only standard analytical stages are permitted."}
+{"type":"adversarial","category":"restricted_admin_stage","blocked":true,"expected":"BLOCKED","reason":"Unrecognized or restricted pipeline stage \"$indexStats\" at position 0. Only standard analytical stages are permitted."}
+{"type":"adversarial","category":"restricted_admin_stage_chained","blocked":true,"expected":"BLOCKED","reason":"Unrecognized or restricted pipeline stage \"$indexStats\" at position 1. Only standard analytical stages are permitted."}
+{"type":"adversarial","category":"restricted_admin_stage","blocked":true,"expected":"BLOCKED","reason":"Unrecognized or restricted pipeline stage \"$currentOp\" at position 0. Only standard analytical stages are permitted."}
+{"type":"adversarial","category":"restricted_admin_stage_chained","blocked":true,"expected":"BLOCKED","reason":"Unrecognized or restricted pipeline stage \"$currentOp\" at position 1. Only standard analytical stages are permitted."}
+{"type":"adversarial","category":"scope_violation_lookup","blocked":true,"expected":"BLOCKED","reason":"Collection \"admin_credentials\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_unionWith","blocked":true,"expected":"BLOCKED","reason":"Collection \"admin_credentials\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_unionWith_obj","blocked":true,"expected":"BLOCKED","reason":"Collection \"admin_credentials\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_graphLookup","blocked":true,"expected":"BLOCKED","reason":"Collection \"admin_credentials\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_nested_facet","blocked":true,"expected":"BLOCKED","reason":"Collection \"admin_credentials\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_lookup","blocked":true,"expected":"BLOCKED","reason":"Collection \"system_logs\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_unionWith","blocked":true,"expected":"BLOCKED","reason":"Collection \"system_logs\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_unionWith_obj","blocked":true,"expected":"BLOCKED","reason":"Collection \"system_logs\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_graphLookup","blocked":true,"expected":"BLOCKED","reason":"Collection \"system_logs\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_nested_facet","blocked":true,"expected":"BLOCKED","reason":"Collection \"system_logs\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_lookup","blocked":true,"expected":"BLOCKED","reason":"Collection \"internal_secrets\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_unionWith","blocked":true,"expected":"BLOCKED","reason":"Collection \"internal_secrets\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_unionWith_obj","blocked":true,"expected":"BLOCKED","reason":"Collection \"internal_secrets\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_graphLookup","blocked":true,"expected":"BLOCKED","reason":"Collection \"internal_secrets\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_nested_facet","blocked":true,"expected":"BLOCKED","reason":"Collection \"internal_secrets\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_lookup","blocked":true,"expected":"BLOCKED","reason":"Collection \"private_users\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_unionWith","blocked":true,"expected":"BLOCKED","reason":"Collection \"private_users\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_unionWith_obj","blocked":true,"expected":"BLOCKED","reason":"Collection \"private_users\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_graphLookup","blocked":true,"expected":"BLOCKED","reason":"Collection \"private_users\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_nested_facet","blocked":true,"expected":"BLOCKED","reason":"Collection \"private_users\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_lookup","blocked":true,"expected":"BLOCKED","reason":"Collection \"audit_vault\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_unionWith","blocked":true,"expected":"BLOCKED","reason":"Collection \"audit_vault\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_unionWith_obj","blocked":true,"expected":"BLOCKED","reason":"Collection \"audit_vault\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_graphLookup","blocked":true,"expected":"BLOCKED","reason":"Collection \"audit_vault\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_nested_facet","blocked":true,"expected":"BLOCKED","reason":"Collection \"audit_vault\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_lookup","blocked":true,"expected":"BLOCKED","reason":"Collection \"passwords\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_unionWith","blocked":true,"expected":"BLOCKED","reason":"Collection \"passwords\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_unionWith_obj","blocked":true,"expected":"BLOCKED","reason":"Collection \"passwords\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_graphLookup","blocked":true,"expected":"BLOCKED","reason":"Collection \"passwords\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_nested_facet","blocked":true,"expected":"BLOCKED","reason":"Collection \"passwords\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_lookup","blocked":true,"expected":"BLOCKED","reason":"Collection \"encryption_keys\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_unionWith","blocked":true,"expected":"BLOCKED","reason":"Collection \"encryption_keys\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_unionWith_obj","blocked":true,"expected":"BLOCKED","reason":"Collection \"encryption_keys\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_graphLookup","blocked":true,"expected":"BLOCKED","reason":"Collection \"encryption_keys\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_nested_facet","blocked":true,"expected":"BLOCKED","reason":"Collection \"encryption_keys\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_lookup","blocked":true,"expected":"BLOCKED","reason":"Collection \"session_tokens\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_unionWith","blocked":true,"expected":"BLOCKED","reason":"Collection \"session_tokens\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_unionWith_obj","blocked":true,"expected":"BLOCKED","reason":"Collection \"session_tokens\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_graphLookup","blocked":true,"expected":"BLOCKED","reason":"Collection \"session_tokens\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_nested_facet","blocked":true,"expected":"BLOCKED","reason":"Collection \"session_tokens\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_lookup","blocked":true,"expected":"BLOCKED","reason":"Collection \"api_tokens\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_unionWith","blocked":true,"expected":"BLOCKED","reason":"Collection \"api_tokens\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_unionWith_obj","blocked":true,"expected":"BLOCKED","reason":"Collection \"api_tokens\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_graphLookup","blocked":true,"expected":"BLOCKED","reason":"Collection \"api_tokens\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_nested_facet","blocked":true,"expected":"BLOCKED","reason":"Collection \"api_tokens\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_lookup","blocked":true,"expected":"BLOCKED","reason":"Collection \"billing_details\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_unionWith","blocked":true,"expected":"BLOCKED","reason":"Collection \"billing_details\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_unionWith_obj","blocked":true,"expected":"BLOCKED","reason":"Collection \"billing_details\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_graphLookup","blocked":true,"expected":"BLOCKED","reason":"Collection \"billing_details\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_nested_facet","blocked":true,"expected":"BLOCKED","reason":"Collection \"billing_details\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_target_collection","blocked":true,"expected":"BLOCKED","reason":"Target collection \"admin_credentials\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_target_collection","blocked":true,"expected":"BLOCKED","reason":"Target collection \"system_logs\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_target_collection","blocked":true,"expected":"BLOCKED","reason":"Target collection \"internal_secrets\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_target_collection","blocked":true,"expected":"BLOCKED","reason":"Target collection \"private_users\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_target_collection","blocked":true,"expected":"BLOCKED","reason":"Target collection \"audit_vault\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_target_collection","blocked":true,"expected":"BLOCKED","reason":"Target collection \"passwords\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_target_collection","blocked":true,"expected":"BLOCKED","reason":"Target collection \"encryption_keys\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_target_collection","blocked":true,"expected":"BLOCKED","reason":"Target collection \"session_tokens\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_target_collection","blocked":true,"expected":"BLOCKED","reason":"Target collection \"api_tokens\" is outside the allowed scope"}
+{"type":"adversarial","category":"scope_violation_target_collection","blocked":true,"expected":"BLOCKED","reason":"Target collection \"billing_details\" is outside the allowed scope"}
+{"type":"adversarial","category":"oversized_pipeline","blocked":true,"expected":"BLOCKED","reason":"Pipeline has too many stages (max 20)"}
+{"type":"adversarial","category":"invalid_collection_name","blocked":true,"expected":"BLOCKED","reason":"Invalid collection name: \"system.users\""}
+{"type":"adversarial","category":"invalid_collection_name","blocked":true,"expected":"BLOCKED","reason":"Invalid collection name: \"system.version\""}
+{"type":"adversarial","category":"invalid_collection_name","blocked":true,"expected":"BLOCKED","reason":"Invalid collection name: \"admin.keys\""}
+{"type":"adversarial","category":"invalid_collection_name","blocked":true,"expected":"BLOCKED","reason":"Invalid collection name: \"local.oplog\""}
+{"type":"adversarial","category":"invalid_collection_name","blocked":true,"expected":"BLOCKED","reason":"Invalid collection name: \"config.settings\""}
+{"type":"adversarial","category":"invalid_collection_name","blocked":true,"expected":"BLOCKED","reason":"Invalid collection name: \"123_invalid\""}
+{"type":"adversarial","category":"invalid_collection_name","blocked":true,"expected":"BLOCKED","reason":"Invalid collection name: \"$special\""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"benign_analytical_pipeline","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"valid_collection_name","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"valid_collection_name","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"valid_collection_name","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"valid_collection_name","allowed":true,"expected":"ALLOWED","reason":""}
+{"type":"benign","category":"valid_collection_name","allowed":true,"expected":"ALLOWED","reason":""}

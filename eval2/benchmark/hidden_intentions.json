@@ -1,0 +1,442 @@
+{
+  "supplies-0063": {
+    "id": "supplies-0063",
+    "dataset": "sample_supplies",
+    "category": "AMB_LEX",
+    "text": "Which items have the highest sales?",
+    "intendedMetric": "items[].price",
+    "intendedInterpretation": "Rank products by total sales revenue (items.price)"
+  },
+  "supplies-0064": {
+    "id": "supplies-0064",
+    "dataset": "sample_supplies",
+    "category": "AMB_LEX",
+    "text": "Find the best-performing products.",
+    "intendedMetric": "items[].quantity",
+    "intendedInterpretation": "Rank products by total quantity sold (items.quantity)"
+  },
+  "supplies-0065": {
+    "id": "supplies-0065",
+    "dataset": "sample_supplies",
+    "category": "AMB_LEX",
+    "text": "Which products generated the most revenue overall?",
+    "intendedMetric": "items[].price",
+    "intendedInterpretation": "Rank products by total sales revenue (items.price)"
+  },
+  "supplies-0066": {
+    "id": "supplies-0066",
+    "dataset": "sample_supplies",
+    "category": "AMB_LEX",
+    "text": "Show the biggest sellers overall.",
+    "intendedMetric": "items[].quantity",
+    "intendedInterpretation": "Rank products by total quantity sold (items.quantity)"
+  },
+  "supplies-0067": {
+    "id": "supplies-0067",
+    "dataset": "sample_supplies",
+    "category": "AMB_LEX",
+    "text": "Which items performed best overall?",
+    "intendedMetric": "items[].price",
+    "intendedInterpretation": "Rank products by total sales revenue (items.price)"
+  },
+  "supplies-0068": {
+    "id": "supplies-0068",
+    "dataset": "sample_supplies",
+    "category": "AMB_LEX",
+    "text": "List the products with the highest sales performance.",
+    "intendedMetric": "items[].price",
+    "intendedInterpretation": "Rank products by total sales revenue (items.price)"
+  },
+  "supplies-0069": {
+    "id": "supplies-0069",
+    "dataset": "sample_supplies",
+    "category": "AMB_LEX",
+    "text": "What are the most successful products overall?",
+    "intendedMetric": "items[].price",
+    "intendedInterpretation": "Rank products by total sales revenue (items.price)"
+  },
+  "supplies-0070": {
+    "id": "supplies-0070",
+    "dataset": "sample_supplies",
+    "category": "AMB_LEX",
+    "text": "Identify the top-selling products.",
+    "intendedMetric": "items[].price",
+    "intendedInterpretation": "Rank products by total sales revenue (items.price)"
+  },
+  "supplies-0071": {
+    "id": "supplies-0071",
+    "dataset": "sample_supplies",
+    "category": "AMB_LEX",
+    "text": "Which items contributed the most to sales?",
+    "intendedMetric": "items[].price",
+    "intendedInterpretation": "Rank products by total sales revenue (items.price)"
+  },
+  "supplies-0072": {
+    "id": "supplies-0072",
+    "dataset": "sample_supplies",
+    "category": "AMB_LEX",
+    "text": "Show me the best products.",
+    "intendedMetric": "items[].price",
+    "intendedInterpretation": "Rank products by total sales revenue (items.price)"
+  },
+  "supplies-0073": {
+    "id": "supplies-0073",
+    "dataset": "sample_supplies",
+    "category": "AMB_LEX",
+    "text": "Which products have the strongest sales figures?",
+    "intendedMetric": "items[].price",
+    "intendedInterpretation": "Rank products by total sales revenue (items.price)"
+  },
+  "supplies-0074": {
+    "id": "supplies-0074",
+    "dataset": "sample_supplies",
+    "category": "AMB_LEX",
+    "text": "Find the most popular items.",
+    "intendedMetric": "items[].quantity",
+    "intendedInterpretation": "Rank products by total quantity sold (items.quantity)"
+  },
+  "supplies-0075": {
+    "id": "supplies-0075",
+    "dataset": "sample_supplies",
+    "category": "AMB_LEX",
+    "text": "Which products are the biggest contributors to revenue?",
+    "intendedMetric": "items[].price",
+    "intendedInterpretation": "Rank products by total sales revenue (items.price)"
+  },
+  "supplies-0076": {
+    "id": "supplies-0076",
+    "dataset": "sample_supplies",
+    "category": "AMB_LEX",
+    "text": "List the worst-performing items.",
+    "intendedMetric": "items[].price",
+    "intendedInterpretation": "Rank products by total sales revenue (items.price)"
+  },
+  "supplies-0077": {
+    "id": "supplies-0077",
+    "dataset": "sample_supplies",
+    "category": "AMB_LEX",
+    "text": "Which items have the least sales?",
+    "intendedMetric": "items[].price",
+    "intendedInterpretation": "Rank products by total sales revenue (items.price)"
+  },
+  "supplies-0078": {
+    "id": "supplies-0078",
+    "dataset": "sample_supplies",
+    "category": "AMB_LEX",
+    "text": "Show the highest-performing products.",
+    "intendedMetric": "items[].price",
+    "intendedInterpretation": "Rank products by total sales revenue (items.price)"
+  },
+  "supplies-0079": {
+    "id": "supplies-0079",
+    "dataset": "sample_supplies",
+    "category": "AMB_LEX",
+    "text": "What are the top revenue-generating items overall?",
+    "intendedMetric": "items[].price",
+    "intendedInterpretation": "Rank products by total sales revenue (items.price)"
+  },
+  "supplies-0080": {
+    "id": "supplies-0080",
+    "dataset": "sample_supplies",
+    "category": "AMB_LEX",
+    "text": "Identify the least popular products.",
+    "intendedMetric": "items[].quantity",
+    "intendedInterpretation": "Rank products by total quantity sold (items.quantity)"
+  },
+  "supplies-0081": {
+    "id": "supplies-0081",
+    "dataset": "sample_supplies",
+    "category": "AMB_LEX",
+    "text": "Which items stand out the most?",
+    "intendedMetric": "items[].price",
+    "intendedInterpretation": "Rank products by total sales revenue (items.price)"
+  },
+  "supplies-0084": {
+    "id": "supplies-0084",
+    "dataset": "sample_supplies",
+    "category": "AMB_LEX",
+    "text": "Find the items that matter most.",
+    "intendedMetric": "items[].price",
+    "intendedInterpretation": "Rank products by total sales revenue (items.price)"
+  },
+  "supplies-0085": {
+    "id": "supplies-0085",
+    "dataset": "sample_supplies",
+    "category": "AMB_LEX",
+    "text": "Which products made the biggest impact?",
+    "intendedMetric": "items[].price",
+    "intendedInterpretation": "Rank products by total sales revenue (items.price)"
+  },
+  "supplies-0087": {
+    "id": "supplies-0087",
+    "dataset": "sample_supplies",
+    "category": "AMB_LEX",
+    "text": "Which products were the most successful?",
+    "intendedMetric": "items[].price",
+    "intendedInterpretation": "Rank products by total sales revenue (items.price)"
+  },
+  "supplies-0090": {
+    "id": "supplies-0090",
+    "dataset": "sample_supplies",
+    "category": "AMB_LEX",
+    "text": "Show the products that did best.",
+    "intendedMetric": "items[].price",
+    "intendedInterpretation": "Rank products by total sales revenue (items.price)"
+  },
+  "supplies-0091": {
+    "id": "supplies-0091",
+    "dataset": "sample_supplies",
+    "category": "AMB_LEX",
+    "text": "Which items were most significant?",
+    "intendedMetric": "items[].price",
+    "intendedInterpretation": "Rank products by total sales revenue (items.price)"
+  },
+  "supplies-0092": {
+    "id": "supplies-0092",
+    "dataset": "sample_supplies",
+    "category": "AMB_LEX",
+    "text": "Find the products that contributed most.",
+    "intendedMetric": "items[].price",
+    "intendedInterpretation": "Rank products by total sales revenue (items.price)"
+  },
+  "supplies-0093": {
+    "id": "supplies-0093",
+    "dataset": "sample_supplies",
+    "category": "AMB_LEX",
+    "text": "Which items had the biggest impact?",
+    "intendedMetric": "items[].price",
+    "intendedInterpretation": "Rank products by total sales revenue (items.price)"
+  },
+  "supplies-0095": {
+    "id": "supplies-0095",
+    "dataset": "sample_supplies",
+    "category": "AMB_LEX",
+    "text": "Which items were most valuable?",
+    "intendedMetric": "items[].price",
+    "intendedInterpretation": "Rank products by total sales revenue (items.price)"
+  },
+  "supplies-0100": {
+    "id": "supplies-0100",
+    "dataset": "sample_supplies",
+    "category": "AMB_LEX",
+    "text": "Tell me which items were most significant.",
+    "intendedMetric": "items[].price",
+    "intendedInterpretation": "Rank products by total sales revenue (items.price)"
+  },
+  "analytics-0183": {
+    "id": "analytics-0183",
+    "dataset": "sample_analytics",
+    "category": "AMB_LEX",
+    "text": "Which assets had the highest trading performance?",
+    "intendedMetric": "transactions[].amount",
+    "intendedInterpretation": "Rank by total transaction trading amount (transactions.amount)"
+  },
+  "analytics-0184": {
+    "id": "analytics-0184",
+    "dataset": "sample_analytics",
+    "category": "AMB_LEX",
+    "text": "Find the best trades overall.",
+    "intendedMetric": "transactions[].amount",
+    "intendedInterpretation": "Rank by total transaction trading amount (transactions.amount)"
+  },
+  "analytics-0185": {
+    "id": "analytics-0185",
+    "dataset": "sample_analytics",
+    "category": "AMB_LEX",
+    "text": "Which transactions generated the most revenue?",
+    "intendedMetric": "transactions[].amount",
+    "intendedInterpretation": "Rank by total transaction trading amount (transactions.amount)"
+  },
+  "analytics-0186": {
+    "id": "analytics-0186",
+    "dataset": "sample_analytics",
+    "category": "AMB_LEX",
+    "text": "Show the biggest performers among the traded assets.",
+    "intendedMetric": "transactions[].amount",
+    "intendedInterpretation": "Rank by total transaction trading amount (transactions.amount)"
+  },
+  "analytics-0187": {
+    "id": "analytics-0187",
+    "dataset": "sample_analytics",
+    "category": "AMB_LEX",
+    "text": "Which trades had the highest gains?",
+    "intendedMetric": "transactions[].amount",
+    "intendedInterpretation": "Rank by total transaction trading amount (transactions.amount)"
+  },
+  "analytics-0188": {
+    "id": "analytics-0188",
+    "dataset": "sample_analytics",
+    "category": "AMB_LEX",
+    "text": "List the top transactions by trading activity.",
+    "intendedMetric": "transaction_count",
+    "intendedInterpretation": "Rank by total transaction count (transaction_count)"
+  },
+  "analytics-0189": {
+    "id": "analytics-0189",
+    "dataset": "sample_analytics",
+    "category": "AMB_LEX",
+    "text": "Which assets had the strongest performance?",
+    "intendedMetric": "transactions[].amount",
+    "intendedInterpretation": "Rank by total transaction trading amount (transactions.amount)"
+  },
+  "supplies-0086": {
+    "id": "supplies-0086",
+    "dataset": "sample_supplies",
+    "category": "AMB_PARA",
+    "text": "Show the leading items.",
+    "intendedMetric": "items[].price",
+    "intendedInterpretation": "Rank products by total sales revenue (items.price)"
+  },
+  "supplies-0088": {
+    "id": "supplies-0088",
+    "dataset": "sample_supplies",
+    "category": "AMB_PARA",
+    "text": "Identify the standout items.",
+    "intendedMetric": "items[].price",
+    "intendedInterpretation": "Rank products by total sales revenue (items.price)"
+  },
+  "supplies-0089": {
+    "id": "supplies-0089",
+    "dataset": "sample_supplies",
+    "category": "AMB_PARA",
+    "text": "Which items delivered the strongest results?",
+    "intendedMetric": "items[].price",
+    "intendedInterpretation": "Rank products by total sales revenue (items.price)"
+  },
+  "supplies-0094": {
+    "id": "supplies-0094",
+    "dataset": "sample_supplies",
+    "category": "AMB_PARA",
+    "text": "Show me the key products.",
+    "intendedMetric": "items[].price",
+    "intendedInterpretation": "Rank products by total sales revenue (items.price)"
+  },
+  "supplies-0096": {
+    "id": "supplies-0096",
+    "dataset": "sample_supplies",
+    "category": "AMB_PARA",
+    "text": "Identify the products that led overall.",
+    "intendedMetric": "items[].price",
+    "intendedInterpretation": "Rank products by total sales revenue (items.price)"
+  },
+  "supplies-0097": {
+    "id": "supplies-0097",
+    "dataset": "sample_supplies",
+    "category": "AMB_PARA",
+    "text": "Which products had the strongest outcome?",
+    "intendedMetric": "items[].price",
+    "intendedInterpretation": "Rank products by total sales revenue (items.price)"
+  },
+  "supplies-0098": {
+    "id": "supplies-0098",
+    "dataset": "sample_supplies",
+    "category": "AMB_PARA",
+    "text": "Show the items that stood out in terms of results.",
+    "intendedMetric": "items[].price",
+    "intendedInterpretation": "Rank products by total sales revenue (items.price)"
+  },
+  "supplies-0099": {
+    "id": "supplies-0099",
+    "dataset": "sample_supplies",
+    "category": "AMB_PARA",
+    "text": "Which products were the main contributors?",
+    "intendedMetric": "items[].price",
+    "intendedInterpretation": "Rank products by total sales revenue (items.price)"
+  },
+  "analytics-0203": {
+    "id": "analytics-0203",
+    "dataset": "sample_analytics",
+    "category": "AMB_PARA",
+    "text": "Which assets made the greatest impact?",
+    "intendedMetric": "transactions[].amount",
+    "intendedInterpretation": "Rank by total transaction trading amount (transactions.amount)"
+  },
+  "analytics-0205": {
+    "id": "analytics-0205",
+    "dataset": "sample_analytics",
+    "category": "AMB_PARA",
+    "text": "Which transactions did particularly well overall?",
+    "intendedMetric": "transactions[].amount",
+    "intendedInterpretation": "Rank by total transaction trading amount (transactions.amount)"
+  },
+  "analytics-0206": {
+    "id": "analytics-0206",
+    "dataset": "sample_analytics",
+    "category": "AMB_PARA",
+    "text": "Show the leading assets.",
+    "intendedMetric": "transactions[].amount",
+    "intendedInterpretation": "Rank by total transaction trading amount (transactions.amount)"
+  },
+  "analytics-0208": {
+    "id": "analytics-0208",
+    "dataset": "sample_analytics",
+    "category": "AMB_PARA",
+    "text": "Identify the standout transactions.",
+    "intendedMetric": "transactions[].amount",
+    "intendedInterpretation": "Rank by total transaction trading amount (transactions.amount)"
+  },
+  "analytics-0209": {
+    "id": "analytics-0209",
+    "dataset": "sample_analytics",
+    "category": "AMB_PARA",
+    "text": "Which assets delivered the strongest results?",
+    "intendedMetric": "transactions[].amount",
+    "intendedInterpretation": "Rank by total transaction trading amount (transactions.amount)"
+  },
+  "analytics-0211": {
+    "id": "analytics-0211",
+    "dataset": "sample_analytics",
+    "category": "AMB_PARA",
+    "text": "Which transactions had the greatest impact?",
+    "intendedMetric": "transactions[].amount",
+    "intendedInterpretation": "Rank by total transaction trading amount (transactions.amount)"
+  },
+  "analytics-0213": {
+    "id": "analytics-0213",
+    "dataset": "sample_analytics",
+    "category": "AMB_PARA",
+    "text": "Which assets were the main contributors to trading activity?",
+    "intendedMetric": "transaction_count",
+    "intendedInterpretation": "Rank by total transaction count (transaction_count)"
+  },
+  "analytics-0216": {
+    "id": "analytics-0216",
+    "dataset": "sample_analytics",
+    "category": "AMB_PARA",
+    "text": "Identify the assets that led results.",
+    "intendedMetric": "transactions[].amount",
+    "intendedInterpretation": "Rank by total transaction trading amount (transactions.amount)"
+  },
+  "analytics-0217": {
+    "id": "analytics-0217",
+    "dataset": "sample_analytics",
+    "category": "AMB_PARA",
+    "text": "Which trades had the strongest outcome?",
+    "intendedMetric": "transactions[].amount",
+    "intendedInterpretation": "Rank by total transaction trading amount (transactions.amount)"
+  },
+  "analytics-0218": {
+    "id": "analytics-0218",
+    "dataset": "sample_analytics",
+    "category": "AMB_PARA",
+    "text": "Show the key transactions.",
+    "intendedMetric": "transactions[].amount",
+    "intendedInterpretation": "Rank by total transaction trading amount (transactions.amount)"
+  },
+  "analytics-0219": {
+    "id": "analytics-0219",
+    "dataset": "sample_analytics",
+    "category": "AMB_PARA",
+    "text": "Which assets were the main drivers of results?",
+    "intendedMetric": "transactions[].amount",
+    "intendedInterpretation": "Rank by total transaction trading amount (transactions.amount)"
+  },
+  "mflix-0312": {
+    "id": "mflix-0312",
+    "dataset": "sample_mflix",
+    "category": "AMB_PARA",
+    "text": "Find the films with the strongest overall reception.",
+    "intendedMetric": "imdb.rating",
+    "intendedInterpretation": "Rank films by viewer rating (imdb.rating)"
+  }
+}

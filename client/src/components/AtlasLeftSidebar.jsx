@@ -3,7 +3,7 @@ import { Plus, MessageSquare, LayoutDashboard, ChevronDown, Database, Loader2, A
 import { Button } from "./ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
 import { cn } from "../lib/utils";
-import { fetchQueryHistory, fetchDashboard, deleteQueryHistoryItem, renameQueryHistoryItem } from "../services/api";
+import { deleteQueryHistoryItem, renameQueryHistoryItem } from "../services/api";
 import { useSchema } from "../hooks/useSchema";
 
 /**
@@ -13,11 +13,12 @@ function ItemMenu({
   onRename, 
   onDelete, 
   deleteLabel = "Delete", 
-  deleteIcon: DeleteIcon = Trash2,
+  deleteIcon = Trash2,
   showRename = true 
 }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef(null);
+  const DeleteIcon = deleteIcon;
 
   useEffect(() => {
     if (!open) return;
@@ -76,12 +77,16 @@ function HistoryItemRow({ item, onRename, onDelete, activeView, onViewChange, on
   const [editName, setEditName]   = useState(item.query);
   const inputRef = useRef(null);
 
+  const startEditing = () => {
+    setEditName(item.query);
+    setIsEditing(true);
+  };
+
   useEffect(() => {
     if (isEditing) {
-      setEditName(item.query);
       setTimeout(() => inputRef.current?.focus(), 50);
     }
-  }, [isEditing, item.query]);
+  }, [isEditing]);
 
   const handleSave = async (e) => {
     e?.stopPropagation();
@@ -155,9 +160,9 @@ function HistoryItemRow({ item, onRename, onDelete, activeView, onViewChange, on
         <p className="text-[11px] text-muted-foreground mt-0.5">{item.time}</p>
       </div>
       <ItemMenu
-        onEditStart={() => setIsEditing(true)}
+        onEditStart={startEditing}
         onDelete={() => onDelete(item.id)}
-        onRename={() => setIsEditing(true)}
+        onRename={startEditing}
       />
     </div>
   );
@@ -392,7 +397,7 @@ export default function AtlasLeftSidebar({
                     {schemaError}
                   </div>
                   <button
-                    onClick={() => { setSchemaError(null); setCollections([]); }}
+                    onClick={() => refreshSchema()}
                     className="text-[11px] text-primary hover:underline"
                   >
                     Retry

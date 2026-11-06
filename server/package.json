@@ -8,8 +8,7 @@
         "dev": "nodemon src/index.js",
         "seed": "node src/db/seed.js",
         "test": "jest --verbose",
-        "test:coverage": "jest --coverage --verbose",
-        "test:smoke": "node test-smoke.js"
+        "test:coverage": "jest --coverage --verbose"
     },
     "dependencies": {
         "cookie-parser": "^1.4.7",

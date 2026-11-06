@@ -1,22 +1,22 @@
 key,title,type,verified,notes
-hossen2023bert,BERT Model-based Natural Language to NoSQL Query Conversion using Deep Learning Approach,article,false,Pages updated to 810-821 per PDF footer; DOI dropped
-tend2025benchmark,Bridging the Gap: Enabling Natural Language Queries for NoSQL Databases through Text-to-NoSQL Translation,article,false,arXiv:2502.11201v3 (Lu et al. 2026) replacing anonymous placeholder
-spider2018,Spider: A Large-Scale Human-Labeled Dataset for Complex and Cross-Domain Semantic Parsing and Text-to-SQL Task,inproceedings,false,Retained cross-domain benchmark reference; pending publisher page check
-bird2023,Can LLM Already Serve as a Database Interface? A BIg Bench for Large-Scale Database Grounded Text-to-SQLs,inproceedings,false,Pages updated to 42330-42357 per NeurIPS 2023 proceedings
-dinsql2023,DIN-SQL: Decomposed In-Context Learning of Text-to-SQL with Self-Correction,inproceedings,false,Pages updated to 36339-36348 per NeurIPS 2023 proceedings
-dailsql2023,Text-to-SQL Empowered by Large Language Models: A Benchmark Evaluation,article,false,PVLDB vol 17 no 5 pp 1132-1145 (2024)
-docspider2025,DocSpider: A Dataset of Cross-Domain Natural Language Querying for MongoDB,article,false,Natural Language Processing vol 31 no 6 pp 1367-1398
-multitend2025,MultiTEND: A Multilingual Benchmark for Natural Language to NoSQL Query Translation,inproceedings,false,ACL 2025 Findings pp 24632-24657
-sm3text2024,SM3-Text-to-Query: Synthetic Multi-Model Medical Text-to-Query Benchmark,inproceedings,false,NeurIPS 2024 vol 37 pp 88627-88663
-quamar2022nli,Natural Language Interfaces to Data,article,false,Foundations and Trends in Databases vol 11 no 4 pp 319-414
-ozcan2020nli,State of the Art and Open Challenges in Natural Language Interfaces to Data,inproceedings,false,ACM SIGMOD 2020 pp 2629-2636
-blank2019nosql,Querying NoSQL with Deep Learning to Answer Natural Language Questions,inproceedings,false,AAAI 2019 vol 33 no 1 pp 9416-9421
-fast2018iris,Iris: A Conversational Agent for Complex Tasks,article,false,Author list completed (Fast Chen Mendelsohn Bassen Bernstein); CHI 2018
-mongodb2024manual,Aggregation Pipeline MongoDB Manual,manual,false,Official MongoDB Documentation; accessed October 2026
-aliannejadi2019asking,Asking Clarifying Questions in Open-Domain Information-Seeking Conversations,inproceedings,false,Retained conversational search reference; pending publisher page check
-zamani2020generating,Generating Clarifying Questions for Information Retrieval,inproceedings,false,Retained clarification generation reference; pending publisher page check
-min2020ambigqa,AmbigQA: Answering Ambiguous Open-Domain Questions,inproceedings,false,Retained open-domain QA ambiguity reference; pending publisher page check
-setlur2016eviza,Eviza: A Natural Language Interface for Visual Analysis,inproceedings,false,Retained conversational visual analysis reference; pending publisher page check
-jwt2015rfc,JSON Web Token (JWT),misc,false,IETF RFC 7519; pending publisher page check
-nist2001aes,Advanced Encryption Standard (AES),misc,false,FIPS PUB 197 specification
-nist80038a,Recommendation for Block Cipher Modes of Operation: Methods and Techniques,techreport,false,NIST SP 800-38A for CBC mode
+hossen2023bert,BERT Model-based Natural Language to NoSQL Query Conversion using Deep Learning Approach,article,true,Verified on IJACSA vol 14 no 2 pp 810-821 (2023)
+tend2025benchmark,Bridging the Gap: Enabling Natural Language Queries for NoSQL Databases through Text-to-NoSQL Translation,article,true,Verified on arXiv:2502.11201v3 (Lu et al. 2026); 1210 tasks across 11 databases
+spider2018,Spider: A Large-Scale Human-Labeled Dataset for Complex and Cross-Domain Semantic Parsing and Text-to-SQL Task,inproceedings,true,Verified on ACL Anthology D18-1425; EMNLP 2018 pp 3911-3921
+bird2023,Can LLM Already Serve as a Database Interface? A BIg Bench for Large-Scale Database Grounded Text-to-SQLs,inproceedings,true,Verified on NeurIPS 2023 proceedings vol 36 pp 42330-42357
+dinsql2023,DIN-SQL: Decomposed In-Context Learning of Text-to-SQL with Self-Correction,inproceedings,true,Verified on NeurIPS 2023 proceedings vol 36 pp 36339-36348
+dailsql2023,Text-to-SQL Empowered by Large Language Models: A Benchmark Evaluation,article,true,Verified on PVLDB vol 17 no 5 pp 1132-1145 (2024); DOI 10.14778/3641204.3641221
+docspider2025,DocSpider: A Dataset of Cross-Domain Natural Language Querying for MongoDB,article,true,Verified on Natural Language Processing vol 31 no 6 pp 1367-1398 (2025); DOI 10.1017/nlp.2024.63
+multitend2025,MultiTEND: A Multilingual Benchmark for Natural Language to NoSQL Query Translation,inproceedings,true,Verified on ACL Anthology 2025.findings-acl.1265; ACL 2025 Findings pp 24632-24657
+sm3text2024,SM3-Text-to-Query: Synthetic Multi-Model Medical Text-to-Query Benchmark,inproceedings,true,Verified on NeurIPS 2024 Datasets and Benchmarks Track vol 37 pp 88627-88663
+quamar2022nli,Natural Language Interfaces to Data,article,true,Verified on Foundations and Trends in Databases vol 11 no 4 pp 319-414 (2022); DOI 10.1561/1900000078
+ozcan2020nli,State of the Art and Open Challenges in Natural Language Interfaces to Data,inproceedings,true,Verified on ACM SIGMOD 2020 pp 2629-2636; DOI 10.1145/3318464.3383128
+blank2019nosql,Querying NoSQL with Deep Learning to Answer Natural Language Questions,inproceedings,true,Verified on AAAI 2019 vol 33 no 1 pp 9416-9421; DOI 10.1609/aaai.v33i01.33019416
+fast2018iris,Iris: A Conversational Agent for Complex Tasks,inproceedings,true,Verified on ACM CHI 2018 Paper 473 pp 1-12; DOI 10.1145/3173574.3174047
+mongodb2024manual,Aggregation Pipeline MongoDB Manual,manual,true,Verified on MongoDB official manual documentation (accessed October 2026)
+aliannejadi2019asking,Asking Clarifying Questions in Open-Domain Information-Seeking Conversations,inproceedings,true,Verified on ACM SIGIR 2019 pp 475-484; DOI 10.1145/3331184.3331265
+zamani2020generating,Generating Clarifying Questions for Information Retrieval,inproceedings,true,Verified on The Web Conference (WWW 2020) pp 418-428; DOI 10.1145/3366423.3380126
+min2020ambigqa,AmbigQA: Answering Ambiguous Open-Domain Questions,inproceedings,true,Verified on ACL Anthology 2020.emnlp-main.466; EMNLP 2020 pp 5783-5797
+setlur2016eviza,Eviza: A Natural Language Interface for Visual Analysis,inproceedings,true,Verified on ACM UIST 2016 pp 365-377; DOI 10.1145/2984511.2984588
+jwt2015rfc,JSON Web Token (JWT),misc,true,Verified on IETF RFC 7519 (May 2015); DOI 10.17487/RFC7519
+nist2001aes,Advanced Encryption Standard (AES),misc,true,Verified on NIST FIPS PUB 197 (November 2001); DOI 10.6028/NIST.FIPS.197
+nist80038a,Recommendation for Block Cipher Modes of Operation: Methods and Techniques,techreport,true,Verified on NIST SP 800-38A (2001); DOI 10.6028/NIST.SP.800-38a

@@ -1,0 +1,21 @@
+% Annotation and benchmark sample accounting across curation stages
+\begin{table}[t]
+\centering
+\small
+\caption{Benchmark Sample Accounting and Ambiguity Eligibility Reconciliation Across Curation Stages ($N = 330$).}
+\label{tab:annotation_flow}
+\begin{tabular}{lccccp{4.2cm}}
+\toprule
+\textbf{Curation Stage} & \textbf{Ambiguous} & \textbf{Clear} & \textbf{Excluded} & \textbf{Total Scored} & \textbf{Decision Rationale} \\
+\midrule
+1. Original human labels & 83 & 247 & --- & 330 & Consensus dual-annotator labeling ($\kappa = 1.000$, $\text{PABAK} = 0.958$). \\
+\addlinespace
+2. Out-of-scope removal & 71 & 247 & 12 & 318 & Removed 12 conversational temporal queries (\texttt{OOS\_UNSCORED}, e.g., \emph{``relevant period''}); gate targets metric ambiguity. \\
+\addlinespace
+3. Eligibility treatment & 69 & 249 & --- & 318 & Reclassified 2 annotator-ambiguous queries lacking schema candidate multiplicity ($< 2$ numeric fields in scope) as clear. \\
+\addlinespace
+\midrule
+\textbf{Final scored set} & \textbf{69} & \textbf{249} & \textbf{12} & \textbf{318} & Primary candidate-scored benchmark for gate specificity and recall ($N_{\text{scored}} = 318$). \\
+\bottomrule
+\end{tabular}
+\end{table}

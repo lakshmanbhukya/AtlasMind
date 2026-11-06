@@ -1,0 +1,50 @@
+{
+  "C0a": {
+    "total": 25,
+    "correctCount": 21,
+    "correctnessPct": "84.0%",
+    "silentCount": 10,
+    "ambTotal": 10,
+    "silentPct": "100.0%",
+    "unnecCount": 0,
+    "clrTotal": 15,
+    "unnecPct": "0.0%",
+    "avgTurns": "0.00",
+    "unresolvedCount": 0,
+    "unresolvedPct": "0.0%",
+    "avgCalls": "1.00",
+    "avgTokens": 1878
+  },
+  "C0b": {
+    "total": 25,
+    "correctCount": 20,
+    "correctnessPct": "80.0%",
+    "silentCount": 6,
+    "ambTotal": 10,
+    "silentPct": "60.0%",
+    "unnecCount": 0,
+    "clrTotal": 15,
+    "unnecPct": "0.0%",
+    "avgTurns": "0.16",
+    "unresolvedCount": 4,
+    "unresolvedPct": "16.0%",
+    "avgCalls": "1.16",
+    "avgTokens": 1863
+  },
+  "C2": {
+    "total": 25,
+    "correctCount": 20,
+    "correctnessPct": "80.0%",
+    "silentCount": 2,
+    "ambTotal": 10,
+    "silentPct": "20.0%",
+    "unnecCount": 0,
+    "clrTotal": 15,
+    "unnecPct": "0.0%",
+    "avgTurns": "0.32",
+    "unresolvedCount": 3,
+    "unresolvedPct": "12.0%",
+    "avgCalls": "1.12",
+    "avgTokens": 1867
+  }
+}

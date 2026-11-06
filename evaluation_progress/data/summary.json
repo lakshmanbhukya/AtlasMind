@@ -1,12 +1,12 @@
 {
-  "generatedAt": "2026-10-20T14:24:56.646Z",
+  "generatedAt": "2026-10-29T17:38:35.903Z",
   "gate": {
     "n": 330,
     "scoredN": 318,
     "confusionMatrix": {
       "TP": 38,
-      "FP": 112,
-      "TN": 137,
+      "FP": 35,
+      "TN": 214,
       "FN": 31
     },
     "recallOverall": {
@@ -31,35 +31,35 @@
       "ciPct": "[0.0%, 12.9%]"
     },
     "precision": {
-      "mean": 0.2533,
-      "lower": 0.1905,
-      "upper": 0.3285,
-      "pointPct": "25.3%",
-      "ciPct": "[19.0%, 32.8%]"
+      "mean": 0.5205,
+      "lower": 0.4078,
+      "upper": 0.6312,
+      "pointPct": "52.1%",
+      "ciPct": "[40.8%, 63.1%]"
     },
     "specificity": {
-      "mean": 0.5502,
-      "lower": 0.4881,
-      "upper": 0.6108,
-      "pointPct": "55.0%",
-      "ciPct": "[48.8%, 61.1%]"
+      "mean": 0.8594,
+      "lower": 0.8108,
+      "upper": 0.8972,
+      "pointPct": "85.9%",
+      "ciPct": "[81.1%, 89.7%]"
     },
     "ucr": {
-      "mean": 0.4498,
-      "lower": 0.3892,
-      "upper": 0.5119,
-      "pointPct": "45.0%",
-      "ciPct": "[38.9%, 51.2%]"
+      "mean": 0.1406,
+      "lower": 0.1028,
+      "upper": 0.1892,
+      "pointPct": "14.1%",
+      "ciPct": "[10.3%, 18.9%]"
     },
     "microbench": {
       "iterations": 10000,
       "warmup": 1000,
       "unit": "microseconds",
-      "mean": 34.78,
-      "p50": 28.5,
-      "p95": 57.2,
-      "p99": 83.8,
-      "max": 3619.7,
+      "mean": 129.07,
+      "p50": 105.8,
+      "p95": 231.9,
+      "p99": 407.2,
+      "max": 7702.2,
       "hardware": {
         "cpuModel": "AMD Ryzen 5 5600H with Radeon Graphics         ",
         "cores": 12,
@@ -67,7 +67,7 @@
         "platform": "win32",
         "totalMemoryGb": "7.34"
       },
-      "recordedAt": "2026-10-13T17:08:24.380Z"
+      "recordedAt": "2026-10-29T17:37:31.280Z"
     }
   },
   "safety": {
@@ -96,11 +96,12 @@
   "e2e": {
     "model": "openai/gpt-oss-120b",
     "nQueries": 100,
+    "basis": "annotator_labels (n=38)",
     "c0a": {
       "n": 100,
       "ambN": 38,
-      "ambLexN": 35,
-      "ambParaN": 20,
+      "ambLexN": 22,
+      "ambParaN": 16,
       "clrN": 62,
       "silentAmbArr": [
         1,
@@ -150,32 +151,32 @@
         "ciPct": "[90.8%, 100.0%]"
       },
       "silentLexCI": {
-        "mean": 0.6286,
-        "lower": 0.4634,
-        "upper": 0.7683,
-        "pointPct": "62.9%",
-        "ciPct": "[46.3%, 76.8%]"
+        "mean": 1,
+        "lower": 0.8513,
+        "upper": 1,
+        "pointPct": "100.0%",
+        "ciPct": "[85.1%, 100.0%]"
       },
       "silentParaCI": {
-        "mean": 0.8,
-        "lower": 0.584,
-        "upper": 0.9193,
-        "pointPct": "80.0%",
-        "ciPct": "[58.4%, 91.9%]"
+        "mean": 1,
+        "lower": 0.8064,
+        "upper": 1,
+        "pointPct": "100.0%",
+        "ciPct": "[80.6%, 100.0%]"
       },
       "matchLexCI": {
-        "mean": 0.6571,
-        "lower": 0.4915,
-        "upper": 0.7917,
-        "pointPct": "65.7%",
-        "ciPct": "[49.2%, 79.2%]"
+        "mean": 0.6364,
+        "lower": 0.4295,
+        "upper": 0.8027,
+        "pointPct": "63.6%",
+        "ciPct": "[43.0%, 80.3%]"
       },
       "matchParaCI": {
-        "mean": 0.35,
-        "lower": 0.1812,
-        "upper": 0.5671,
-        "pointPct": "35.0%",
-        "ciPct": "[18.1%, 56.7%]"
+        "mean": 0.375,
+        "lower": 0.1848,
+        "upper": 0.6136,
+        "pointPct": "37.5%",
+        "ciPct": "[18.5%, 61.4%]"
       },
       "resultMatchClrCI": {
         "mean": 1,
@@ -234,8 +235,8 @@
     "c0b": {
       "n": 100,
       "ambN": 38,
-      "ambLexN": 35,
-      "ambParaN": 20,
+      "ambLexN": 22,
+      "ambParaN": 16,
       "clrN": 62,
       "silentAmbArr": [
         1,
@@ -285,32 +286,32 @@
         "ciPct": "[49.9%, 78.8%]"
       },
       "silentLexCI": {
-        "mean": 0.5143,
-        "lower": 0.3557,
-        "upper": 0.6701,
-        "pointPct": "51.4%",
-        "ciPct": "[35.6%, 67.0%]"
+        "mean": 0.8182,
+        "lower": 0.6148,
+        "upper": 0.9269,
+        "pointPct": "81.8%",
+        "ciPct": "[61.5%, 92.7%]"
       },
       "silentParaCI": {
-        "mean": 0.35,
-        "lower": 0.1812,
-        "upper": 0.5671,
-        "pointPct": "35.0%",
-        "ciPct": "[18.1%, 56.7%]"
+        "mean": 0.4375,
+        "lower": 0.231,
+        "upper": 0.6682,
+        "pointPct": "43.8%",
+        "ciPct": "[23.1%, 66.8%]"
       },
       "matchLexCI": {
-        "mean": 0.5143,
-        "lower": 0.3557,
-        "upper": 0.6701,
-        "pointPct": "51.4%",
-        "ciPct": "[35.6%, 67.0%]"
+        "mean": 0.5,
+        "lower": 0.3072,
+        "upper": 0.6928,
+        "pointPct": "50.0%",
+        "ciPct": "[30.7%, 69.3%]"
       },
       "matchParaCI": {
-        "mean": 0.15,
-        "lower": 0.0524,
-        "upper": 0.3604,
-        "pointPct": "15.0%",
-        "ciPct": "[5.2%, 36.0%]"
+        "mean": 0.1875,
+        "lower": 0.0659,
+        "upper": 0.4301,
+        "pointPct": "18.8%",
+        "ciPct": "[6.6%, 43.0%]"
       },
       "resultMatchClrCI": {
         "mean": 0.9032,
@@ -369,8 +370,8 @@
     "c2": {
       "n": 100,
       "ambN": 38,
-      "ambLexN": 35,
-      "ambParaN": 20,
+      "ambLexN": 22,
+      "ambParaN": 16,
       "clrN": 62,
       "silentAmbArr": [
         0,
@@ -422,30 +423,30 @@
       "silentLexCI": {
         "mean": 0,
         "lower": 0,
-        "upper": 0.0989,
+        "upper": 0.1487,
         "pointPct": "0.0%",
-        "ciPct": "[0.0%, 9.9%]"
+        "ciPct": "[0.0%, 14.9%]"
       },
       "silentParaCI": {
-        "mean": 0.35,
-        "lower": 0.1812,
-        "upper": 0.5671,
-        "pointPct": "35.0%",
-        "ciPct": "[18.1%, 56.7%]"
+        "mean": 0.4375,
+        "lower": 0.231,
+        "upper": 0.6682,
+        "pointPct": "43.8%",
+        "ciPct": "[23.1%, 66.8%]"
       },
       "matchLexCI": {
         "mean": 1,
-        "lower": 0.9011,
+        "lower": 0.8513,
         "upper": 1,
         "pointPct": "100.0%",
-        "ciPct": "[90.1%, 100.0%]"
+        "ciPct": "[85.1%, 100.0%]"
       },
       "matchParaCI": {
-        "mean": 0.15,
-        "lower": 0.0524,
-        "upper": 0.3604,
-        "pointPct": "15.0%",
-        "ciPct": "[5.2%, 36.0%]"
+        "mean": 0.1875,
+        "lower": 0.0659,
+        "upper": 0.4301,
+        "pointPct": "18.8%",
+        "ciPct": "[6.6%, 43.0%]"
       },
       "resultMatchClrCI": {
         "mean": 0.9516,
@@ -501,6 +502,129 @@
       "meanTotalTokens": 1895.2,
       "meanLatencyMs": 19820.7
     },
+    "pairedArrays": {
+      "n": 38,
+      "c0aPairedArr": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "c0bPairedArr": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        0,
+        0,
+        1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0,
+        1,
+        0,
+        0,
+        1,
+        1
+      ],
+      "c2PairedArr": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0,
+        1,
+        0,
+        0,
+        1,
+        1
+      ]
+    },
     "pairedComparison_C0b_vs_C2": {
       "mcNemar": {
         "b": 18,
@@ -530,9 +654,9 @@
       "pairedBootstrapDiff": {
         "diffMean": 0.8158,
         "lower": 0.6842,
-        "upper": 0.9211,
+        "upper": 0.9474,
         "diffPct": "81.6 pp",
-        "ciPct": "[68.4, 92.1]"
+        "ciPct": "[68.4, 94.7]"
       }
     }
   },

@@ -20,6 +20,7 @@ const {
     TokenAlreadyUsedError,
     SafetyViolationError,
     ExecutionError,
+    RateLimitError,
 } = jest.requireActual('../services/queryExecutionEngine');
 
 jest.mock('../services/queryExecutionEngine', () => ({
@@ -171,6 +172,31 @@ describe('Route Adapters Smoke Tests (POST /api/query and POST /api/voice)', () 
             expect(res.status).toBe(500);
             expect(res.body.success).toBe(false);
             expect(res.body.error.code).toBe('execution_error');
+        });
+    });
+
+    describe('engine error mapping', () => {
+        test('maps RateLimitError to HTTP 429', async () => {
+            mockExecuteNaturalLanguageQuery.mockRejectedValueOnce(new RateLimitError());
+            const res = await request(app).post('/api/query').send({ text: 'count users' });
+            expect(res.status).toBe(429);
+            expect(res.body.error.code).toBe('rate_limited');
+        });
+
+        test('a non-engine error maps to 500 and never forwards its own status', async () => {
+            mockExecuteNaturalLanguageQuery.mockRejectedValueOnce(
+                Object.assign(new Error('boom'), { status: 401, code: 'upstream_auth' })
+            );
+            const res = await request(app).post('/api/query').send({ text: 'count users' });
+            expect(res.status).toBe(500);
+            expect(res.body.error.code).toBe('query_error');
+        });
+
+        test('maps approve-flow TokenAlreadyUsedError to HTTP 409', async () => {
+            mockExecuteApprovedWrite.mockRejectedValueOnce(new TokenAlreadyUsedError());
+            const res = await request(app).post('/api/query/approve').send({ approvalToken: 't' });
+            expect(res.status).toBe(409);
+            expect(res.body.error.code).toBe('token_already_used');
         });
     });
 

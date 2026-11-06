@@ -2,6 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const { transcribeAudio } = require('../services/groqService');
 const { QueryExecutionEngine } = require('../services/queryExecutionEngine');
+const { sendOutcome, sendError } = require('./engineHttp');
 
 const router = express.Router();
 
@@ -94,11 +95,7 @@ router.post('/', upload.single('audio'), async (req, res) => {
             },
         };
 
-        if (outcome.type === 'safety_blocked') {
-            return res.status(422).json(voiceData);
-        }
-
-        return res.status(200).json(voiceData);
+        return sendOutcome(res, outcome, voiceData);
     } catch (error) {
         console.error('❌ Voice pipeline error:', error);
         if (error instanceof multer.MulterError) {
@@ -110,15 +107,7 @@ router.post('/', upload.single('audio'), async (req, res) => {
                 },
             });
         }
-        const statusCode = error.statusCode || error.status || 500;
-        const code = error.code || (statusCode >= 500 ? 'voice_pipeline_error' : 'validation_error');
-        return res.status(statusCode).json({
-            success: false,
-            error: {
-                code,
-                message: error.message || 'Failed to process voice query',
-            },
-        });
+        return sendError(res, error, 'voice_pipeline_error', 'Failed to process voice query');
     }
 });
 

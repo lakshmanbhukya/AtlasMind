@@ -1,6 +1,7 @@
 const express = require('express');
 const { QueryExecutionEngine } = require('../services/queryExecutionEngine');
 const { getDb } = require('../db/connection');
+const { sendOutcome, sendError } = require('./engineHttp');
 
 const router = express.Router();
 
@@ -43,21 +44,10 @@ router.post('/', async (req, res) => {
             source: 'query',
         });
 
-        if (outcome.type === 'safety_blocked') {
-            return res.status(422).json(outcome.data);
-        }
-        return res.status(200).json(outcome.data);
+        return sendOutcome(res, outcome);
     } catch (error) {
         console.error('❌ Query pipeline error:', error);
-        const statusCode = error.statusCode || error.status || 500;
-        const code = error.code || (statusCode >= 500 ? 'query_error' : 'validation_error');
-        return res.status(statusCode).json({
-            success: false,
-            error: {
-                code,
-                message: error.message || 'Failed to process query',
-            },
-        });
+        return sendError(res, error, 'query_error', 'Failed to process query');
     }
 });
 
@@ -289,18 +279,10 @@ router.post('/approve', async (req, res) => {
             connectionId,
         });
 
-        return res.status(200).json(outcome.data);
+        return sendOutcome(res, outcome);
     } catch (error) {
         console.error('❌ Approved write execution error:', error);
-        const statusCode = error.statusCode || error.status || 500;
-        const code = error.code || (statusCode >= 500 ? 'execution_error' : 'validation_error');
-        return res.status(statusCode).json({
-            success: false,
-            error: {
-                code,
-                message: error.message || 'Failed to apply approved write transaction',
-            },
-        });
+        return sendError(res, error, 'execution_error', 'Failed to apply approved write transaction');
     }
 });
 

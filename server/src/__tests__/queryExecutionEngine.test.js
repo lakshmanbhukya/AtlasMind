@@ -78,6 +78,7 @@ const {
     TokenAlreadyUsedError,
     SafetyViolationError,
     ExecutionError,
+    RateLimitError,
 } = require('../services/queryExecutionEngine');
 
 describe('QueryExecutionEngine Interface Tests', () => {
@@ -242,6 +243,40 @@ describe('QueryExecutionEngine Interface Tests', () => {
             ).rejects.toThrow(ScopeError);
         });
 
+        test('wraps unexpected infrastructure failures in ExecutionError', async () => {
+            mockGetUserDb.mockRejectedValueOnce(new Error('connection refused'));
+            const err = await QueryExecutionEngine.executeNaturalLanguageQuery({
+                connectionId: testConnectionId,
+                text: 'show orders',
+            }).catch((e) => e);
+            expect(err).toBeInstanceOf(ExecutionError);
+            expect(err.statusCode).toBe(500);
+            expect(err.message).toBe('connection refused');
+        });
+
+        test('maps an upstream LLM 429 to RateLimitError', async () => {
+            const upstream = Object.assign(new Error('Rate limit reached'), { status: 429 });
+            mockGenerateMQL.mockRejectedValueOnce(upstream);
+            const err = await QueryExecutionEngine.executeNaturalLanguageQuery({
+                connectionId: testConnectionId,
+                text: 'show orders over 100',
+            }).catch((e) => e);
+            expect(err).toBeInstanceOf(RateLimitError);
+            expect(err.statusCode).toBe(429);
+            expect(err.code).toBe('rate_limited');
+        });
+
+        test('does not leak an upstream status code other than 429', async () => {
+            const upstream = Object.assign(new Error('invalid api key'), { status: 401 });
+            mockGenerateMQL.mockRejectedValueOnce(upstream);
+            const err = await QueryExecutionEngine.executeNaturalLanguageQuery({
+                connectionId: testConnectionId,
+                text: 'show orders over 100',
+            }).catch((e) => e);
+            expect(err).toBeInstanceOf(ExecutionError);
+            expect(err.statusCode).toBe(500);
+        });
+
         test('verifies behavioral equivalence between text and voice queries', async () => {
             const queryText = 'show orders over 100';
 
@@ -365,6 +400,12 @@ describe('QueryExecutionEngine Interface Tests', () => {
                     approvalToken: tokenUnsafePipe,
                 })
             ).rejects.toThrow(SafetyViolationError);
+        });
+
+        test('throws ValidationError when connectionId is missing', async () => {
+            await expect(
+                QueryExecutionEngine.executeApprovedWrite({ approvalToken: createValidToken() })
+            ).rejects.toThrow(ValidationError);
         });
 
         test('throws ValidationError when approvalToken or jti is missing', async () => {

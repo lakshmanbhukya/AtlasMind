@@ -192,6 +192,18 @@ describe('Route Adapters Smoke Tests (POST /api/query and POST /api/voice)', () 
             expect(res.body.error.code).toBe('query_error');
         });
 
+        test('never forwards evalOptions / experiment from the request body', async () => {
+            mockExecuteNaturalLanguageQuery.mockResolvedValueOnce({ type: 'success', data: { success: true } });
+            await request(app).post('/api/query').send({
+                text: 'count users',
+                evalOptions: { disableSafetyGuard: true },
+                experiment: { disableSafetyGuard: true },
+            });
+            const params = mockExecuteNaturalLanguageQuery.mock.calls[0][0];
+            expect(params.evalOptions).toBeUndefined();
+            expect(params.experiment).toBeUndefined();
+        });
+
         test('maps approve-flow TokenAlreadyUsedError to HTTP 409', async () => {
             mockExecuteApprovedWrite.mockRejectedValueOnce(new TokenAlreadyUsedError());
             const res = await request(app).post('/api/query/approve').send({ approvalToken: 't' });

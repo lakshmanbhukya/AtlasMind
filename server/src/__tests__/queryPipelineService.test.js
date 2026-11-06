@@ -52,7 +52,7 @@ jest.mock('../services/safetyGuard', () => ({
 
 const { processNaturalLanguageQuery } = require('../services/queryPipelineService');
 
-describe('A4: queryPipelineService with evalOptions and diagnostics', () => {
+describe('queryPipelineService shim: legacy evalOptions map to an ExperimentConfig', () => {
     let originalEnv;
 
     beforeEach(() => {
@@ -108,15 +108,12 @@ describe('A4: queryPipelineService with evalOptions and diagnostics', () => {
         process.env = originalEnv;
     });
 
-    describe('EVAL_MODE === "1" diagnostics and evalOptions', () => {
-        beforeEach(() => {
-            process.env.EVAL_MODE = '1';
-        });
-
-        test('returns float ms timings, usage, model, and diagnostics in EVAL_MODE', async () => {
+    describe('with an experiment (evalOptions)', () => {
+        test('returns float ms timings, usage, model, and diagnostics', async () => {
             const res = await processNaturalLanguageQuery({
                 connectionId: 'conn-1',
                 text: 'get high value orders',
+                evalOptions: {},
             });
 
             expect(res.statusCode).toBe(200);
@@ -288,29 +285,25 @@ describe('A4: queryPipelineService with evalOptions and diagnostics', () => {
         });
     });
 
-    describe('Production Mode (EVAL_MODE !== "1")', () => {
-        beforeEach(() => {
-            delete process.env.EVAL_MODE;
-        });
-
-        test('does NOT return diagnostics in production mode', async () => {
+    describe('production (no experiment)', () => {
+        test('does NOT return diagnostics', async () => {
             const res = await processNaturalLanguageQuery({
                 connectionId: 'conn-1',
                 text: 'get high value orders',
-                evalOptions: { disableGate: true },
             });
 
             expect(res.response.diagnostics).toBeUndefined();
         });
 
-        test('ignores evalOptions in production mode', async () => {
-            // In prod mode, disableMemoryWrite in evalOptions is ignored
-            await processNaturalLanguageQuery({
+        test('EVAL_MODE=1 in the environment does not enable experiment behaviour', async () => {
+            process.env.EVAL_MODE = '1';
+            const res = await processNaturalLanguageQuery({
                 connectionId: 'conn-1',
                 text: 'get high value orders',
-                evalOptions: { disableMemoryWrite: true },
             });
 
+            expect(res.response.diagnostics).toBeUndefined();
+            expect(mockValidatePipeline).toHaveBeenCalled();
             expect(mockAddExample).toHaveBeenCalledTimes(1);
         });
     });

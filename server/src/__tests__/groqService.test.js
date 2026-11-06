@@ -1,136 +1,25 @@
 'use strict';
 
-const {
-    QuotaExhaustedError,
-    consumeQuota,
-    refundQuota,
-    recordActualUsage,
-    probeJsonModeSupport,
-    jsonModeCache,
-    estimatePromptTokens,
-    getBucket,
-} = require('../services/quotaLimiter');
-const { generateMQL } = require('../services/groqService');
+const { generateMQL, setGroqClient } = require('../services/groqService');
 
-describe('A3: groqService & quotaLimiter', () => {
+function completion(content, extra = {}) {
+    return {
+        model: 'openai/gpt-oss-120b',
+        choices: [{ message: { content: JSON.stringify(content) } }],
+        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+        ...extra,
+    };
+}
+
+describe('groqService.generateMQL', () => {
     const originalEnv = { ...process.env };
 
     afterEach(() => {
         process.env = { ...originalEnv };
-        jsonModeCache.clear();
+        setGroqClient(null);
     });
 
-    describe('quotaLimiter unit tests', () => {
-        const testModel = 'test/model-quota';
-        const limits = {
-            rpm: 2,
-            tpm: 1000,
-            tpd: 10000,
-            maxTokens: 500,
-        };
-
-        test('fail-fast when single request estimated tokens exceeds TPM', async () => {
-            await expect(consumeQuota(testModel, 1500, limits)).rejects.toThrow(
-                /exceeds model TPM limit/
-            );
-        });
-
-        test('consumeQuota decrements available quota and refundQuota restores it', async () => {
-            const bucket = getBucket(testModel);
-            bucket.rpmCount = 0;
-            bucket.tpmTokens = 0;
-            bucket.rpmWindowStart = Date.now();
-            bucket.tpmWindowStart = Date.now();
-
-            const consumed = await consumeQuota(testModel, 200, limits);
-            expect(consumed).toBe(200);
-            expect(bucket.rpmCount).toBe(1);
-            expect(bucket.tpmTokens).toBe(200);
-
-            refundQuota(testModel, consumed);
-            expect(bucket.rpmCount).toBe(0);
-            expect(bucket.tpmTokens).toBe(0);
-        });
-
-        test('estimatePromptTokens estimates based on char count / 3.5 + maxTokens', () => {
-            const messages = [
-                { role: 'system', content: '1234567' }, // 7 chars -> 2 tokens
-                { role: 'user', content: '1234567' },   // 7 chars -> 2 tokens
-            ];
-            const est = estimatePromptTokens(messages, 100);
-            expect(est).toBe(Math.ceil(14 / 3.5) + 100); // 4 + 100 = 104
-        });
-
-        test('recordActualUsage throws QuotaExhaustedError when TPD hits 90%', () => {
-            const tightLimits = { rpm: 10, tpm: 10000, tpd: 1000 };
-            expect(() => {
-                recordActualUsage('test/tpd-model', 500, 910, tightLimits);
-            }).toThrow(QuotaExhaustedError);
-        });
-    });
-
-    describe('probeJsonModeSupport', () => {
-        test('caches true when probe succeeds', async () => {
-            const mockClient = {
-                chat: {
-                    completions: {
-                        create: jest.fn().mockResolvedValue({ choices: [{ message: { content: '{}' } }] }),
-                    },
-                },
-            };
-
-            const supported = await probeJsonModeSupport(mockClient, 'test/model-json-ok');
-            expect(supported).toBe(true);
-            expect(jsonModeCache.get('test/model-json-ok')).toBe(true);
-
-            // Second call uses cache
-            await probeJsonModeSupport(mockClient, 'test/model-json-ok');
-            expect(mockClient.chat.completions.create).toHaveBeenCalledTimes(1);
-        });
-
-        test('marks unsupported only on 400 error mentioning response_format', async () => {
-            const mockClient = {
-                chat: {
-                    completions: {
-                        create: jest.fn().mockRejectedValue({
-                            status: 400,
-                            message: 'Model does not support response_format: json_object',
-                        }),
-                    },
-                },
-            };
-
-            const supported = await probeJsonModeSupport(mockClient, 'test/model-no-json');
-            expect(supported).toBe(false);
-            expect(jsonModeCache.get('test/model-no-json')).toBe(false);
-        });
-
-        test('re-throws on 429 without marking unsupported in cache', async () => {
-            const mockClient = {
-                chat: {
-                    completions: {
-                        create: jest.fn().mockRejectedValue({
-                            status: 429,
-                            message: 'Rate limit exceeded',
-                        }),
-                    },
-                },
-            };
-
-            await expect(probeJsonModeSupport(mockClient, 'test/model-429')).rejects.toEqual(
-                expect.objectContaining({ status: 429 })
-            );
-            expect(jsonModeCache.has('test/model-429')).toBe(false);
-        });
-    });
-
-    describe('generateMQL returns rich diagnostics and respects STRICT_MODEL', () => {
-        const { setGroqClient } = require('../services/groqService');
-
-        afterEach(() => {
-            setGroqClient(null);
-        });
-
+    describe('rich diagnostics and LLM hooks', () => {
         test('returns usage, model, rawText, timings, retries and jsonModeUsed', async () => {
             const mockCreate = jest.fn().mockResolvedValue({
                 id: 'chatcmpl-test',
@@ -175,25 +64,86 @@ describe('A3: groqService & quotaLimiter', () => {
             expect(result.jsonModeUsed).toBe(true);
         });
 
-        test('STRICT_MODEL=1 throws original error instead of fallback', async () => {
-            const customModelError = new Error('Custom model unavailable');
-            const mockCreate = jest.fn().mockRejectedValue(customModelError);
-
-            setGroqClient({
-                chat: { completions: { create: mockCreate } },
-            });
-
-            process.env.GROQ_API_KEY = 'gsk_test';
-            process.env.EVAL_MODE = '1';
-            process.env.STRICT_MODEL = '1';
-            jsonModeCache.set('custom/test-model', true);
+        test('llm.strictModel throws the original error instead of falling back', async () => {
+            const mockCreate = jest.fn().mockRejectedValue(new Error('Custom model unavailable'));
+            setGroqClient({ chat: { completions: { create: mockCreate } } });
 
             await expect(
-                generateMQL('find active users', 'Database: db', [], 'custom/test-model')
+                generateMQL('find active users', 'Database: db', [], 'custom/test-model', {
+                    llm: { strictModel: true },
+                })
             ).rejects.toThrow('Custom model unavailable');
-
-            // Did NOT attempt fallback to DEFAULT_MODEL (only 1 call to custom model)
             expect(mockCreate).toHaveBeenCalledTimes(1);
+        });
+
+        test('EVAL_MODE / STRICT_MODEL env vars have no effect', async () => {
+            process.env.EVAL_MODE = '1';
+            process.env.STRICT_MODEL = '1';
+            const mockCreate = jest.fn()
+                .mockRejectedValueOnce(new Error('Custom model unavailable'))
+                .mockResolvedValueOnce(completion({ pipeline: [], collection: 'users' }));
+            setGroqClient({ chat: { completions: { create: mockCreate } } });
+
+            await generateMQL('find users', 'Database: db', [], 'custom/test-model');
+            expect(mockCreate).toHaveBeenCalledTimes(2);
+            expect(mockCreate.mock.calls[1][0].model).toBe('openai/gpt-oss-120b');
+        });
+
+        test('default-model fallback sends the normalized query text', async () => {
+            const mockCreate = jest.fn()
+                .mockRejectedValueOnce(new Error('Custom model unavailable'))
+                .mockResolvedValueOnce(completion({ pipeline: [], collection: 'users' }));
+            setGroqClient({ chat: { completions: { create: mockCreate } } });
+
+            await generateMQL({ query: 'find users' }, 'Database: db', [], 'custom/test-model');
+            const fallbackMessages = mockCreate.mock.calls[1][0].messages;
+            expect(fallbackMessages[1].content).toBe('find users');
+        });
+
+        test('runs beforeCall / afterCall hooks around a successful call', async () => {
+            const mockCreate = jest.fn().mockResolvedValue(completion({ pipeline: [], collection: 'users' }));
+            setGroqClient({ chat: { completions: { create: mockCreate } } });
+            const beforeCall = jest.fn().mockResolvedValue('ticket-1');
+            const afterCall = jest.fn();
+            const onFailure = jest.fn();
+
+            await generateMQL('find users', 'Database: db', [], 'm', {
+                llm: { beforeCall, afterCall, onFailure, maxTokens: 321, extraParams: { reasoning_effort: 'low' } },
+            });
+
+            expect(beforeCall).toHaveBeenCalledWith(expect.objectContaining({ model: 'm', maxTokens: 321 }));
+            expect(afterCall).toHaveBeenCalledWith('ticket-1', expect.objectContaining({ total_tokens: 15 }));
+            expect(onFailure).not.toHaveBeenCalled();
+            expect(mockCreate.mock.calls[0][0]).toEqual(expect.objectContaining({
+                max_tokens: 321,
+                reasoning_effort: 'low',
+            }));
+        });
+
+        test('runs onFailure with the ticket when the call fails', async () => {
+            const failure = new Error('bad request');
+            const mockCreate = jest.fn().mockRejectedValue(failure);
+            setGroqClient({ chat: { completions: { create: mockCreate } } });
+            const onFailure = jest.fn();
+
+            await expect(generateMQL('find users', 'Database: db', [], undefined, {
+                llm: { beforeCall: async () => 'ticket-2', onFailure },
+            })).rejects.toThrow('bad request');
+            expect(onFailure).toHaveBeenCalledWith('ticket-2', failure);
+        });
+
+        test('resolveJsonMode=false drops response_format and adds a JSON instruction', async () => {
+            const mockCreate = jest.fn().mockResolvedValue(completion({ pipeline: [], collection: 'users' }));
+            setGroqClient({ chat: { completions: { create: mockCreate } } });
+
+            const result = await generateMQL('find users', 'Database: db', [], 'm', {
+                llm: { resolveJsonMode: async () => false },
+            });
+
+            const params = mockCreate.mock.calls[0][0];
+            expect(params.response_format).toBeUndefined();
+            expect(params.messages[0].content).toContain('Return ONLY a raw JSON object');
+            expect(result.jsonModeUsed).toBe(false);
         });
     });
 });

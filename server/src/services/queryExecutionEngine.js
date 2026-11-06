@@ -17,6 +17,7 @@ const {
     recordAmbiguityMetric,
 } = require('./ambiguityGate');
 const { verifyInterpretationCompliance } = require('./interpretationComplianceVerifier');
+const { resolveExperiment } = require('./experiment');
 
 // Domain Error Hierarchy
 class QueryEngineError extends Error {
@@ -242,7 +243,6 @@ async function runNaturalLanguageQuery(params) {
         connectionId,
         text,
         query: queryParam,
-        db: dbParam,
         collections,
         workspaceId,
         dropMissing,
@@ -252,7 +252,7 @@ async function runNaturalLanguageQuery(params) {
         isEdit,
         startTime = Date.now(),
         source = 'query',
-        evalOptions = {},
+        experiment: experimentInput,
     } = params;
 
     // Input validation
@@ -270,8 +270,9 @@ async function runNaturalLanguageQuery(params) {
         throw new ValidationError('connectionId is required', 'validation_error');
     }
 
-    const isEvalMode = process.env.EVAL_MODE === '1';
-    const evalOpts = isEvalMode ? (evalOptions || {}) : {};
+    // Research seam: only in-process callers can supply an ExperimentConfig.
+    const evalOpts = resolveExperiment(experimentInput);
+    const collectDiagnostics = Boolean(evalOpts.diagnostics);
 
     const hrNow = () => process.hrtime.bigint();
     const toMs = (startNs) => Number(process.hrtime.bigint() - startNs) / 1e6;
@@ -296,7 +297,7 @@ async function runNaturalLanguageQuery(params) {
         if (payload.meta) {
             payload.meta.compliance = complianceInfo;
         }
-        if (isEvalMode) {
+        if (collectDiagnostics) {
             payload.diagnostics = {
                 timings: {
                     gateMs,
@@ -321,10 +322,8 @@ async function runNaturalLanguageQuery(params) {
         return payload;
     };
 
-    // 1. Get User DB from pool (or evalOptions.db / dbParam in evaluation mode)
-    const userDb = (isEvalMode && (evalOpts.db || dbParam))
-        ? (evalOpts.db || dbParam)
-        : await getUserDb(connectionId);
+    // 1. Get User DB from pool (an experiment may supply its own)
+    const userDb = evalOpts.db || await getUserDb(connectionId);
 
     // If workspaceId was provided, resolve its collections
     let effectiveCollections = collections;
@@ -350,7 +349,7 @@ async function runNaturalLanguageQuery(params) {
     let { effectiveScope } = scopeCheck;
     let isRestrictedScope = Array.isArray(collections) && collections.length > 0;
 
-    // evalOptions.disableScope: override scoping to all user collections
+    // experiment.disableScope: override scoping to all user collections
     if (evalOpts.disableScope) {
         effectiveScope = scopeCheck.allUserCollections;
         isRestrictedScope = false;
@@ -364,6 +363,7 @@ async function runNaturalLanguageQuery(params) {
         forceRefresh: false,
         connectionId,
         collections: effectiveScope,
+        snapshot: evalOpts.schemaSnapshot,
     });
     schemaMs = toMs(tSchemaStart);
 
@@ -381,7 +381,7 @@ async function runNaturalLanguageQuery(params) {
     }
     fewShotMs = toMs(tFewShotStart);
 
-    // evalOptions.disableSchemaContext: field names only without types, samples, or relationship hints
+    // experiment.disableSchemaContext: field names only without types, samples, or relationship hints
     const schemaContext = evalOpts.disableSchemaContext
         ? formatFieldNamesOnly(rawSchema)
         : formatMinifiedSchema(rawSchema);
@@ -419,7 +419,11 @@ async function runNaturalLanguageQuery(params) {
     } else {
         try {
             const tGateStart = hrNow();
-            const ambiguityAnalysis = analyzeAmbiguity(query, rawSchema);
+            const ambiguityAnalysis = analyzeAmbiguity(query, rawSchema, {
+                mode: evalOpts.ambiguityMode,
+                vagueTerms: evalOpts.vagueTerms,
+                enableBindFix: !evalOpts.disableBindFix,
+            });
             gateMs = toMs(tGateStart);
 
             gateInfo = {
@@ -455,6 +459,7 @@ async function runNaturalLanguageQuery(params) {
         rawSchema,
         scopedCollections: isRestrictedScope ? effectiveScope : [],
         ...(evalOpts.temperature !== undefined ? { temperature: evalOpts.temperature } : {}),
+        ...(evalOpts.llm ? { llm: evalOpts.llm } : {}),
     };
 
     const tLlmStart = hrNow();

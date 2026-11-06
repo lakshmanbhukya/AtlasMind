@@ -26,7 +26,6 @@ router.post('/', async (req, res) => {
             clarifications,
             bypassAmbiguity,
             isEdit,
-            evalOptions,
         } = req.body;
         const connectionId = req.connectionId;
 
@@ -40,7 +39,7 @@ router.post('/', async (req, res) => {
             clarifications,
             bypassAmbiguity,
             isEdit,
-            evalOptions,
+            // Never forward an ExperimentConfig from a request body.
             source: 'query',
         });
 

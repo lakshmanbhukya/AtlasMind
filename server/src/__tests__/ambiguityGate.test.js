@@ -6,7 +6,6 @@ const {
     validateClarifications,
     extractNumericFields,
     DEFAULT_VAGUE_TERMS,
-    VAGUE_TERMS,
 } = require('../services/ambiguityGate');
 
 describe('A2: ambiguityGate diagnostics and refinements', () => {
@@ -82,11 +81,6 @@ describe('A2: ambiguityGate diagnostics and refinements', () => {
 
     // 2. Removal of temporal terms 'recent' and 'latest'
     describe('temporal terms exclusion', () => {
-        test('VAGUE_TERMS does not contain "recent" or "latest"', () => {
-            expect(VAGUE_TERMS.has('recent')).toBe(false);
-            expect(VAGUE_TERMS.has('latest')).toBe(false);
-        });
-
         test('DEFAULT_VAGUE_TERMS contains exact 15 non-temporal terms as a Set', () => {
             expect(DEFAULT_VAGUE_TERMS).toBeInstanceOf(Set);
             expect(DEFAULT_VAGUE_TERMS.size).toBe(15);

@@ -268,71 +268,60 @@ describe('A1: schemaProfiler', () => {
         });
     });
 
-    // ── EVAL_SCHEMA_SNAPSHOT hook ────────────────────────────────────────────
-    describe('profileSchema — EVAL_SCHEMA_SNAPSHOT hook', () => {
-        const originalEnv = { ...process.env };
-        const tmpSnapshotPath = require('path').resolve(__dirname, 'tmp_test_snapshot.json');
-
-        beforeAll(() => {
-            const fs = require('fs');
-            fs.writeFileSync(tmpSnapshotPath, JSON.stringify({
-                snap_db: {
-                    database: 'snap_db',
-                    collections: [
-                        { name: 'col1', fields: [{ name: 'f1', type: 'number' }] },
-                        { name: 'col2', fields: [{ name: 'f2', type: 'string' }] },
-                    ],
-                },
-            }));
-        });
-
-        afterAll(() => {
-            const fs = require('fs');
-            if (fs.existsSync(tmpSnapshotPath)) fs.unlinkSync(tmpSnapshotPath);
-        });
+    // ── Schema snapshot option (ExperimentConfig.schemaSnapshot) ─────────────
+    describe('profileSchema — snapshot option', () => {
+        const snapshot = {
+            snap_db: {
+                database: 'snap_db',
+                collections: [
+                    { name: 'col1', fields: [{ name: 'f1', type: 'number' }] },
+                    { name: 'col2', fields: [{ name: 'f2', type: 'string' }] },
+                ],
+            },
+        };
 
         afterEach(() => {
-            process.env = { ...originalEnv };
             invalidateSchemaCache();
         });
 
-        test('loads schema from snapshot file when EVAL_MODE=1 and EVAL_SCHEMA_SNAPSHOT is set', async () => {
-            process.env.EVAL_MODE = '1';
-            process.env.EVAL_SCHEMA_SNAPSHOT = tmpSnapshotPath;
-
+        test('returns the snapshot for the database instead of profiling', async () => {
             const mockDb = { databaseName: 'snap_db', listCollections: () => ({ toArray: async () => [] }) };
-            const schema = await profileSchema(mockDb);
+            const schema = await profileSchema(mockDb, { snapshot });
 
             expect(schema.database).toBe('snap_db');
             expect(schema.collections.map((c) => c.name)).toEqual(['col1', 'col2']);
         });
 
-        test('filters collections from snapshot when actualOptions.collections is provided', async () => {
-            process.env.EVAL_MODE = '1';
-            process.env.EVAL_SCHEMA_SNAPSHOT = tmpSnapshotPath;
-
+        test('filters snapshot collections when collections are provided', async () => {
             const mockDb = { databaseName: 'snap_db', listCollections: () => ({ toArray: async () => [] }) };
-            const schema = await profileSchema(mockDb, { collections: ['col1'] });
+            const schema = await profileSchema(mockDb, { snapshot, collections: ['col1'] });
 
-            expect(schema.database).toBe('snap_db');
             expect(schema.collections.map((c) => c.name)).toEqual(['col1']);
         });
 
-        test('ignores EVAL_SCHEMA_SNAPSHOT when EVAL_MODE is not 1', async () => {
-            delete process.env.EVAL_MODE;
-            process.env.EVAL_SCHEMA_SNAPSHOT = tmpSnapshotPath;
+        test('throws when the snapshot has no entry for the database', async () => {
+            const mockDb = { databaseName: 'other_db', listCollections: () => ({ toArray: async () => [] }) };
+            await expect(profileSchema(mockDb, { snapshot })).rejects.toThrow('no schema snapshot for other_db');
+        });
 
-            const mockDb = {
-                databaseName: 'snap_db',
-                listCollections: () => ({ toArray: async () => [{ name: 'live_col' }] }),
-                collection: () => ({
-                    estimatedDocumentCount: async () => 1,
-                    aggregate: () => ({ toArray: async () => [{ live_field: 123 }] }),
-                }),
-            };
-
-            const schema = await profileSchema(mockDb);
-            expect(schema.collections.map((c) => c.name)).toEqual(['live_col']);
+        test('ignores EVAL_* environment variables entirely', async () => {
+            process.env.EVAL_MODE = '1';
+            process.env.EVAL_SCHEMA_SNAPSHOT = '/does/not/exist.json';
+            try {
+                const mockDb = {
+                    databaseName: 'snap_db',
+                    listCollections: () => ({ toArray: async () => [{ name: 'live_col' }] }),
+                    collection: () => ({
+                        estimatedDocumentCount: async () => 1,
+                        aggregate: () => ({ toArray: async () => [{ live_field: 123 }] }),
+                    }),
+                };
+                const schema = await profileSchema(mockDb);
+                expect(schema.collections.map((c) => c.name)).toEqual(['live_col']);
+            } finally {
+                delete process.env.EVAL_MODE;
+                delete process.env.EVAL_SCHEMA_SNAPSHOT;
+            }
         });
     });
 });

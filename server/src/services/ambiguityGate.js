@@ -14,8 +14,6 @@
 
 const { isMetricCandidate } = require('./schemaProfiler');
 
-const AMBIGUITY_MODE = process.env.AMBIGUITY_MODE || 'hybrid';
-
 // ---------------------------------------------------------------------------
 // Term Sets
 // ---------------------------------------------------------------------------
@@ -30,13 +28,10 @@ const DEFAULT_VAGUE_TERMS = new Set([
     'growth', 'worst', 'biggest',
 ]);
 
-/**
- * Active vague terms set. In EVAL_MODE, can be overridden via EVAL_VAGUE_TERMS env var.
- * @type {Set<string>}
- */
-const VAGUE_TERMS = (process.env.EVAL_MODE === '1' && process.env.EVAL_VAGUE_TERMS)
-    ? new Set(process.env.EVAL_VAGUE_TERMS.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean))
-    : new Set(DEFAULT_VAGUE_TERMS);
+function toVagueTermSet(terms) {
+    if (!terms) return DEFAULT_VAGUE_TERMS;
+    return new Set(Array.from(terms, (t) => String(t).trim().toLowerCase()).filter(Boolean));
+}
 
 /**
  * Write-intent patterns — skip the ambiguity gate entirely for these.
@@ -369,7 +364,7 @@ function queryAlreadyNamesSpecificField(lowerQuery, numericFields, enableBindFix
         return true;
     }
 
-    const bindFixActive = Boolean(enableBindFix || process.env.ENABLE_BIND_FIX === "1");
+    const bindFixActive = Boolean(enableBindFix);
 
     // Explicit bound or comparison operator with numeric constants
     const hasNumericBound = bindFixActive && (
@@ -500,10 +495,16 @@ function queryAlreadyNamesSpecificField(lowerQuery, numericFields, enableBindFix
  *
  * @param {string} queryText
  * @param {object} schemaObject
+ * @param {object} [gateOptions]
+ * @param {'hybrid'|'deterministic'|'llm'|'off'} [gateOptions.mode='hybrid'] 'off'/'llm' skip the deterministic gate
+ * @param {Iterable<string>} [gateOptions.vagueTerms] Override DEFAULT_VAGUE_TERMS
+ * @param {boolean} [gateOptions.enableBindFix=true]
  * @returns {{ result: object|null, diagnostics: { matchedTerms: string[], numericCandidateCount: number, explicitBindingFound: boolean, reason: 'no_vague_term'|'lt2_numeric'|'explicit_binding'|'write_intent'|'asked' } }}
  */
 function analyzeAmbiguity(queryText, schemaObject, gateOptions = {}) {
-    const bindFixActive = gateOptions.enableBindFix !== false && process.env.DISABLE_BIND_FIX !== "1";
+    const bindFixActive = gateOptions.enableBindFix !== false;
+    const mode = gateOptions.mode || 'hybrid';
+    const vagueTerms = toVagueTermSet(gateOptions.vagueTerms);
     const diagnostics = {
         matchedTerms: [],
         numericCandidateCount: 0,
@@ -511,7 +512,7 @@ function analyzeAmbiguity(queryText, schemaObject, gateOptions = {}) {
         reason: 'no_vague_term',
     };
 
-    if (AMBIGUITY_MODE === 'off' || AMBIGUITY_MODE === 'llm') {
+    if (mode === 'off' || mode === 'llm') {
         return { result: null, diagnostics };
     }
 
@@ -534,7 +535,7 @@ function analyzeAmbiguity(queryText, schemaObject, gateOptions = {}) {
     }
 
     const words = lower.replace(/[^a-z0-9_]/g, ' ').split(/\s+/).filter(Boolean);
-    let matchedTerms = words.filter((word) => VAGUE_TERMS.has(word));
+    let matchedTerms = words.filter((word) => vagueTerms.has(word));
 
     // Strip idiomatic non-metric collocations
     for (const idiomRe of IDIOMATIC_COLLOCATIONS) {
@@ -838,7 +839,6 @@ module.exports = {
     getAmbiguityMetrics,
     resetAmbiguityMetrics,
     DEFAULT_VAGUE_TERMS,
-    VAGUE_TERMS,
     // Exposed for testing and ablation
     extractNumericFields,
     toLabel,

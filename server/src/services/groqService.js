@@ -22,16 +22,6 @@ function getGroqClient() {
     return groqClient;
 }
 
-const {
-    QuotaExhaustedError,
-    getModelLimits,
-    estimatePromptTokens,
-    consumeQuota,
-    refundQuota,
-    recordActualUsage,
-    probeJsonModeSupport,
-} = require('./quotaLimiter');
-
 const DEFAULT_MODEL = 'openai/gpt-oss-120b';
 
 /**
@@ -42,6 +32,8 @@ const DEFAULT_MODEL = 'openai/gpt-oss-120b';
  * @param {object[]} fewShotExamples - Similar NL→MQL examples
  * @param {string} [model='openai/gpt-oss-120b'] - Groq LLM model ID
  * @param {object} [options={}] - Options controlling generation mode
+ * @param {import('./experiment').LlmHooks} [options.llm] - Research hooks (quota, JSON-mode probing,
+ *        strict model). Supplied only through an ExperimentConfig; production passes none.
  * @returns {Promise<{ pipeline: object[], collection: string, chartType: string, explanation: string|null, usage: object, model: string, rawText: string, timings: object, retries: number, jsonModeUsed: boolean }>}
  */
 async function generateMQL(naturalLanguage, schemaContext, fewShotExamples, model = DEFAULT_MODEL, options = {}) {
@@ -49,19 +41,17 @@ async function generateMQL(naturalLanguage, schemaContext, fewShotExamples, mode
     let systemPrompt = buildSystemPrompt(schemaContext, fewShotExamples, options);
     const targetModel = model || DEFAULT_MODEL;
 
-    const isEvalMode = process.env.EVAL_MODE === '1';
-    const strictModel = isEvalMode && process.env.STRICT_MODEL === '1';
-    const modelLimits = isEvalMode ? getModelLimits(targetModel) : null;
-    const maxTokens = (isEvalMode && modelLimits?.maxTokens) ? modelLimits.maxTokens : (options.max_tokens || 2048);
-    const extraParams = (isEvalMode && modelLimits?.extraParams) ? modelLimits.extraParams : {};
+    const llm = options.llm || {};
+    const strictModel = Boolean(llm.strictModel);
+    const maxTokens = llm.maxTokens || options.max_tokens || 2048;
+    const extraParams = llm.extraParams || {};
 
-    // Probe JSON-mode support in evaluation mode
     let jsonModeUsed = true;
-    if (isEvalMode) {
+    if (typeof llm.resolveJsonMode === 'function') {
         try {
-            jsonModeUsed = await probeJsonModeSupport(client, targetModel);
+            jsonModeUsed = await llm.resolveJsonMode(client, targetModel);
         } catch {
-            // Default to true if probe fails non-definitively
+            // Default to JSON mode if the probe fails non-definitively
             jsonModeUsed = true;
         }
     }
@@ -79,11 +69,9 @@ async function generateMQL(naturalLanguage, schemaContext, fewShotExamples, mode
         { role: 'user', content: nlText },
     ];
 
-    let consumed = 0;
-    if (isEvalMode && modelLimits) {
-        const estimated = estimatePromptTokens(messages, maxTokens);
-        consumed = await consumeQuota(targetModel, estimated, modelLimits);
-    }
+    const ticket = typeof llm.beforeCall === 'function'
+        ? await llm.beforeCall({ model: targetModel, messages, maxTokens })
+        : null;
 
     const maxRetries = 6;
     let retries = 0;
@@ -114,9 +102,8 @@ async function generateMQL(naturalLanguage, schemaContext, fewShotExamples, mode
                 continue;
             }
 
-            if (consumed > 0) {
-                refundQuota(targetModel, consumed);
-                consumed = 0;
+            if (typeof llm.onFailure === 'function') {
+                llm.onFailure(ticket, err);
             }
 
             if (strictModel) {
@@ -128,7 +115,7 @@ async function generateMQL(naturalLanguage, schemaContext, fewShotExamples, mode
                 chatCompletion = await client.chat.completions.create({
                     messages: [
                         { role: 'system', content: systemPrompt },
-                        { role: 'user', content: naturalLanguage },
+                        { role: 'user', content: nlText },
                     ],
                     model: DEFAULT_MODEL,
                     temperature: options.temperature !== undefined ? options.temperature : 0.1,
@@ -145,9 +132,8 @@ async function generateMQL(naturalLanguage, schemaContext, fewShotExamples, mode
 
     const llmMs = Date.now() - callStart;
 
-    if (consumed > 0 && isEvalMode && modelLimits) {
-        const actualTokens = chatCompletion?.usage?.total_tokens || 0;
-        recordActualUsage(targetModel, consumed, actualTokens, modelLimits);
+    if (typeof llm.afterCall === 'function') {
+        llm.afterCall(ticket, chatCompletion?.usage || {});
     }
 
     const content = chatCompletion?.choices[0]?.message?.content;

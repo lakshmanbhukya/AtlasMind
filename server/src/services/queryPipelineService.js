@@ -14,7 +14,12 @@ const {
  */
 async function processNaturalLanguageQuery(params) {
     try {
-        const outcome = await QueryExecutionEngine.executeNaturalLanguageQuery(params);
+        // Legacy in-process callers pass `evalOptions`; the engine calls it `experiment`.
+        const { evalOptions, ...rest } = params || {};
+        const outcome = await QueryExecutionEngine.executeNaturalLanguageQuery({
+            ...rest,
+            experiment: rest.experiment || evalOptions,
+        });
         let statusCode = 200;
         if (outcome.type === 'safety_blocked') {
             statusCode = 422;

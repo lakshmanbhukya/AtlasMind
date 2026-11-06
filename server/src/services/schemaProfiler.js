@@ -193,6 +193,8 @@ async function profileCollection(db, collectionName, { sampleSize = 5 } = {}) {
  * @param {object} [options]
  * @param {boolean} [options.forceRefresh=false] Bypass the cache
  * @param {number} [options.sampleSize=5] Number of sample documents per collection
+ * @param {object} [options.snapshot] `{ [databaseName]: schema }` returned instead of live profiling
+ *        (supplied by an ExperimentConfig; see services/experiment.js)
  * @returns {Promise<object>}
  */
 async function profileSchema(dbOrOptions, options = {}) {
@@ -209,9 +211,8 @@ async function profileSchema(dbOrOptions, options = {}) {
     const now = Date.now();
     const dbName = db.databaseName;
 
-    if (process.env.EVAL_MODE === '1' && process.env.EVAL_SCHEMA_SNAPSHOT) {
-        const snapAll = JSON.parse(require('fs').readFileSync(process.env.EVAL_SCHEMA_SNAPSHOT, 'utf8'));
-        const snap = snapAll[dbName];
+    if (actualOptions.snapshot) {
+        const snap = actualOptions.snapshot[dbName];
         if (!snap) throw new Error(`no schema snapshot for ${dbName}`);
         const want = actualOptions.collections ? new Set(actualOptions.collections) : null;
         return want ? { ...snap, collections: snap.collections.filter((c) => want.has(c.name)) } : snap;
@@ -369,7 +370,7 @@ function formatMinifiedSchema(schema) {
 /**
  * Format an already-profiled schema object into a stripped text format
  * containing collection names and field names only (no types, samples, or hints).
- * Used for schema context ablation studies in EVAL_MODE.
+ * Used for schema-context ablations (ExperimentConfig.disableSchemaContext).
  * @param {object} schema - Result of profileSchema()
  * @returns {string}
  */

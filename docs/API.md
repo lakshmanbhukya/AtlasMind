@@ -227,6 +227,16 @@ Safely executes an intercepted mutating query using the signed `approvalToken` i
 }
 ```
 
+Before executing, the server verifies the token signature and 10-minute expiry, checks that the token's `connectionId` matches the session, re-runs the safety guard (write stages are permitted only here), and records the token's `jti` so it can be used once.
+
+| Status | `error.code` | Cause |
+|---|---|---|
+| 400 | `validation_error` / `invalid_token` | Missing token, wrong token type, or missing `jti` |
+| 401 | `expired_token` | Signature invalid or token expired |
+| 403 | `forbidden` | Token belongs to a different connection |
+| 409 | `token_already_used` | Token was already executed |
+| 422 | `safety_violation` | Pipeline fails the safety guard (beyond the approved write stage) |
+
 **Error Response (Expired or Tampered Token - HTTP 401)**:
 ```json
 {
@@ -375,10 +385,10 @@ Analyzes all database collections using semantic LLM clustering and suggests opt
 Returns all pinned dashboard widgets for the current authenticated user.
 
 ### POST `/api/dashboard/pin`
-Pins a query and its chart visualization to the dashboard.
+Pins a query and its chart visualization to the dashboard. Body: `{ query, pipeline, collection, chartType?, name?, results?, scope? }`. The pipeline is checked by the safety guard before it is stored; an unsafe pipeline returns **422** `safety_violation` (or `scope_violation`).
 
 ### POST `/api/dashboard/:id/refresh`
-Re-runs the pinned MQL aggregation pipeline against the user's live database pool and stores refreshed results.
+Re-runs the pinned MQL aggregation pipeline against the user's live database pool and stores refreshed results. The safety guard runs again on every refresh; a stored pipeline that fails it returns **422** and is not executed.
 
 ### DELETE `/api/dashboard/:id`
 Deletes a dashboard pin.
@@ -418,13 +428,19 @@ Fetches a read-only, sanitized dashboard widget for public sharing. Excludes int
 ```
 
 Common Error Codes:
-- `unauthorized`: Missing or invalid `am_token` cookie.
-- `validation_error`: Invalid parameters or prompt-injection attempt.
-- `expired_token`: HITL write approval token expired.
-- `safety_violation`: Unsafe stage (`$out`, `$merge`) detected.
-- `scope_violation`: Attempted cross-collection query outside active workspace.
-- `database_error`: MongoDB driver execution failure.
-- `groq_rate_limit`: Upstream LLM rate limit exceeded.
+- `unauthenticated` (401): No `am_token` session cookie.
+- `session_expired` (401): Session cookie invalid or expired; the cookie is cleared.
+- `validation_error` (400): Invalid parameters, unknown collection, or prompt-injection attempt in clarifications.
+- `connection_not_found` (404): The session's stored connection no longer exists.
+- `expired_token` (401), `forbidden` (403), `token_already_used` (409): Write approval failures (see section 4).
+- `safety_violation` (422): Unsafe stage or operator (`$out`, `$merge`, `$function`, `$where`, system collection).
+- `scope_violation` (422): Pipeline references a collection outside the Effective Scope.
+- `rate_limited` (429): The upstream LLM is rate limited; retry shortly.
+- `execution_error` / `query_error` / `voice_pipeline_error` (500): Unexpected failure while running the query.
+
+Upstream SDK or driver status codes are never forwarded: anything that is not one of the codes above is reported as a 500.
+
+`POST /api/query` does not accept evaluation switches (`evalOptions`); they are only available to in-process evaluation code through an `ExperimentConfig`.
 
 ---
 

@@ -13,7 +13,6 @@ Server (`cd server`):
 - `npm test`: Jest (`jest --verbose`). CI runs only this, on Node 24, and only when `server/**` changes
 - Single test: `npx jest src/__tests__/routesSmoke.test.js` or `npx jest -t "test name"`
 - `npm run test:coverage`, `npm run seed` (seeds the `sample_sales` collection)
-- `test:smoke` points to `test-smoke.js`, which does not exist
 
 Client (`cd client`):
 - `npm run dev`: Vite on 5173; proxies `/api` to `localhost:3001`
@@ -22,39 +21,40 @@ Client (`cd client`):
 
 `start.bat` starts both dev servers in separate windows (Windows).
 
+The ambiguity research (`eval2/`, `paper/`, `evaluation_progress/`, benchmark runners) lives on the `research/ambiguity-eval` branch, not on `main`. These paths are gitignored here.
+
 ## Architecture
 
 ### Two kinds of database
-- **Central DB** (`server/src/db/connection.js`, fixed DB name `aggregatorflow_db`, from `MONGODB_URI`): app state only. It holds `user_connections` (users' encrypted connection strings), `query_history` (history, saved/pinned dashboard items), `few_shot_examples`, and `approval_tokens` (single-use write-approval `jti`s).
-- **User DBs**: the databases users connect. `routes/connections.js` validates the URI, AES-256 encrypts it (`utils/encryption.js`), upserts it through `models/UserConnection.js`, and sets an httpOnly JWT cookie `am_token` that carries `connectionId`. `services/userDbPool.js` caches one `MongoClient` per `connectionId` (LRU plus idle TTL). Always get user DB handles with `getUserDb(connectionId)`. Do not open new clients.
+- **Central DB** (`server/src/db/connection.js`, fixed DB name `aggregatorflow_db`, from `MONGODB_URI`): app state only. It holds `user_connections` (users' encrypted connection strings), `workspaces`, `query_history`, `dashboards`, `few_shot_examples`, and `approval_tokens` (single-use write-approval `jti`s). The internal-collection list is `db/systemCollections.js`; do not copy it.
+- **Tenant stores** (`server/src/stores/`): `queryHistoryStore` and `dashboardStore` are the only code that touches `query_history` and `dashboards`. They require a `connectionId` and throw `TenantRequiredError` without one (fail closed, ADR 0003). Few-Shot Memory (`services/fewShotRetriever.js`) applies one tenant filter on every search path.
+- **User DBs**: the databases users connect. `routes/connections.js` validates the URI, AES-256 encrypts it (`utils/encryption.js`), upserts it through `models/UserConnection.js`, evicts any pooled client, and issues the session cookie. `services/userDbPool.js` caches one `MongoClient` per `connectionId` (LRU, idle TTL, concurrent misses deduped). Always get user DB handles with `getUserDb(connectionId)`. Do not open new clients. Schema and user-collection lookups go through `services/tenantSchema.js` (`getSchema(connectionId)`), which keys the schema cache by tenant.
 
 ### Auth
-There are no user accounts. A session is a "connected DB". `middleware/auth.js` (`requireAuth`) checks the cookie and sets `req.connectionId`. In `index.js`, `/api/auth` and `/api/connections` are public (with the auth rate limiter). `/api/query`, `/api/voice`, `/api/schema`, and `/api/dashboard` are protected. The client sends cookies with `withCredentials: true` (`client/src/services/api.js`). In production, cookies use `sameSite: none` and `secure`, and CORS needs an explicit allow-list.
+There are no user accounts. A session is a "connected DB". `auth/session.js` owns the `am_token` cookie (name, options, 7-day JWT) and the 10-minute Write Approval Token; nothing else reads `JWT_SECRET` or sets the cookie. `middleware/auth.js` (`requireAuth`) uses it to set `req.connectionId`. In `index.js`, `/api/auth` and `/api/connections` are public (with the auth rate limiter). `/api/query`, `/api/voice`, `/api/schema`, and `/api/dashboard` are protected. The client sends cookies with `withCredentials: true` (`client/src/services/api.js`). In production, cookies use `sameSite: none` and `secure`, and CORS needs an explicit allow-list.
 
 ### NL → MQL pipeline (the core flow)
-1. `schemaProfiler`: samples the user DB and builds a minified schema string for the prompt (cached; routes pass `forceRefresh: true`)
-2. `fewShotRetriever`: finds similar past queries in `few_shot_examples`, and adds new ones after successful runs
-3. `groqService.generateMQL`: prompt from `prompts/systemPrompt.js`. Default model is `openai/gpt-oss-120b` at temperature 0.1. If a model the client picked fails, it falls back to the default. `transcribeAudio` uses Whisper for voice.
-4. `safetyGuard`: `validateCollectionName` blocks `system`/`admin`/`local`/`config`; `validatePipeline` walks the pipeline against `BLOCKED_STAGES`/`BLOCKED_OPERATORS`. Write stages are not just rejected (`isWrite`). They are staged for human-in-the-loop approval: the server returns a 10-minute JWT approval token, and `POST /api/query/approve` executes the write once.
-5. `queryExecutor`: runs the pipeline on the user DB and saves to `query_history`
+`routes/query.js` (`POST /`, `POST /approve`) and `routes/voice.js` are thin HTTP adapters over `services/queryExecutionEngine.js` (ADR 0001). The engine's interface is `executeNaturalLanguageQuery(params)` and `executeApprovedWrite(params)`. It returns a typed `QueryOutcome` (`success` / `clarification_required` / `approval_required` / `safety_blocked`) or throws a typed `QueryEngineError`; anything else is wrapped as `ExecutionError` (500), an upstream 429 as `RateLimitError`. `routes/engineHttp.js` maps both to HTTP. Voice transcribes at the route, then calls the engine with `source: 'voice'`. `queryPipelineService.js` is a backwards-compatible shim. Inside the engine:
+1. Effective Scope: the requested collections (or a workspace's) are checked against the tenant's real collections
+2. `schemaProfiler` via the Tenant Schema cache, plus `fewShotRetriever` (Few-Shot Memory) examples
+3. `ambiguityGate.decide(...)`: write-intent and user bypass, clarification validation and prompt enrichment, the deterministic vague-term check. It can return a clarification instead of generating.
+4. `groqService.generateMQL`: prompt from `prompts/systemPrompt.js`. Default model is `openai/gpt-oss-120b` at temperature 0.1, falling back to the default if a picked model fails. `ambiguityGate.reviewModelQuestions` only shows LLM-asked questions whose options are real schema fields. `interpretationComplianceVerifier` checks (advisory only) that the sort/metric matches the chosen clarification.
+5. `safetyGuard`: `validateCollectionName` blocks `system`/`admin`/`local`/`config`; `validatePipeline` walks the pipeline against `BLOCKED_STAGES`/`BLOCKED_OPERATORS`/hard-denied code operators. Write stages (`isWrite`) are staged for human-in-the-loop approval: the engine returns a Write Approval Token, and `POST /api/query/approve` executes the write once.
+6. `queryExecutor.executePipeline`: always re-applies the safety guard itself (writes only with `approvedWrite`), runs on the user DB, and the result is recorded via `queryHistoryStore` and Few-Shot Memory
+
+Research switches never come from env vars or request bodies. In-process evaluation code passes an `experiment` (`services/experiment.js`, ADR 0002) to `executeNaturalLanguageQuery`.
 
 Response envelope: `{ success: true, ... }` or `{ success: false, error: { code, message } }`. Query responses also carry fields the client uses: `aiMessage`, `pipeline`/`mql`, `collection`, `chartType`, `results`/`result`, `safetyStatus`, and `meta`. If you change a route, keep `client/src/services/api.js` and `docs/API.md` in sync.
 
-### In-progress refactor (ADR 0001): watch for broken state
-`docs/adr/0001-collapse-query-execution-seam.md` and `docs/specs/0001-…` describe moving orchestration out of `routes/query.js` and `routes/voice.js` into `services/queryExecutionEngine.js`. The engine returns typed `QueryOutcome`s (`success` / `clarification_required` / `approval_required` / `safety_blocked`) and throws typed domain errors that the routes map to HTTP codes. It adds an ambiguity/clarification gate and `interpretationComplianceVerifier.js`, which checks that the generated sort/metric matches the clarification the user chose. Current state (untracked files):
-- `queryExecutionEngine.js` requires `./ambiguityGate`, which does not exist yet
-- The ADR's `queryPipelineService.js` shim does not exist
-- `routes/query.js` and `routes/voice.js` still contain the old inline pipeline and do not call the engine
-- `server/src/__tests__/` tests are written against the engine API (they mock `QueryExecutionEngine`)
-
-Check this state before you assume the tests pass or that the routes use the engine.
-
 ### Client
-React Router pages are in `client/src/pages/` (Chat, Dashboard, SharedDashboard). Server-state hooks are in `client/src/hooks/` (`useChat`, `useSchema`, `useAuth`, `useStreamingQuery`, `useVoice`), built on TanStack Query and the shared axios instance. `ChartRenderer.jsx` (Recharts) renders results based on the server's `chartType`. UI primitives are shadcn-style, in `components/ui/`. The `@` alias resolves to `client/src`.
+The chat UI is `components/AtlasChatPanel.jsx` (rendered from `App.jsx`); React Router pages are in `client/src/pages/` (Dashboard, SharedDashboard). Server-state hooks are in `client/src/hooks/` (`useChat`, `useSchema`, `useAuth`, `useVoice`, `useWorkspaces`), built on TanStack Query and the shared axios instance. `ChartRenderer.jsx` (Recharts) renders results based on the server's `chartType`. UI primitives are shadcn-style, in `components/ui/`. The `@` alias resolves to `client/src`.
 
 ## Conventions
-- Keep route handlers thin: put orchestration and business logic in `server/src/services`.
-- Never weaken the read-only safety guard. Generated pipelines must go through `validateCollectionName` and `validatePipeline` before execution, and writes go only through the approval-token flow.
+- Keep route handlers thin: put orchestration and business logic in `server/src/services`, and central-DB access in `server/src/stores`.
+- Never weaken the read-only safety guard. Pipelines run only through `queryExecutor.executePipeline`, which applies `validateCollectionName` and `validatePipeline`. Writes go only through the approval-token flow (`approvedWrite`).
+- Tenant data is always filtered by `connectionId`. Never write `connectionId ? { connectionId } : {}`; use a store, which fails closed.
+- Do not add `process.env` research toggles to production modules or forward evaluation options from requests. Extend `ExperimentConfig` instead.
+- Architecture vocabulary (module, interface, seam, depth, adapter) and domain terms are in `GLOSSARY.md`; decisions are in `docs/adr/`.
 
 ## Repo-specific agent rules (`.agents/rules/rules.md`)
 - "Do not break anything": check dependencies before changing existing code, and keep changes atomic.

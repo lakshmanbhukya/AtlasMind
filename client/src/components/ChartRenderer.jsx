@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useMemo } from 'react';
 import {
     BarChart, Bar,
     LineChart, Line,
@@ -8,32 +8,20 @@ import {
     ComposedChart,
     XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
-import {
-    BarChart3, TrendingUp, PieChart as PieIcon, Layers,
-    Pin, PinOff, Table2, Crosshair, GitMerge,
-} from 'lucide-react';
-import { cn } from '../lib/utils';
-
+import { flattenValue } from '../lib/turnFormat';
 /* ------------------------------------------------------------------ */
-/* Design tokens — synced with Atlas dark theme                        */
+/* Design tokens — Verdigris palette (hex mirrors of the vg-* CSS vars)  */
 /* ------------------------------------------------------------------ */
-const COLORS = ['#00ED64', '#016EE9', '#FFC000', '#8b5cf6', '#f59e0b', '#06b6d4'];
+// accent, clay, amber, text-2, accent-deep, red
+const COLORS = ['#4FC79B', '#C98F5C', '#D4A961', '#A9B5AC', '#2A8467', '#DF6A57'];
 
-const BG_PANEL   = 'transparent';
-const BG_TOOLTIP = '#0a0e14';
-const GRID_COLOR = 'rgba(255,255,255,0.04)';
-const TICK_COLOR = '#64748b';
+const BG_TOOLTIP = '#121A16';
+const GRID_COLOR = '#1A231E';
+const TICK_COLOR = '#808C84';
+const TEXT_COLOR = '#E9EFE9';
+const LINE_COLOR = '#2B3730';
+const BG_BASE = '#0B100D';
 const TICK_FONT  = '"DM Sans", system-ui, sans-serif';
-
-const CHART_TYPES = [
-    { id: 'bar',      label: 'Bar',      Icon: BarChart3   },
-    { id: 'line',     label: 'Line',     Icon: TrendingUp  },
-    { id: 'area',     label: 'Area',     Icon: Layers      },
-    { id: 'pie',      label: 'Pie',      Icon: PieIcon     },
-    { id: 'scatter',  label: 'Scatter',  Icon: Crosshair   },
-    { id: 'composed', label: 'Composed', Icon: GitMerge    },
-    { id: 'table',    label: 'Table',    Icon: Table2      },
-];
 
 /* ------------------------------------------------------------------ */
 /* Custom tooltip                                                       */
@@ -43,7 +31,7 @@ function AtlasTooltip({ active, payload, label }) {
     return (
         <div style={{
             background: BG_TOOLTIP,
-            border: '1px solid rgba(0,237,100,0.25)',
+            border: `1px solid ${LINE_COLOR}`,
             borderRadius: '12px',
             padding: '10px 14px',
             fontSize: '12px',
@@ -51,7 +39,7 @@ function AtlasTooltip({ active, payload, label }) {
             boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
         }}>
             {label !== undefined && (
-                <p style={{ color: '#e2e8f0', fontWeight: 600, marginBottom: 6, fontSize: 13 }}>
+                <p style={{ color: TEXT_COLOR, fontWeight: 600, marginBottom: 6, fontSize: 13 }}>
                     {String(label)}
                 </p>
             )}
@@ -115,9 +103,7 @@ function useChartKeys(data) {
 /* ------------------------------------------------------------------ */
 /* ChartRenderer                                                        */
 /* ------------------------------------------------------------------ */
-export default function ChartRenderer({ data, chartType: initialChartType = 'bar', query, onPin, isPinned = false }) {
-    const [activeType, setActiveType] = useState(initialChartType || 'bar');
-    const [pinned, setPinned] = useState(isPinned);
+export default function ChartRenderer({ data, chartType = 'bar' }) {
 
     // Clean/flatten data for Recharts to handle nested MongoDB _id / other objects smoothly
     const processedData = useMemo(() => {
@@ -127,7 +113,7 @@ export default function ChartRenderer({ data, chartType: initialChartType = 'bar
             for (const key of Object.keys(cleaned)) {
                 const val = cleaned[key];
                 if (val !== null && typeof val === 'object') {
-                    cleaned[key] = val.$oid || val._id || val.id || val.name || JSON.stringify(val);
+                    cleaned[key] = flattenValue(val);
                 }
             }
             return cleaned;
@@ -135,11 +121,6 @@ export default function ChartRenderer({ data, chartType: initialChartType = 'bar
     }, [data]);
 
     const { labelKey, valueKeys } = useChartKeys(processedData);
-
-    const handlePin = useCallback(() => {
-        setPinned((p) => !p);
-        if (onPin) onPin({ query, chartType: activeType, results: data });
-    }, [onPin, query, activeType, data]);
 
     if (!data?.length || !labelKey) return null;
 
@@ -160,7 +141,7 @@ export default function ChartRenderer({ data, chartType: initialChartType = 'bar
     const gridProps   = { stroke: GRID_COLOR, strokeDasharray: '0' };
 
     const renderBody = () => {
-        switch (activeType) {
+        switch (chartType) {
             case 'bar':
                 return (
                     <BarChart {...commonProps}>
@@ -206,7 +187,7 @@ export default function ChartRenderer({ data, chartType: initialChartType = 'bar
                                         <circle 
                                             key={`dot-${index}`}
                                             cx={cx} cy={cy} r={3.5} 
-                                            fill="#0D1117" 
+                                            fill={BG_BASE}
                                             stroke={valueKeys.length === 1 ? COLORS[index % COLORS.length] : COLORS[i % COLORS.length]} 
                                             strokeWidth={2} 
                                         />
@@ -258,7 +239,7 @@ export default function ChartRenderer({ data, chartType: initialChartType = 'bar
                             nameKey={labelKey}
                             cx="50%" cy="50%"
                             outerRadius={100} innerRadius={44}
-                            strokeWidth={2} stroke="#0D1117"
+                            strokeWidth={2} stroke={BG_BASE}
                             label={false}
                             labelLine={false}
                         >
@@ -283,7 +264,7 @@ export default function ChartRenderer({ data, chartType: initialChartType = 'bar
                         <XAxis dataKey={xKey} name={xKey} {...axisProps} />
                         <YAxis dataKey={yKey} name={yKey} {...axisProps} />
                         <Tooltip content={<AtlasTooltip />} cursor={{ stroke: TICK_COLOR, strokeDasharray: '3 3' }} />
-                        <Scatter name={`${xKey} vs ${yKey}`} data={processedData} strokeWidth={1} stroke="#0D1117">
+                        <Scatter name={`${xKey} vs ${yKey}`} data={processedData} strokeWidth={1} stroke={BG_BASE}>
                             {processedData.map((entry, index) => (
                                 <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                             ))}
@@ -310,60 +291,6 @@ export default function ChartRenderer({ data, chartType: initialChartType = 'bar
                     </ComposedChart>
                 );
 
-            case 'table': {
-                const columns = Object.keys(data[0]);
-                return (
-                    <div style={{ overflowX: 'auto', maxHeight: 320 }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: TICK_FONT }}>
-                            <thead>
-                                <tr>
-                                    {columns.map((col) => (
-                                        <th key={col} style={{
-                                            textAlign: 'left', padding: '8px 14px',
-                                            borderBottom: '1px solid rgba(255,255,255,0.07)',
-                                            color: TICK_COLOR, fontWeight: 700, fontSize: 10,
-                                            textTransform: 'uppercase', letterSpacing: '0.08em',
-                                            position: 'sticky', top: 0, background: '#0a0e14', whiteSpace: 'nowrap',
-                                        }}>
-                                            {col}
-                                        </th>
-                                    ))}
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {data.map((row, ri) => (
-                                    <tr key={ri} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                                        {columns.map((col) => {
-                                            const val = row[col];
-                                            const isNum = typeof val === 'number';
-                                            
-                                            let displayVal = '—';
-                                            if (val !== null && val !== undefined) {
-                                                if (typeof val === 'object') {
-                                                    displayVal = val.$oid || val._id || val.id || JSON.stringify(val);
-                                                } else {
-                                                    displayVal = String(val);
-                                                }
-                                            }
-
-                                            return (
-                                                <td key={col} style={{
-                                                    padding: '8px 14px',
-                                                    color: isNum ? '#00ED64' : '#e2e8f0',
-                                                    fontFamily: isNum ? '"JetBrains Mono", monospace' : TICK_FONT,
-                                                }}>
-                                                    {isNum ? val.toLocaleString() : displayVal}
-                                                </td>
-                                            );
-                                        })}
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                );
-            }
-
             default:
                 return null;
         }
@@ -373,67 +300,10 @@ export default function ChartRenderer({ data, chartType: initialChartType = 'bar
     /* Render                                                               */
     /* ------------------------------------------------------------------ */
     return (
-        <div style={{ background: BG_PANEL }}>
-            {/* Toolbar */}
-            <div style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '10px 14px',
-                borderBottom: '1px solid rgba(255,255,255,0.06)',
-                background: 'rgba(0,0,0,0.2)',
-                gap: 8,
-                flexWrap: 'wrap',
-            }}>
-                <div className="flex gap-1.5 flex-wrap">
-                    {CHART_TYPES.map(({ id, label, Icon }) => (
-                        <button
-                            key={id}
-                            onClick={() => setActiveType(id)}
-                            title={label}
-                            aria-label={`Switch to ${label} chart`}
-                            className={cn(
-                                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[11px] font-medium transition-all duration-200 cursor-pointer",
-                                activeType === id
-                                    ? "border-primary/40 bg-primary/15 text-primary shadow-[0_0_12px_rgba(0,237,100,0.15)]"
-                                    : "border-white/5 bg-white/[0.02] text-muted-foreground hover:bg-white/[0.06] hover:text-foreground hover:border-white/10"
-                            )}
-                        >
-                            <Icon size={12} className={cn("transition-colors", activeType === id ? "text-primary" : "text-muted-foreground/60")} />
-                            {label}
-                        </button>
-                    ))}
-                </div>
-
-                {onPin && (
-                    <button
-                        onClick={handlePin}
-                        aria-label={pinned ? 'Unpin from dashboard' : 'Pin to dashboard'}
-                        className={cn(
-                            "flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[11px] font-medium transition-all duration-200 cursor-pointer",
-                            pinned
-                                ? "border-primary/40 bg-primary/15 text-primary shadow-[0_0_12px_rgba(0,237,100,0.15)]"
-                                : "border-white/5 bg-white/[0.02] text-muted-foreground hover:bg-white/[0.06] hover:text-foreground hover:border-white/10"
-                        )}
-                    >
-                        {pinned ? (
-                            <PinOff size={12} className="text-primary" />
-                        ) : (
-                            <Pin size={12} className="text-muted-foreground/60 group-hover:text-foreground" />
-                        )}
-                        {pinned ? 'Unpin' : 'Pin to Dashboard'}
-                    </button>
-                )}
-            </div>
-
-            {/* Chart / Table body */}
-            <div style={{ padding: activeType === 'table' ? 0 : '16px 8px 8px' }}>
-                {activeType !== 'table' ? (
-                    <ResponsiveContainer width="100%" height={280}>
-                        {renderBody()}
-                    </ResponsiveContainer>
-                ) : (
-                    renderBody()
-                )}
-            </div>
+        <div style={{ padding: '16px 8px 8px' }}>
+            <ResponsiveContainer width="100%" height={280}>
+                {renderBody()}
+            </ResponsiveContainer>
         </div>
     );
 }

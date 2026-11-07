@@ -34,6 +34,27 @@ Validates a MongoDB connection string + database name, stores encrypted credenti
 }
 ```
 
+### POST `/api/connections/databases` *(Public - auth rate limiter)*
+Lists the non-empty databases a connection string can see, so the landing page can offer them before connecting. Internal databases (`admin`, `local`, `config`) and `system.*` collections are skipped. Nothing is stored and no session cookie is issued. If the user lacks the `listDatabases` privilege the list is empty.
+
+**Request Body**:
+```json
+{ "connectionString": "mongodb+srv://user:pass@cluster.mongodb.net" }
+```
+
+**Success Response (HTTP 200)**:
+```json
+{
+  "success": true,
+  "databases": [
+    { "name": "analytics_prod", "collectionCount": 12 },
+    { "name": "inventory", "collectionCount": 9 }
+  ]
+}
+```
+
+**Errors**: `400` for a malformed connection string or an unreachable cluster, `500` otherwise.
+
 ### GET `/api/auth/me`
 Validates the current session cookie and returns active connection metadata.
 
@@ -89,11 +110,13 @@ The primary query execution endpoint. Implements dual-pass ambiguity detection, 
 ```json
 {
   "text": "get the top sales",
-  "model": "deepseek-r1-distill-llama-70b",
+  "model": "openai/gpt-oss-120b",
   "collections": ["orders", "customers"],
   "workspaceId": "66f4..."
 }
 ```
+
+**Scope resolution** (Effective Scope): a non-empty `collections` array wins (unknown names are rejected, or dropped when `dropMissing` or a `workspaceId` is set). Otherwise `workspaceId` restricts the query to that workspace's collections; collections that no longer exist are dropped. With neither, every user collection is in scope. An unknown workspace (`workspace_not_found`) or one with no remaining collections (`workspace_empty`) is an error, never a widening to all collections.
 
 #### B. Clarification Response (HTTP 200)
 When the Ambiguity Gate detects underspecified metrics (2+ candidate schema fields):
@@ -121,17 +144,19 @@ When the Ambiguity Gate detects underspecified metrics (2+ candidate schema fiel
 *Note: During clarification, no database execution occurs, no query history is saved, and no few-shot example is recorded.*
 
 #### C. Disambiguation Resubmission
-The client submits the user's selected choice from `ClarificationCard`:
+The client submits the user's selected choice from the clarification turn:
 ```json
 {
   "text": "get the top sales",
-  "model": "deepseek-r1-distill-llama-70b",
+  "model": "openai/gpt-oss-120b",
   "clarifications": [
     { "id": "metric", "value": "sales_amount" }
   ],
   "bypassAmbiguity": true
 }
 ```
+
+For a `"type": "multiple"` question, `value` may be an array of strings (1–10 entries), e.g. `{ "id": "metric", "value": ["total", "subtotal"] }`. Every entry is validated exactly like a single value: it must be an offered option and resolve to a real schema field. An `"__other__"` entry uses the clarification's `customText`. One invalid entry rejects the request with `400 validation_error`.
 
 #### D. Scope Expansion Required Response (HTTP 200)
 Returned when a query references collections outside the active workspace:
@@ -159,11 +184,52 @@ Returned when a query specifies a database write, deletion, or modification:
   "safetyStatus": "approval-required",
   "safetyBlocked": false,
   "approvalToken": "eyJhbGciOiJIUzI1NiIsIn...",
+  "approval": {
+    "expiresAt": "2026-11-07T08:24:00.000Z",
+    "writeStage": "$merge",
+    "writeStageIndex": 2,
+    "sourceCollection": "customers",
+    "targetCollection": "customers_archive",
+    "fieldsWritten": ["archived", "archivedAt"]
+  },
   "collection": "customers",
-  "pipeline": [{ "$match": { "status": "inactive" } }],
+  "pipeline": [
+    { "$match": { "status": "inactive" } },
+    { "$set": { "archived": true, "archivedAt": "$$NOW" } },
+    { "$merge": { "into": "customers_archive" } }
+  ],
   "results": []
 }
 ```
+
+`approval` describes the staged write for the approval UI. `expiresAt` is the token's JWT `exp` (10 minutes after issue). `writeStage` / `writeStageIndex` locate the `$merge`/`$out` stage, `targetCollection` is its destination, and `fieldsWritten` lists the `$set`/`$addFields`/`$unset` keys before it. Nothing has been written until `POST /api/query/approve` succeeds.
+
+#### E2. Query Blocked Response (HTTP 422)
+Returned when the pipeline fails the safety guard and is not approvable (code execution operators, protected/system collections, restricted stages, malformed pipelines). Nothing is executed.
+```json
+{
+  "success": false,
+  "error": { "code": "safety_violation", "message": "Access to \"system_users\" is not allowed" },
+  "safetyStatus": "blocked",
+  "safetyBlocked": true,
+  "collection": "orders",
+  "pipeline": [
+    { "$match": { "status": "paid" } },
+    { "$lookup": { "from": "system_users", "localField": "userId", "foreignField": "_id", "as": "user" } }
+  ],
+  "safetyBlock": {
+    "code": "protected_collection",
+    "rule": "System and internal collections (system, admin, local, config) cannot be read.",
+    "stage": "$lookup",
+    "stageIndex": 1,
+    "referenceType": "$lookup collection",
+    "reference": "system_users",
+    "reason": "Access to \"system_users\" is not allowed"
+  }
+}
+```
+
+`safetyBlock.code` is one of `hard_blocked_operator`, `blocked_write_operator`, `protected_collection`, `out_of_scope_collection`, `invalid_collection`, `restricted_stage` or `malformed_pipeline`. `stageIndex` is the top-level stage that contains `reference` (`null` when the problem is the target collection or the whole pipeline). A reference to a valid collection outside the workspace is not blocked: it returns the scope-expansion response (D).
 
 #### F. Final Execution Response (HTTP 200)
 Returned when a query is unambiguous or has been successfully clarified:
@@ -253,7 +319,7 @@ Before executing, the server verifies the token signature and 10-minute expiry, 
 ## 5. Query History Management
 
 ### GET `/api/query/history`
-Returns recent query execution history for the active connection.
+Returns the 20 most recent history items for the active connection, plus every pinned item (up to 50) even when it is older. Items are sorted newest first, and the newest is marked `active`.
 
 **Success Response (HTTP 200)**:
 ```json
@@ -263,10 +329,19 @@ Returns recent query execution history for the active connection.
     {
       "id": "6703...",
       "query": "get the top sales",
-      "time": "5 minutes ago",
+      "time": "5 min ago",
+      "timestamp": "2026-11-07T07:58:12.000Z",
       "collection": "orders",
       "resultCount": 10,
-      "clarifications": [{ "id": "metric", "value": "sales_amount" }],
+      "chartType": "bar",
+      "pipeline": [{ "$group": { "_id": "$customerId", "total_sales": { "$sum": "$sales_amount" } } }],
+      "results": [{ "_id": "CUST-104", "total_sales": 84200 }],
+      "schemaContext": "orders: _id, customerId, sales_amount, …",
+      "explanation": "Aggregates orders grouped by customer…",
+      "executionTimeMs": 24,
+      "confidenceScore": 92,
+      "scope": ["orders"],
+      "pinned": false,
       "active": true
     }
   ],
@@ -274,21 +349,26 @@ Returns recent query execution history for the active connection.
 }
 ```
 
+`explanation`, `executionTimeMs`, `confidenceScore` and `scope` are `""`/`null` for items recorded before they were stored.
+
 ### PATCH `/api/query/history/:id`
-Renames a saved query history item.
+Renames and/or pins a saved query history item. Send at least one field.
 
 **Request Body**:
 ```json
 {
-  "name": "Q3 Top Revenue Orders"
+  "name": "Q3 Top Revenue Orders",
+  "pinned": true
 }
 ```
+
+`name` must be a non-empty string, and `pinned` must be a boolean. Anything else returns `400 validation_error`, and an id that does not belong to this connection returns `404 not_found`.
 
 **Success Response (HTTP 200)**:
 ```json
 {
   "success": true,
-  "message": "History item renamed successfully"
+  "message": "History item updated successfully"
 }
 ```
 
@@ -315,7 +395,8 @@ Accepts `multipart/form-data` audio recordings and performs Whisper Large v3 Tur
 - `model` (optional): LLM model ID.
 - `bypassAmbiguity` (optional): `"true"` to bypass clarification.
 - `clarifications` (optional): JSON string of validated clarification answers.
-- `collections` (optional): JSON array of scoped collection names.
+- `collections` (optional): JSON array string of scoped collection names, e.g. `["orders"]`. Anything that is not a JSON array returns 400 `validation_error`.
+- `workspaceId` (optional): Saved workspace to scope the query to (same rules as `/api/query`).
 
 **Ambiguity Response**:
 If the transcribed speech is ambiguous, returns `{ success: true, needsClarification: true, transcript: "...", questions: [...] }`.
@@ -349,14 +430,14 @@ Creates a new workspace with a specific collection whitelist.
 }
 ```
 
-### PUT `/api/workspaces/:id`
+### PATCH `/api/workspaces/:id`
 Updates workspace details or collection whitelist.
 
 ### DELETE `/api/workspaces/:id`
 Removes a workspace.
 
 ### POST `/api/scope/suggest`
-Analyzes all database collections using semantic LLM clustering and suggests optimal workspace scopes.
+Suggests workspace scopes by keyword-scoring the collections against the question. Disabled unless `SCOPE_AUTO_SUGGEST=true`; the bundled client does not call it.
 
 **Success Response (HTTP 200)**:
 ```json
@@ -431,10 +512,12 @@ Common Error Codes:
 - `unauthenticated` (401): No `am_token` session cookie.
 - `session_expired` (401): Session cookie invalid or expired; the cookie is cleared.
 - `validation_error` (400): Invalid parameters, unknown collection, or prompt-injection attempt in clarifications.
+- `workspace_not_found` (400): `workspaceId` does not name a workspace of the current connection.
+- `workspace_empty` (400): None of the workspace's collections exist in the database any more.
 - `connection_not_found` (404): The session's stored connection no longer exists.
 - `expired_token` (401), `forbidden` (403), `token_already_used` (409): Write approval failures (see section 4).
-- `safety_violation` (422): Unsafe stage or operator (`$out`, `$merge`, `$function`, `$where`, system collection).
-- `scope_violation` (422): Pipeline references a collection outside the Effective Scope.
+- `safety_violation` (422): Unsafe stage or operator (`$function`, `$where`, system collection, restricted stage). On `POST /api/query` and `/api/voice` the body also carries `safetyBlock` (see section 3, E2). Write stages (`$out`, `$merge`) are not a 422 there: they return the approval response (E).
+- `scope_violation` (422): Dashboard pin/refresh only. The stored pipeline references a collection outside its scope. `POST /api/query` never returns this code: an out-of-scope collection is the HTTP 200 scope-expansion response (`safetyStatus: "scope-insufficient"`, section 3, D).
 - `rate_limited` (429): The upstream LLM is rate limited; retry shortly.
 - `execution_error` / `query_error` / `voice_pipeline_error` (500): Unexpected failure while running the query.
 

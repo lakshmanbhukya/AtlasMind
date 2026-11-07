@@ -1,6 +1,6 @@
 import { Component } from "react";
 import { AlertTriangle, RotateCcw } from "lucide-react";
-import { Button } from "./ui/button";
+import { TurnButton } from "./app/turnParts";
 
 /**
  * ErrorBoundary — Catches rendering errors in child components
@@ -32,27 +32,22 @@ export default class ErrorBoundary extends Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-destructive/20 bg-destructive/5 p-6 text-center backdrop-blur-md animate-atlas-fade-in">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-destructive/10 border border-destructive/20">
-            <AlertTriangle className="h-5 w-5 text-destructive" />
+        <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-vg-red bg-[var(--vg-red-wash)] p-6 text-center animate-atlas-fade-in">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-vg-red bg-vg-surface-2">
+            <AlertTriangle className="h-5 w-5 text-vg-red" />
           </div>
-          <p className="text-sm font-medium text-foreground/90">
+          <p className="text-sm font-medium text-vg-text">
             {this.props.label
               ? `Unable to render ${this.props.label}`
               : "Something went wrong"}
           </p>
-          <p className="text-xs text-muted-foreground max-w-[240px] leading-relaxed">
+          <p className="max-w-[240px] text-xs leading-relaxed text-vg-text-2">
             {this.state.error?.message || "An unexpected error occurred."}
           </p>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={this.handleReset}
-            className="mt-1 gap-1.5 text-xs border-destructive/30 hover:bg-destructive/10"
-          >
+          <TurnButton onClick={this.handleReset} className="mt-1 h-8 text-xs">
             <RotateCcw className="h-3 w-3" />
             Try Again
-          </Button>
+          </TurnButton>
         </div>
       );
     }

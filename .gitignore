@@ -12,3 +12,6 @@ eval2/
 paper/
 evaluation_progress/
 RUN_LOG.md
+
+# Installed agent skills lock
+skills-lock.json

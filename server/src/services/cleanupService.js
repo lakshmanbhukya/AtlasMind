@@ -112,8 +112,6 @@ function stopCleanupCron() {
 }
 
 module.exports = {
-    cleanOldPlaygroundChats,
     startCleanupCron,
-    stopCleanupCron,
     initializeCleanupIndexes,
 };

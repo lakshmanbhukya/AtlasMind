@@ -1,8 +1,27 @@
 const express = require('express');
 const Workspace = require('../models/Workspace');
 const { getUserCollections } = require('../services/tenantSchema');
+const { requireKnownCollections } = require('../services/effectiveScope');
+const { QueryEngineError } = require('../services/engineErrors');
 
 const router = express.Router();
+
+/**
+ * Check workspace collections against the tenant's real collections.
+ * Returns the sent 400 response on failure, or null when every name is known.
+ */
+async function validateWorkspaceCollections(res, connectionId, collections) {
+    try {
+        await requireKnownCollections(connectionId, collections);
+        return null;
+    } catch (error) {
+        if (!(error instanceof QueryEngineError)) throw error;
+        return res.status(error.statusCode).json({
+            success: false,
+            error: { code: error.code, message: error.message },
+        });
+    }
+}
 
 /** Available user collections for this tenant, as a Set. */
 async function getUserCollectionSet(connectionId) {
@@ -85,22 +104,8 @@ router.post('/', async (req, res) => {
             });
         }
 
-        // Validate collections against real user DB
-        const availableSet = await getUserCollectionSet(connectionId);
-        for (const col of collections) {
-            if (typeof col !== 'string' || !col.trim()) {
-                return res.status(400).json({
-                    success: false,
-                    error: { code: 'validation_error', message: 'Collection names must be non-empty strings' },
-                });
-            }
-            if (!availableSet.has(col)) {
-                return res.status(400).json({
-                    success: false,
-                    error: { code: 'validation_error', message: `Unknown collection: "${col}"` },
-                });
-            }
-        }
+        const scopeError = await validateWorkspaceCollections(res, connectionId, collections);
+        if (scopeError) return scopeError;
 
         const workspace = await Workspace.createWorkspace({
             connectionId,
@@ -180,25 +185,18 @@ router.patch('/:id', async (req, res) => {
                 });
             }
 
-            const availableSet = await getUserCollectionSet(connectionId);
-            for (const col of collections) {
-                if (typeof col !== 'string' || !col.trim()) {
-                    return res.status(400).json({
-                        success: false,
-                        error: { code: 'validation_error', message: 'Collection names must be non-empty strings' },
-                    });
-                }
-                if (!availableSet.has(col)) {
-                    return res.status(400).json({
-                        success: false,
-                        error: { code: 'validation_error', message: `Unknown collection: "${col}"` },
-                    });
-                }
-            }
+            const scopeError = await validateWorkspaceCollections(res, connectionId, collections);
+            if (scopeError) return scopeError;
             updates.collections = collections;
         }
 
         const updated = await Workspace.updateWorkspace(id, connectionId, updates);
+        if (!updated) {
+            return res.status(404).json({
+                success: false,
+                error: { code: 'not_found', message: 'Workspace not found' },
+            });
+        }
         return res.json({
             success: true,
             data: {

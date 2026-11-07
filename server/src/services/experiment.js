@@ -56,4 +56,4 @@ function resolveExperiment(experiment) {
     return Object.freeze({ diagnostics: true, ...experiment });
 }
 
-module.exports = { PRODUCTION, resolveExperiment };
+module.exports = { resolveExperiment };

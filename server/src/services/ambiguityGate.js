@@ -240,6 +240,7 @@ function recordAmbiguityMetric(event, meta = {}) {
     if (Object.prototype.hasOwnProperty.call(metricsStore, event)) {
         metricsStore[event] += 1;
     }
+    if (process.env.NODE_ENV === 'production') return;
     console.log('[AMBIGUITY_METRIC]', {
         event,
         connectionId: meta.connectionId || 'anonymous',
@@ -686,6 +687,8 @@ function validateModelClarification(questions, schemaObject = null) {
     return { valid: true, questions: normalizedQuestions };
 }
 
+const MAX_MULTI_VALUES = 10;
+
 /**
  * Validate incoming clarification answers against the live schema and offered options.
  * Rejects prompt-injection attempts by requiring all values (including custom "Other" text)
@@ -725,6 +728,33 @@ function validateClarifications(clarifications, schemaObject, offeredQuestions =
     const errors = [];
 
     for (const c of clarifications) {
+        // Multi-select answer: validate every entry exactly like a single value.
+        if (c && typeof c.id === 'string' && Array.isArray(c.value)) {
+            const entries = c.value;
+            if (entries.length === 0 || entries.length > MAX_MULTI_VALUES || entries.some((v) => typeof v !== 'string')) {
+                errors.push(`Invalid multi-select clarification for "${c.id}": expected 1-${MAX_MULTI_VALUES} strings`);
+                continue;
+            }
+            const sub = validateClarifications(
+                entries.map((v) => ({ id: c.id, value: v, customText: v === '__other__' ? c.customText : undefined })),
+                schemaObject,
+                offeredQuestions
+            );
+            if (!sub.valid) {
+                errors.push(...sub.errors);
+                continue;
+            }
+            const values = Array.from(new Set(
+                sub.sanitized.map((s) => s.value).filter((v) => v && v !== '__other__')
+            ));
+            if (values.length === 0) {
+                sanitized.push({ id: sub.sanitized[0].id, value: '__other__', customText: '' });
+            } else {
+                sanitized.push({ id: sub.sanitized[0].id, value: values });
+            }
+            continue;
+        }
+
         // Structural check
         if (!c || typeof c.id !== 'string' || typeof c.value !== 'string') {
             errors.push(`Invalid clarification entry: ${JSON.stringify(c)}`);
@@ -816,8 +846,8 @@ function buildEnrichedQuery(originalQuery, sanitizedClarifications) {
     }
 
     const clarificationLines = sanitizedClarifications
-        .filter((c) => c.value && c.value !== '__other__')
-        .map((c) => `${c.id}:\n${c.value}`);
+        .filter((c) => c.value && c.value !== '__other__' && !(Array.isArray(c.value) && c.value.length === 0))
+        .map((c) => `${c.id}:\n${Array.isArray(c.value) ? c.value.join(', ') : c.value}`);
 
     if (clarificationLines.length === 0) return originalQuery;
 

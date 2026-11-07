@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import api from '../services/api';
+import { getSession, logout as apiLogout } from '../services/api';
 
 /**
  * useAuth — manages sessionstate via the httpOnly JWT cookie.
@@ -19,7 +19,7 @@ export function useAuth() {
     const checkSession = useCallback(async () => {
         setIsLoading(true);
         try {
-            const { data } = await api.get('auth/me');
+            const data = await getSession();
             if (data.success) {
                 setIsAuthenticated(true);
                 setConnectionMeta({
@@ -47,7 +47,7 @@ export function useAuth() {
 
     const logout = useCallback(async () => {
         try {
-            await api.post('auth/logout');
+            await apiLogout();
         } catch {
             // Ignore logout errors — clear state regardless
         }

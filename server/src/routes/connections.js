@@ -1,11 +1,18 @@
 const express = require('express');
-const { MongoClient } = require('mongodb');
 const router = express.Router();
 const { encrypt, hashString } = require('../utils/encryption');
-const { upsertConnection } = require('../models/UserConnection');
+const userConnections = require('../models/UserConnection');
+const { upsertConnection } = userConnections;
 const { issueSession } = require('../auth/session');
 const { requireAuth } = require('../middleware/auth');
 const { evictUserDb } = require('../services/userDbPool');
+const { listUserDatabases, discoverDatabases, openTemporaryClient } = require('../services/databaseDiscovery');
+const { listUserCollections } = require('../services/tenantSchema');
+
+const isMongoUri = (s) => typeof s === 'string' && /^mongodb(\+srv)?:\/\//.test(s);
+
+const connectionFailed = (err) =>
+    err && (err.name === 'MongoServerSelectionError' || err.name === 'MongoNetworkError' || err.name === 'MongoParseError' || err.name === 'MongoAPIError');
 
 /**
  * POST /api/connections/connect
@@ -25,7 +32,7 @@ router.post('/connect', async (req, res) => {
         if (connectionString) connectionString = connectionString.trim();
         if (dbName) dbName = dbName.trim();
 
-        if (!connectionString || !connectionString.startsWith('mongodb')) {
+        if (!isMongoUri(connectionString)) {
             return res.status(400).json({
                 success: false,
                 error: { message: 'Invalid MongoDB connection string format' },
@@ -40,38 +47,13 @@ router.post('/connect', async (req, res) => {
         }
 
         // ── Validate the connection + database BEFORE storing ──
-        client = new MongoClient(connectionString, { serverSelectionTimeoutMS: 8000, maxPoolSize: 2 });
-        await client.connect();
+        client = await openTemporaryClient(connectionString);
 
-        const userDb = client.db(dbName);
-        const collections = await userDb.listCollections().toArray();
-        const userCollections = collections
-            .map(c => c.name)
-            .filter(name => !name.startsWith('system.'));
+        const userCollections = await listUserCollections(client.db(dbName));
 
         if (userCollections.length === 0) {
             // Database might not exist or is empty — list available ones for the user
-            const adminDb = client.db().admin();
-            let availableDbs = [];
-            try {
-                const { databases } = await adminDb.listDatabases();
-                // Filter out internal DBs and empty ones
-                const internalNames = new Set(['admin', 'local', 'config']);
-                for (const d of databases) {
-                    if (internalNames.has(d.name)) continue;
-                    const cols = await client.db(d.name).listCollections().toArray();
-                    const userCols = cols.filter(c => !c.name.startsWith('system.'));
-                    if (userCols.length > 0) {
-                        availableDbs.push({
-                            name: d.name,
-                            collections: userCols.map(c => c.name),
-                            collectionCount: userCols.length,
-                        });
-                    }
-                }
-            } catch {
-                // listDatabases might fail due to permissions — that's okay
-            }
+            const availableDbs = await listUserDatabases(client);
 
             return res.status(400).json({
                 success: false,
@@ -112,7 +94,7 @@ router.post('/connect', async (req, res) => {
         console.error('❌ [CONNECT_ERROR]', err);
 
         // Distinguish connection errors from other errors
-        if (err.name === 'MongoServerSelectionError' || err.name === 'MongoNetworkError') {
+        if (connectionFailed(err)) {
             return res.status(400).json({
                 success: false,
                 error: { message: 'Could not connect to MongoDB. Please check your connection string.' },
@@ -129,6 +111,43 @@ router.post('/connect', async (req, res) => {
 });
 
 /**
+ * POST /api/connections/databases
+ *
+ * Public (behind the auth rate limiter). Lists the non-empty databases a
+ * connection string can see, so the landing page can offer them before
+ * the user connects. Nothing is stored and no session is issued.
+ */
+router.post('/databases', async (req, res) => {
+    const connectionString = typeof req.body?.connectionString === 'string'
+        ? req.body.connectionString.trim()
+        : '';
+
+    if (!isMongoUri(connectionString)) {
+        return res.status(400).json({
+            success: false,
+            error: { message: 'Invalid MongoDB connection string format' },
+        });
+    }
+
+    try {
+        const databases = await discoverDatabases(connectionString);
+        return res.json({
+            success: true,
+            databases: databases.map(({ name, collectionCount }) => ({ name, collectionCount })),
+        });
+    } catch (err) {
+        if (connectionFailed(err)) {
+            return res.status(400).json({
+                success: false,
+                error: { message: 'Could not connect to MongoDB. Please check your connection string.' },
+            });
+        }
+        console.error('❌ [LIST_DATABASES_ERROR]', err);
+        return res.status(500).json({ success: false, error: { message: 'Failed to list databases' } });
+    }
+});
+
+/**
  * GET /api/connections/:connectionId
  */
 router.get('/:connectionId', requireAuth, async (req, res) => {
@@ -140,8 +159,7 @@ router.get('/:connectionId', requireAuth, async (req, res) => {
     }
 
     try {
-        const { getConnectionById } = require('../models/UserConnection');
-        const conn = await getConnectionById(req.params.connectionId);
+        const conn = await userConnections.getConnectionById(req.params.connectionId);
 
         if (!conn) {
             return res.status(404).json({ success: false, error: { message: 'Connection not found' } });

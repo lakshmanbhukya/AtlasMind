@@ -28,7 +28,8 @@ Mapped by HTTP adapters to status codes (`200`, `422`, etc.).
 
 ### `EngineErrors`
 **Type**: Domain Error Classes  
-**Definition**: Typed errors thrown across the engine seam for exceptional or unauthorized conditions:
+**Definition**: Typed errors thrown across the engine seam for exceptional or unauthorized conditions. They live in `server/src/services/engineErrors.js`; `queryExecutor.UnsafePipelineError` is a separate family used by the guarded pipeline executor.
+
 - `ValidationError`: Query string missing or over length limit, or `connectionId` missing (maps to 400).
 - `ScopeError`: Requested collections do not belong to user DB (maps to 400).
 - `TokenExpiredError`: Staged write approval token has passed TTL (maps to 401).
@@ -62,7 +63,10 @@ Mapped by HTTP adapters to status codes (`200`, `422`, etc.).
 
 ### `Effective Scope`
 **Type**: Tenant Isolation Guard  
+**Location**: `server/src/services/effectiveScope.js`
 **Definition**: The verified subset of MongoDB collection names belonging to the user's active connection that are admissible for schema introspection and pipeline execution.
+**Interface**: `resolve({ userDb, connectionId, collections, workspaceId, dropMissing })` → `{ collections, restricted, all, source, dropped }`; `requireKnownCollections(connectionId, names)` for saving workspaces.
+**Rules**: a non-empty `collections` list wins, then a workspace, then all user collections (unrestricted). It fails closed: an unknown workspace throws `workspace_not_found`, a workspace whose collections are all gone throws `workspace_empty`; missing workspace collections are dropped and reported in `dropped`.
 
 ---
 
@@ -104,4 +108,3 @@ Mapped by HTTP adapters to status codes (`200`, `422`, etc.).
 **Type**: Module  
 **Location**: `server/src/auth/session.js`  
 **Definition**: Owns the `am_token` session cookie (name, options, 7-day TTL) and the Write Approval Token (sign/verify, `jti`, 10-minute TTL). `requireAuth`, the auth/connection routes and the engine use it; nothing else reads `JWT_SECRET` or sets the cookie.
-

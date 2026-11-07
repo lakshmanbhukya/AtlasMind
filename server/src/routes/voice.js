@@ -28,6 +28,24 @@ const upload = multer({
 });
 
 /**
+ * Multipart fields arrive as strings, so "collections" is sent as a JSON array.
+ * An empty string means no explicit scope; anything that is not an array is rejected.
+ * (Effective Scope itself validates the names.)
+ */
+function parseMultipartCollections(raw) {
+    if (raw === undefined || raw === null) return { ok: true, collections: undefined };
+    if (Array.isArray(raw)) return { ok: true, collections: raw };
+    if (typeof raw !== 'string') return { ok: false };
+    if (!raw.trim()) return { ok: true, collections: undefined };
+    try {
+        const value = JSON.parse(raw);
+        return Array.isArray(value) ? { ok: true, collections: value } : { ok: false };
+    } catch {
+        return { ok: false };
+    }
+}
+
+/**
  * POST /api/voice
  *
  * Speech-to-Query adapter:
@@ -47,8 +65,16 @@ router.post('/', upload.single('audio'), async (req, res) => {
         const { buffer, originalname, size } = req.file;
         const connectionId = req.connectionId;
         const model = req.body?.model;
-        const collections = req.body?.collections;
-        const workspaceId = req.body?.workspaceId;
+        const workspaceId = req.body?.workspaceId || undefined;
+
+        const parsed = parseMultipartCollections(req.body?.collections);
+        if (!parsed.ok) {
+            return res.status(400).json({
+                success: false,
+                error: { code: 'validation_error', message: '"collections" must be a JSON array of collection names' },
+            });
+        }
+        const { collections } = parsed;
 
         console.log(`🎙️ Transcribing audio: ${originalname} (${(size / 1024).toFixed(1)} KB)`);
 
@@ -65,7 +91,9 @@ router.post('/', upload.single('audio'), async (req, res) => {
             });
         }
 
-        console.log(`📝 Transcribed: "${queryText}" (Model: ${model || 'default'})`);
+        if (process.env.NODE_ENV !== 'production') {
+            console.log(`Transcribed voice query (model: ${model || 'default'}, ${queryText.length} chars)`);
+        }
 
         // Step 2: Delegate to deep QueryExecutionEngine with source: 'voice'
         const outcome = await QueryExecutionEngine.executeNaturalLanguageQuery({

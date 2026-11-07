@@ -210,6 +210,41 @@ describe('A2: ambiguityGate diagnostics and refinements', () => {
             expect(res.valid).toBe(true);
             expect(res.sanitized[0].value).toBe('discount');
         });
+
+        test('accepts a multi-select answer and validates every entry', () => {
+            const res = validateClarifications(
+                [{ id: 'metric', value: ['sales_amount', 'Profit'] }],
+                multiMetricSchema,
+                offeredQuestions
+            );
+            expect(res.valid).toBe(true);
+            expect(res.sanitized).toEqual([{ id: 'metric', value: ['sales_amount', 'profit'] }]);
+        });
+
+        test('a multi-select answer with one bad entry is rejected', () => {
+            const res = validateClarifications(
+                [{ id: 'metric', value: ['sales_amount', 'discount'] }],
+                multiMetricSchema,
+                offeredQuestions
+            );
+            expect(res.valid).toBe(false);
+            expect(res.errors[0]).toContain('not among the offered options');
+        });
+
+        test('a multi-select Other entry resolves customText against the schema', () => {
+            const res = validateClarifications(
+                [{ id: 'metric', value: ['profit', '__other__'], customText: 'discount' }],
+                multiMetricSchema,
+                offeredQuestions
+            );
+            expect(res.valid).toBe(true);
+            expect(res.sanitized[0].value).toEqual(['profit', 'discount']);
+        });
+
+        test('rejects an empty or non-string multi-select value', () => {
+            expect(validateClarifications([{ id: 'metric', value: [] }], multiMetricSchema).valid).toBe(false);
+            expect(validateClarifications([{ id: 'metric', value: ['profit', 3] }], multiMetricSchema).valid).toBe(false);
+        });
     });
 
     // 6. Enhanced binding heuristic (C2+BindFix)

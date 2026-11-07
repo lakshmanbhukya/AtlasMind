@@ -71,8 +71,14 @@ jest.mock('../stores/queryHistoryStore', () => ({
     record: (...args) => mockSaveQueryHistory(...args),
 }));
 
+// Workspace model mock (Effective Scope resolves workspaces through it)
+const mockGetWorkspaceById = jest.fn();
+jest.mock('../models/Workspace', () => ({
+    getWorkspaceById: (...args) => mockGetWorkspaceById(...args),
+}));
+
+const { QueryExecutionEngine } = require('../services/queryExecutionEngine');
 const {
-    QueryExecutionEngine,
     ValidationError,
     ScopeError,
     TokenExpiredError,
@@ -81,7 +87,7 @@ const {
     SafetyViolationError,
     ExecutionError,
     RateLimitError,
-} = require('../services/queryExecutionEngine');
+} = require('../services/engineErrors');
 
 describe('QueryExecutionEngine Interface Tests', () => {
     const testSecret = 'engine-test-secret-32-chars-long-123456';
@@ -189,6 +195,98 @@ describe('QueryExecutionEngine Interface Tests', () => {
             expect(decoded.collection).toBe('orders');
             expect(decoded.type).toBe('write-approval');
             expect(decoded.jti).toBeDefined();
+
+            // Structured approval details for the approval card
+            expect(outcome.data.approval).toEqual({
+                expiresAt: new Date(decoded.exp * 1000).toISOString(),
+                writeStage: '$out',
+                writeStageIndex: 1,
+                sourceCollection: 'orders',
+                targetCollection: 'archived_orders',
+                fieldsWritten: [],
+            });
+        });
+
+        test('approval details list the fields written before a $merge', async () => {
+            mockGenerateMQL.mockResolvedValueOnce({
+                pipeline: [
+                    { $match: { createdAt: { $lt: '2023-11-07' } } },
+                    { $set: { archived: true, archivedAt: '$$NOW' } },
+                    { $merge: { into: 'orders_archive', whenMatched: 'replace' } },
+                ],
+                collection: 'orders',
+                chartType: 'table',
+                explanation: 'Archive old orders',
+            });
+
+            const outcome = await QueryExecutionEngine.executeNaturalLanguageQuery({
+                connectionId: testConnectionId,
+                text: 'archive orders older than 3 years',
+            });
+
+            expect(outcome.type).toBe('approval_required');
+            expect(outcome.data.approval).toMatchObject({
+                writeStage: '$merge',
+                writeStageIndex: 2,
+                targetCollection: 'orders_archive',
+                fieldsWritten: ['archived', 'archivedAt'],
+            });
+            expect(Date.parse(outcome.data.approval.expiresAt)).toBeGreaterThan(Date.now());
+        });
+
+        test('a $lookup into a protected collection is blocked with structured details, not scope-insufficient', async () => {
+            const pipeline = [
+                { $match: { status: 'paid' } },
+                { $lookup: { from: 'system_users', localField: 'userId', foreignField: '_id', as: 'user' } },
+            ];
+            mockGenerateMQL.mockResolvedValueOnce({
+                pipeline,
+                collection: 'orders',
+                chartType: 'table',
+                explanation: 'Orders with users',
+            });
+
+            const outcome = await QueryExecutionEngine.executeNaturalLanguageQuery({
+                connectionId: testConnectionId,
+                text: 'show paid orders with their user',
+            });
+
+            expect(outcome.type).toBe('safety_blocked');
+            expect(outcome.data.error.code).toBe('safety_violation');
+            expect(outcome.data.safetyStatus).toBe('blocked');
+            expect(outcome.data.collection).toBe('orders');
+            expect(outcome.data.pipeline).toEqual(pipeline);
+            expect(outcome.data.safetyBlock).toMatchObject({
+                code: 'protected_collection',
+                referenceType: '$lookup collection',
+                reference: 'system_users',
+                stage: '$lookup',
+                stageIndex: 1,
+            });
+            expect(outcome.data.safetyBlock.rule).toEqual(expect.any(String));
+            expect(mockExecutePipeline).not.toHaveBeenCalled();
+        });
+
+        test('a hard-denied operator is blocked with the operator as the reference', async () => {
+            mockGenerateMQL.mockResolvedValueOnce({
+                pipeline: [{ $match: { $where: 'this.total > 10' } }],
+                collection: 'orders',
+                chartType: 'table',
+                explanation: 'Where clause',
+            });
+
+            const outcome = await QueryExecutionEngine.executeNaturalLanguageQuery({
+                connectionId: testConnectionId,
+                text: 'orders over 10 using where',
+            });
+
+            expect(outcome.type).toBe('safety_blocked');
+            expect(outcome.data.safetyBlock).toMatchObject({
+                code: 'hard_blocked_operator',
+                referenceType: 'Operator',
+                reference: '$where',
+                stageIndex: 0,
+            });
         });
 
         test('returns { type: "safety_blocked", data } for disallowed operations like system collections', async () => {
@@ -208,6 +306,12 @@ describe('QueryExecutionEngine Interface Tests', () => {
             expect(outcome.data.success).toBe(false);
             expect(outcome.data.error.code).toBe('safety_violation');
             expect(outcome.data.safetyBlocked).toBe(true);
+            expect(outcome.data.safetyStatus).toBe('blocked');
+            expect(outcome.data.safetyBlock).toMatchObject({
+                code: 'protected_collection',
+                referenceType: 'Target collection',
+                reference: 'system.users',
+            });
             expect(mockExecutePipeline).not.toHaveBeenCalled();
         });
 
@@ -342,6 +446,60 @@ describe('QueryExecutionEngine Interface Tests', () => {
             expect(textOutcome.data.pipeline).toEqual(voiceOutcome.data.pipeline);
             expect(textOutcome.data.safetyStatus).toEqual(voiceOutcome.data.safetyStatus);
             expect(textOutcome.data.results).toEqual(voiceOutcome.data.results);
+        });
+    });
+
+    describe('workspace scope (Effective Scope regression)', () => {
+        beforeEach(() => {
+            mockGetWorkspaceById.mockResolvedValue({ name: 'Sales', collections: ['orders'] });
+        });
+
+        test('a workspaceId-only query is restricted to the workspace collections', async () => {
+            const outcome = await QueryExecutionEngine.executeNaturalLanguageQuery({
+                connectionId: testConnectionId,
+                text: 'show high value orders',
+                workspaceId: '64b7f0000000000000000001',
+            });
+
+            expect(outcome.type).toBe('success');
+            expect(mockGetWorkspaceById).toHaveBeenCalledWith('64b7f0000000000000000001', testConnectionId);
+            expect(mockGetSimilarExamples).toHaveBeenCalledWith(
+                'show high value orders', expect.any(Number), testConnectionId, ['orders']
+            );
+            expect(mockExecutePipeline).toHaveBeenCalledWith(
+                mockUserDb, 'orders', expect.any(Array), expect.objectContaining({ scope: ['orders'] })
+            );
+        });
+
+        test('a $lookup outside the workspace is scope-insufficient, not executed', async () => {
+            mockGenerateMQL.mockResolvedValueOnce({
+                pipeline: [
+                    { $lookup: { from: 'customers', localField: 'customerId', foreignField: '_id', as: 'customer' } },
+                ],
+                collection: 'orders',
+                chartType: 'table',
+                explanation: 'Orders joined with customers',
+            });
+
+            const outcome = await QueryExecutionEngine.executeNaturalLanguageQuery({
+                connectionId: testConnectionId,
+                text: 'show orders with customer names',
+                workspaceId: '64b7f0000000000000000001',
+            });
+
+            expect(outcome.data.safetyStatus).toBe('scope-insufficient');
+            expect(mockExecutePipeline).not.toHaveBeenCalled();
+        });
+
+        test('an unknown workspace fails closed', async () => {
+            mockGetWorkspaceById.mockResolvedValueOnce(null);
+
+            await expect(QueryExecutionEngine.executeNaturalLanguageQuery({
+                connectionId: testConnectionId,
+                text: 'show high value orders',
+                workspaceId: '64b7f0000000000000000002',
+            })).rejects.toMatchObject({ code: 'workspace_not_found', statusCode: 400 });
+            expect(mockGenerateMQL).not.toHaveBeenCalled();
         });
     });
 

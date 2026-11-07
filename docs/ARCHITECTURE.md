@@ -8,7 +8,7 @@ AtlasMind is an intelligent Natural Language to MongoDB Aggregation Pipeline (NL
 
 AtlasMind enforces strict separation of concerns across six distinct architectural tiers:
 
-1. **Client Tier**: Modern React 19 SPA featuring an interactive Clarification UI (`ClarificationCard`), dynamic Scope Expansion (`ScopeInsufficientCard`), cryptographic HITL approval cards, chat streaming, chart visualizers, and workspace scope selectors.
+1. **Client Tier**: Modern React 19 SPA featuring an interactive Clarification UI (`ClarificationTurn`), dynamic Scope Expansion (`ScopeTurn`), cryptographic HITL approval cards, chat streaming, chart visualizers, and workspace scope selectors.
 2. **API Gateway & Routing Tier**: Express 4 server providing cookie-authenticated session management, workspace header resolution, and IP rate limiting.
 3. **Prompt Grounding & Ambiguity Tier**: Per-connection schema cache profiler, deterministic & LLM ambiguity detection gate, workspace collection scoper, and connection-isolated few-shot vector retriever.
 4. **AI Inference Tier**: High-throughput Groq LPU running dual-mode system prompts on DeepSeek / Llama 3.3 models alongside Whisper Large v3 Turbo audio transcription.
@@ -19,8 +19,8 @@ AtlasMind enforces strict separation of concerns across six distinct architectur
 flowchart TD
     subgraph Client["Client Tier (React 19 SPA :5173)"]
         UI["AtlasMind UI (React 19)"]
-        CC["ClarificationCard (Ambiguity)"]
-        SC["ScopeInsufficientCard (Scope Expansion)"]
+        CC["ClarificationTurn (Ambiguity)"]
+        SC["ScopeTurn (Scope Expansion)"]
         AC["HITL Write Approval Card"]
         WS["Workspace & Scope Selector"]
         API_C["API Client (Axios + Credentials)"]
@@ -114,7 +114,7 @@ When a natural language query is submitted, AtlasMind executes an ambiguity-awar
 sequenceDiagram
     autonumber
     actor User as User
-    participant Frontend as React UI (ClarificationCard)
+    participant Frontend as React UI (ClarificationTurn)
     participant Gateway as Express Gateway (/api/query)
     participant Engine as QueryExecutionEngine
     participant Ambiguity as Ambiguity Gate
@@ -136,7 +136,7 @@ sequenceDiagram
         Ambiguity-->>Engine: { needsClarification: true, questions: [...] }
         Engine-->>Gateway: { type: "clarification_required", data }
         Gateway-->>Frontend: HTTP 200 { needsClarification: true, questions: [...] }
-        Frontend-->>User: Render ClarificationCard (Pills: sales_amount, quantity, profit)
+        Frontend-->>User: Render ClarificationTurn (Pills: sales_amount, quantity, profit)
     else Clear Query or Single Metric
         Engine->>Groq: generateMQL(query, schema, examples, { isClarificationPass: false })
         Groq-->>Engine: Direct MQL output
@@ -219,7 +219,7 @@ When users restrict their active workspace to specific collections (e.g., `["ord
 sequenceDiagram
     autonumber
     actor User as User
-    participant Frontend as React UI (ScopeInsufficientCard)
+    participant Frontend as React UI (ScopeTurn)
     participant Gateway as Express Gateway (/api/query)
     participant Engine as QueryExecutionEngine
     participant Safety as Safety Guard
@@ -231,7 +231,7 @@ sequenceDiagram
     Safety-->>Engine: { safe: false, code: "scope_violation", violatingCollections: ["customers"] }
     Engine-->>Gateway: { type: "success", data: { safetyStatus: "scope-insufficient", suggestedCollections: ["customers"] } }
     Gateway-->>Frontend: HTTP 200 { safetyStatus: "scope-insufficient", suggestedCollections: ["customers"] }
-    Frontend-->>User: Renders ScopeInsufficientCard ("Scope Expansion Required")
+    Frontend-->>User: Renders ScopeTurn ("Scope Expansion Required")
     
     alt User clicks "Add & Re-run"
         User->>Frontend: Adds "customers" to workspace
@@ -264,7 +264,6 @@ The central deep domain engine for AtlasMind:
   7. AST safety validation and write interception.
   8. MongoDB aggregation execution with timeout cap.
   9. Telemetry recording and persistent query history save.
-- **Backwards-Compatibility Shim (`server/src/services/queryPipelineService.js`)**: Preserved as a lightweight delegator ensuring zero breakage for evaluation benchmarks (`eval2`) and legacy test suites.
 
 ### 3.2 Ambiguity Gate Service (`server/src/services/ambiguityGate.js`)
 Protects against hallucinated business logic:
@@ -280,7 +279,7 @@ Protects against hallucinated business logic:
 
 ### 3.4 Dynamic Workspace Scoping & Suggestion (`server/src/routes/workspaces.js`, `server/src/routes/scopeSuggest.js`)
 - **Workspace Scoping**: Restricts query context to curated collection subsets, reducing LLM prompt size and preventing cross-domain confusion.
-- **Scope Insufficient Handling**: When an MQL pipeline requires unselected collections, the system returns `safetyStatus: 'scope-insufficient'` and prompts users via `ScopeInsufficientCard`.
+- **Scope Insufficient Handling**: When an MQL pipeline requires unselected collections, the system returns `safetyStatus: 'scope-insufficient'` and prompts users via `ScopeTurn`.
 - **Dynamic Scope Discovery (`scopeSuggest.js`)**: Uses semantic clustering to recommend optimal workspace groupings (e.g., *Billing & Invoices*, *User Engagement*, *Catalog & Inventory*).
 
 ### 3.5 Schema Profiler & Isolated Caching (`server/src/services/schemaProfiler.js`)
@@ -317,16 +316,15 @@ Protects against hallucinated business logic:
 | Layer | Component | Implementation | Primary Responsibility |
 |---|---|---|---|
 | **Frontend** | Application Shell | React 19, Vite, Tailwind CSS | UI orchestration, state management, layout |
-| **Frontend** | Clarification Card | `ClarificationCard.jsx` | Disambiguation pills, custom metric inputs |
-| **Frontend** | Scope Insufficient Card | `ScopeInsufficientCard.jsx` | Scope expansion prompts and re-runs |
-| **Frontend** | HITL Approval Card | `AtlasChatPanel.jsx` | 2-step write verification modal |
-| **Frontend** | Workspace Selector | `ScopeWorkspaceSelector.jsx` | Active collection scoping & switching |
+| **Frontend** | Clarification Turn | `app/ClarificationTurn.jsx` | Disambiguation pills, custom metric inputs |
+| **Frontend** | Scope Turn | `app/ScopeTurn.jsx` | Scope expansion prompts and re-runs |
+| **Frontend** | HITL Approval Turn | `app/ApprovalTurn.jsx` | 2-step write verification modal |
+| **Frontend** | Scope Picker & Workspaces | `app/ComposerPickers.jsx`, `app/WorkspacesDialog.jsx` | Active collection scoping & switching |
 | **Frontend** | Visualizations | Recharts (`ChartRenderer.jsx`) | Interactive Bar, Line, Area, Pie, Radar charts |
-| **Frontend** | Voice Input | `AtlasChatPanel.jsx`, `useVoice.js` | MediaRecorder WebM audio streaming |
+| **Frontend** | Voice Input | `app/Composer.jsx`, `useVoice.js` | MediaRecorder WebM audio streaming |
 | **Backend** | Query Route Adapter | `routes/query.js` | Thin HTTP adapter for `/api/query` and `/api/query/approve` |
 | **Backend** | Voice Route Adapter | `routes/voice.js` | Audio intake boundary & Whisper transcription adapter |
 | **Backend** | Deep Query Engine | `queryExecutionEngine.js` | Unified deep domain execution & write approval |
-| **Backend** | Pipeline Compatibility Shim | `queryPipelineService.js` | Backwards-compatible delegator for evaluation suites |
 | **Backend** | Ambiguity Gate | `ambiguityGate.js` | Deterministic checks, prompt injection defense |
 | **Backend** | Schema Profiler | `schemaProfiler.js` | Per-connection schema cache and document sampler |
 | **Backend** | Few-Shot Matcher | `fewShotRetriever.js` | Connection-isolated vector memory |

@@ -5,17 +5,19 @@ import {
 } from 'recharts';
 import { motion } from 'framer-motion';
 import { TrendingUp, Download, Share2 } from 'lucide-react';
+import { downloadCsv } from '../lib/csv';
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
+// Verdigris: accent, clay, amber, text-2, accent-deep, red
+const COLORS = ['#4FC79B', '#C98F5C', '#D4A961', '#A9B5AC', '#2A8467', '#DF6A57'];
 
 const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
         return (
-            <div className="bg-black/80 backdrop-blur-2xl border border-white/5 p-4 rounded-xl shadow-2xl shadow-black/80">
-                <p className="text-gray-400 text-xs uppercase tracking-widest font-semibold mb-2">{label}</p>
+            <div className="bg-[var(--vg-menu)] border border-vg-line p-3 rounded-xl shadow-[0_16px_40px_rgba(0,0,0,0.65)] font-ui">
+                <p className="text-vg-text-2 text-[12px] font-medium mb-1.5">{label}</p>
                 {payload.map((entry, index) => (
                     <p key={index} className="text-sm" style={{ color: entry.color }}>
-                        {entry.name}: <span className="font-bold text-white">{entry.value.toLocaleString()}</span>
+                        {entry.name}: <span className="font-code text-vg-text">{entry.value.toLocaleString()}</span>
                     </p>
                 ))}
             </div>
@@ -51,7 +53,7 @@ const InsightDashboard = ({ data, type = 'bar', title, pinId, hideActions = fals
             setToastMsg('Public link copied!');
             setTimeout(() => setToastMsg(null), 3000);
         }).catch(err => {
-            console.error('Failed to copy link', err);
+            if (import.meta.env.DEV) console.error('Failed to copy link', err);
             setToastMsg('Failed to copy link');
             setTimeout(() => setToastMsg(null), 3000);
         });
@@ -60,28 +62,8 @@ const InsightDashboard = ({ data, type = 'bar', title, pinId, hideActions = fals
     const handleDownload = () => {
         if (!data || data.length === 0) return;
         
-        const keys = Object.keys(data[0]);
-        const csvContent = [
-            keys.join(','),
-            ...data.map(row => keys.map(k => {
-                let val = row[k] === null || row[k] === undefined ? '' : row[k];
-                // Escape commas by wrapping in quotes
-                if (typeof val === 'string' && val.includes(',')) {
-                    val = `"${val}"`;
-                }
-                return val;
-            }).join(','))
-        ].join('\n');
+        downloadCsv(data, `${(title || '').replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'export'}.csv`);
 
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.setAttribute('href', url);
-        link.setAttribute('download', `${title.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'export'}.csv`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        
         setToastMsg('Data downloaded!');
         setTimeout(() => setToastMsg(null), 3000);
     };
@@ -91,17 +73,17 @@ const InsightDashboard = ({ data, type = 'bar', title, pinId, hideActions = fals
             case 'line':
                 return (
                     <LineChart data={data}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" vertical={false} />
-                        <XAxis dataKey={nameKey} stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} />
-                        <YAxis stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} />
-                        <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#ffffff20', strokeWidth: 2 }} />
+                        <CartesianGrid strokeDasharray="3 3" stroke="#1A231E" vertical={false} />
+                        <XAxis dataKey={nameKey} stroke="#808C84" fontSize={12} tickLine={false} axisLine={false} />
+                        <YAxis stroke="#808C84" fontSize={12} tickLine={false} axisLine={false} />
+                        <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#2B3730', strokeWidth: 2 }} />
                         <Line
                             type="monotone"
                             dataKey={valueKey}
-                            stroke="#3b82f6"
+                            stroke="#4FC79B"
                             strokeWidth={3}
-                            dot={{ r: 4, fill: '#1d4ed8', strokeWidth: 2, stroke: '#fff' }}
-                            activeDot={{ r: 6, fill: '#60a5fa' }}
+                            dot={{ r: 4, fill: '#0B100D', strokeWidth: 2, stroke: '#4FC79B' }}
+                            activeDot={{ r: 6, fill: '#4FC79B' }}
                         />
                     </LineChart>
                 );
@@ -114,7 +96,7 @@ const InsightDashboard = ({ data, type = 'bar', title, pinId, hideActions = fals
                             cy="50%"
                             innerRadius={60}
                             outerRadius={80}
-                            fill="#8884d8"
+                            fill="#4FC79B"
                             paddingAngle={5}
                             dataKey={valueKey}
                             nameKey={nameKey}
@@ -132,26 +114,26 @@ const InsightDashboard = ({ data, type = 'bar', title, pinId, hideActions = fals
                     <AreaChart data={data}>
                         <defs>
                             <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="#8884d8" stopOpacity={0.8} />
-                                <stop offset="95%" stopColor="#8884d8" stopOpacity={0} />
+                                <stop offset="5%" stopColor="#4FC79B" stopOpacity={0.8} />
+                                <stop offset="95%" stopColor="#4FC79B" stopOpacity={0} />
                             </linearGradient>
                         </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" vertical={false} />
-                        <XAxis dataKey={nameKey} stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} />
-                        <YAxis stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} />
+                        <CartesianGrid strokeDasharray="3 3" stroke="#1A231E" vertical={false} />
+                        <XAxis dataKey={nameKey} stroke="#808C84" fontSize={12} tickLine={false} axisLine={false} />
+                        <YAxis stroke="#808C84" fontSize={12} tickLine={false} axisLine={false} />
                         <Tooltip content={<CustomTooltip />} />
-                        <Area type="monotone" dataKey={valueKey} stroke="#8884d8" fillOpacity={1} fill="url(#colorValue)" />
+                        <Area type="monotone" dataKey={valueKey} stroke="#4FC79B" fillOpacity={1} fill="url(#colorValue)" />
                     </AreaChart>
                 );
             case 'bar':
             default:
                 return (
                     <BarChart data={data} barSize={40}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" vertical={false} />
-                        <XAxis dataKey={nameKey} stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} />
-                        <YAxis stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} />
-                        <Tooltip content={<CustomTooltip />} cursor={{ fill: '#ffffff05' }} />
-                        <Bar dataKey={valueKey} fill="#3b82f6" radius={[4, 4, 0, 0]}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#1A231E" vertical={false} />
+                        <XAxis dataKey={nameKey} stroke="#808C84" fontSize={12} tickLine={false} axisLine={false} />
+                        <YAxis stroke="#808C84" fontSize={12} tickLine={false} axisLine={false} />
+                        <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(79,199,155,0.06)' }} />
+                        <Bar dataKey={valueKey} fill="#4FC79B" radius={[4, 4, 0, 0]}>
                             {data.map((entry, index) => (
                                 <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                             ))}
@@ -165,39 +147,37 @@ const InsightDashboard = ({ data, type = 'bar', title, pinId, hideActions = fals
         <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            className="bg-[#151b24] border-2 border-solid border-[#2d3748] rounded-[2px] p-6 w-full h-[400px] flex flex-col mt-6 relative overflow-hidden group transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)] hover:border-[#3f4f63] hover:shadow-[2px_2px_0_rgba(0,0,0,0.5)] hover:-translate-x-[1px] hover:-translate-y-[1px]"
+            className="bg-vg-surface border border-vg-line rounded-xl p-5 w-full h-[400px] flex flex-col relative overflow-hidden group font-ui transition-colors hover:border-vg-muted"
         >
-            {/* Subtle glow effect behind chart */}
-            <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-500/10 rounded-full blur-[100px] pointer-events-none opacity-50 group-hover:opacity-100 transition-opacity duration-700" />
             
             {toastMsg && (
-                <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-blue-500 text-white text-xs font-bold px-3 py-1 rounded shadow-lg z-50">
+                <div role="status" className="absolute top-4 left-1/2 -translate-x-1/2 bg-vg-surface-3 border border-vg-line text-vg-text text-[12.5px] px-3 py-1 rounded-md shadow-lg z-50">
                     {toastMsg}
                 </div>
             )}
 
             <div className="flex justify-between items-center mb-6 relative z-10">
                 <div>
-                    <h3 className="text-[14px] font-semibold text-white flex items-center gap-2" style={{ fontFamily: 'DM Sans' }}>
-                        <TrendingUp size={18} className="text-blue-400" />
+                    <h3 className="text-[15px] font-semibold text-vg-text flex items-center gap-2">
+                        <TrendingUp size={17} className="text-vg-text-2" aria-hidden="true" />
                         {title || "Data Visualization"}
                     </h3>
-                    <p className="text-[10px] mt-1" style={{ fontFamily: 'IBM Plex Mono', color: '#64748b' }}>
-                        Showing <strong>{valueKey}</strong> by <strong>{nameKey}</strong>
+                    <p className="text-[12px] mt-1 text-vg-text-3">
+                        <span className="font-code text-vg-text-2">{valueKey}</span> by <span className="font-code text-vg-text-2">{nameKey}</span>
                     </p>
                 </div>
                 {!hideActions && (
                     <div className="flex gap-2">
                         <button 
                             onClick={handleShare}
-                            className="w-8 h-8 flex items-center justify-center border border-[#2d3748] bg-[#0a0e14]/50 backdrop-blur rounded-[2px] text-[#94a3b8] hover:bg-[#1a2332] hover:border-[#3f4f63] hover:text-[#e2e8f0] transition-all duration-150 relative"
+                            aria-label="Share as public link" className="w-8 h-8 flex items-center justify-center rounded-md text-vg-text-3 hover:bg-vg-surface-2 hover:text-vg-text transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vg-accent"
                             title="Share as Public Link"
                         >
                             <Share2 size={16} />
                         </button>
                         <button 
                             onClick={handleDownload}
-                            className="w-8 h-8 flex items-center justify-center border border-[#2d3748] bg-[#0a0e14]/50 backdrop-blur rounded-[2px] text-[#94a3b8] hover:bg-[#1a2332] hover:border-[#3b82f6] hover:text-[#3b82f6] transition-all duration-150"
+                            aria-label="Download data as CSV" className="w-8 h-8 flex items-center justify-center rounded-md text-vg-text-3 hover:bg-vg-surface-2 hover:text-vg-text transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vg-accent"
                             title="Download Data as CSV"
                         >
                             <Download size={16} />

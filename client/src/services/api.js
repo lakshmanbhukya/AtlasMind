@@ -15,51 +15,49 @@ const api = axios.create({
     },
 });
 
-// Response interceptor — log errors but preserve the full response for callers
+/**
+ * Best human-readable message for a failed request.
+ * @param {unknown} err
+ * @param {string} [fallback]
+ */
+export function apiErrorMessage(err, fallback = 'An unexpected error occurred') {
+    const data = err?.response?.data;
+    const fromBody = data?.error?.message || (typeof data?.error === 'string' ? data.error : null);
+    return fromBody || err?.message || fallback;
+}
+
+// Response interceptor — log errors (dev only) but preserve the full response for callers
 api.interceptors.response.use(
     (response) => response,
     (error) => {
-        const message = error.response?.data?.error?.message
-            || error.response?.data?.error
-            || error.message
-            || 'An unexpected error occurred';
-        console.error('[API Error]', message);
+        if (import.meta.env.DEV) console.error('[API Error]', apiErrorMessage(error));
         // IMPORTANT: re-throw the original error, not a plain Error,
         // so callers can access error.response.data (e.g. availableDatabases)
         return Promise.reject(error);
     }
 );
 
+// ─── Connections API ────────────────────────────────────────────────────────
+
+/**
+ * List the non-empty databases a connection string can see (public, no session).
+ * @param {string} connectionString
+ * @returns {Promise<Array<{ name: string, collectionCount: number }>>}
+ */
+export async function listDatabases(connectionString) {
+    const { data } = await api.post('connections/databases', { connectionString });
+    return data.databases || [];
+}
+
 // ─── Query API ──────────────────────────────────────────────────────────────
 
 /**
  * Send a natural language query → MQL → execute → visualize.
- * Supports both positional parameters (text, model, options) and an options object.
- * Options can include { collections, scopeMode, bypassAmbiguity, clarifications, workspaceId, dropMissing, isEdit }.
- * @param {string|object} textOrPayload
- * @param {string|object} [modelOrOptions]
- * @param {object} [extraOptions]
+ * @param {{ text: string, model?: string, collections?: string[], bypassAmbiguity?: boolean,
+ *           clarifications?: object, workspaceId?: string, dropMissing?: boolean, isEdit?: boolean }} payload
  * @returns {Promise<object>} { aiMessage, pipeline, results, chartType, ... }
  */
-export async function sendQuery(textOrPayload, modelOrOptions, extraOptions = {}) {
-    let payload = {};
-
-    if (typeof textOrPayload === 'object' && textOrPayload !== null) {
-        payload = { ...textOrPayload };
-    } else {
-        payload.text = textOrPayload;
-        if (typeof modelOrOptions === 'object' && modelOrOptions !== null) {
-            payload = { ...payload, ...modelOrOptions };
-        } else {
-            if (modelOrOptions !== undefined) {
-                payload.model = modelOrOptions;
-            }
-            if (typeof extraOptions === 'object' && extraOptions !== null) {
-                payload = { ...payload, ...extraOptions };
-            }
-        }
-    }
-
+export async function sendQuery(payload) {
     const { data } = await api.post('query', payload);
     return data;
 }
@@ -78,13 +76,21 @@ export async function approveWriteQuery(approvalToken) {
  * Send audio blob for speech-to-query.
  * @param {Blob} audioBlob
  * @param {string} [model]
+ * @param {{ collections?: string[], workspaceId?: string }} [scopeOptions] - same scope as sendQuery
  * @returns {Promise<object>}
  */
-export async function sendVoice(audioBlob, model) {
+export async function sendVoice(audioBlob, model, scopeOptions = {}) {
     const formData = new FormData();
     formData.append('audio', audioBlob, 'recording.webm');
     if (model) {
         formData.append('model', model);
+    }
+    // Multipart fields are strings, so the collection list travels as JSON
+    if (Array.isArray(scopeOptions.collections) && scopeOptions.collections.length > 0) {
+        formData.append('collections', JSON.stringify(scopeOptions.collections));
+    }
+    if (scopeOptions.workspaceId) {
+        formData.append('workspaceId', scopeOptions.workspaceId);
     }
     const { data } = await api.post('voice', formData, {
         headers: { 'Content-Type': undefined },
@@ -138,6 +144,17 @@ export async function renameQueryHistoryItem(id, name) {
     return data;
 }
 
+/**
+ * Pin or unpin a query history item. Pinned items always appear in the history list.
+ * @param {string} id
+ * @param {boolean} pinned
+ * @returns {Promise<object>}
+ */
+export async function setQueryHistoryPinned(id, pinned) {
+    const { data } = await api.patch(`query/history/${id}`, { pinned });
+    return data;
+}
+
 
 // ─── Dashboard API ──────────────────────────────────────────────────────────
 
@@ -159,12 +176,6 @@ export async function pinToDashboard(pin) {
 /** @param {string} pinId */
 export async function removeDashboardPin(pinId) {
     await api.delete(`dashboard/${pinId}`);
-}
-
-/** @param {string} pinId */
-export async function refreshDashboardPin(pinId) {
-    const { data } = await api.post(`dashboard/${pinId}/refresh`);
-    return data;
 }
 
 /** @param {string} pinId */
@@ -215,26 +226,21 @@ export async function deleteWorkspace(id) {
     return data.data || data;
 }
 
-// ─── Scope API ──────────────────────────────────────────────────────────────
+// ─── Auth / connection API ──────────────────────────────────────────────────
 
-/**
- * Suggest collections relevant to a natural language question.
- * @param {string} question
- * @returns {Promise<object>}
- */
-export async function suggestScope(question) {
-    const { data } = await api.post('scope/suggest', { question });
-    return data.data || data;
+/** Current session (`auth/me`). */
+export async function getSession() {
+    const { data } = await api.get('auth/me');
+    return data;
 }
 
-// ─── Export API ─────────────────────────────────────────────────────────────
+export async function logout() {
+    await api.post('auth/logout');
+}
 
-/**
- * Export query results as JSON.
- * @param {{ query, pipeline, collection, results }} payload
- */
-export async function exportQueryResults(payload) {
-    const { data } = await api.post('query/export', payload);
+/** @param {{ connectionString: string, dbName: string, label?: string }} payload */
+export async function connect(payload) {
+    const { data } = await api.post('connections/connect', payload);
     return data;
 }
 

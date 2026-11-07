@@ -1,4 +1,5 @@
 const Groq = require('groq-sdk');
+const { toFile } = require('groq-sdk');
 const { buildSystemPrompt } = require('../prompts/systemPrompt');
 
 /** @type {Groq|null} */
@@ -237,7 +238,6 @@ async function generateMQL(naturalLanguage, schemaContext, fewShotExamples, mode
  */
 async function transcribeAudio(audioBuffer, filename = 'recording.webm') {
     const client = getGroqClient();
-    const { toFile } = require('groq-sdk');
 
     const file = await toFile(audioBuffer, filename);
 
@@ -275,4 +275,4 @@ function setGroqClient(client) {
     groqClient = client;
 }
 
-module.exports = { generateMQL, transcribeAudio, DEFAULT_MODEL, getGroqClient, setGroqClient };
+module.exports = { generateMQL, transcribeAudio, setGroqClient };

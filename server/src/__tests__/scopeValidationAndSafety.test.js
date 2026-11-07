@@ -1,69 +1,7 @@
 const { validatePipeline } = require('../services/safetyGuard');
-const { validateRequestedCollections } = require('../services/queryPipelineService');
 const { profileSchema, getMinifiedSchema, invalidateSchemaCache } = require('../services/schemaProfiler');
 
 describe('Phase 1: Scope Validation and Safety Enforcement', () => {
-    describe('validateRequestedCollections', () => {
-        let mockUserDb;
-
-        beforeEach(() => {
-            mockUserDb = {
-                listCollections: jest.fn().mockReturnValue({
-                    toArray: jest.fn().mockResolvedValue([
-                        { name: 'orders' },
-                        { name: 'customers' },
-                        { name: 'products' },
-                        { name: 'few_shot_examples' }, // System collection
-                        { name: 'query_history' },     // System collection
-                    ]),
-                }),
-            };
-        });
-
-        test('returns all user collections when collections is undefined or null', async () => {
-            const res1 = await validateRequestedCollections(mockUserDb, undefined);
-            expect(res1.valid).toBe(true);
-            expect(res1.effectiveScope).toEqual(['orders', 'customers', 'products']);
-
-            const res2 = await validateRequestedCollections(mockUserDb, null);
-            expect(res2.valid).toBe(true);
-            expect(res2.effectiveScope).toEqual(['orders', 'customers', 'products']);
-        });
-
-        test('returns all user collections when collections is empty array', async () => {
-            const res = await validateRequestedCollections(mockUserDb, []);
-            expect(res.valid).toBe(true);
-            expect(res.effectiveScope).toEqual(['orders', 'customers', 'products']);
-        });
-
-        test('returns valid when all requested collections exist in user DB', async () => {
-            const res = await validateRequestedCollections(mockUserDb, ['orders', 'customers']);
-            expect(res.valid).toBe(true);
-            expect(res.effectiveScope).toEqual(['orders', 'customers']);
-        });
-
-        test('rejects non-array collections with 400 validation_error', async () => {
-            const res = await validateRequestedCollections(mockUserDb, 'orders');
-            expect(res.valid).toBe(false);
-            expect(res.error.code).toBe('validation_error');
-            expect(res.error.status).toBe(400);
-        });
-
-        test('rejects unknown collection names with 400 validation_error', async () => {
-            const res = await validateRequestedCollections(mockUserDb, ['orders', 'non_existent_coll']);
-            expect(res.valid).toBe(false);
-            expect(res.error.code).toBe('validation_error');
-            expect(res.error.status).toBe(400);
-            expect(res.error.message).toContain('Unknown collection: "non_existent_coll"');
-        });
-
-        test('rejects system collections even if present in DB', async () => {
-            const res = await validateRequestedCollections(mockUserDb, ['few_shot_examples']);
-            expect(res.valid).toBe(false);
-            expect(res.error.code).toBe('validation_error');
-        });
-    });
-
     describe('safetyGuard.validatePipeline Scope Enforcement', () => {
         const allowedScope = ['orders', 'customers'];
 

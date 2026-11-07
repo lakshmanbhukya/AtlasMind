@@ -1,6 +1,6 @@
 'use strict';
 
-const { QueryEngineError } = require('../services/queryExecutionEngine');
+const { QueryEngineError } = require('../services/engineErrors');
 
 /**
  * HTTP mapping for QueryExecutionEngine outcomes and errors.

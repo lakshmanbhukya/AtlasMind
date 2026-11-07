@@ -1,14 +1,17 @@
 require("dotenv").config();
-require("./utils/dnsConfig");
 
 const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
-const path = require("path");
 const { connectToDatabase, closeConnection } = require("./db/connection");
 const { initializeCollection } = require("./models/UserConnection");
-const { initializeCollection: initializeWorkspaceCollection } = require("./models/Workspace");
-const { initializeCleanupIndexes, startCleanupCron } = require("./services/cleanupService");
+const {
+  initializeCollection: initializeWorkspaceCollection,
+} = require("./models/Workspace");
+const {
+  initializeCleanupIndexes,
+  startCleanupCron,
+} = require("./services/cleanupService");
 const { requireAuth } = require("./middleware/auth");
 const { generalLimiter, authLimiter } = require("./middleware/rateLimiter");
 const { cleanupPool, getPoolSize } = require("./services/userDbPool");
@@ -80,13 +83,6 @@ if (process.env.NODE_ENV !== "production") {
   });
 }
 
-// Ensure uploads dir exists for multer temp files
-const uploadsDir = path.join(__dirname, "..", "uploads");
-const fs = require("fs");
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-
 // Apply general rate limiter to all API requests
 app.use("/api/", generalLimiter);
 
@@ -131,7 +127,7 @@ app.use((_req, res) => {
 });
 
 app.use((err, _req, res, _next) => {
-  console.error("❌ Unhandled error:", err);
+  console.error("Unhandled error:", err);
   res.status(err.statusCode || 500).json({
     success: false,
     error: {
@@ -156,7 +152,7 @@ async function startServer() {
     startCleanupCron();
 
     const server = app.listen(PORT, () => {
-      console.log(`\n🚀 AtlasMind server running on http://localhost:${PORT}`);
+      console.log(`\n AtlasMind server running on http://localhost:${PORT}`);
       console.log(`   Environment: ${process.env.NODE_ENV || "development"}`);
       console.log(`   Health:      http://localhost:${PORT}/api/health\n`);
     });
@@ -167,7 +163,7 @@ async function startServer() {
     const shutdown = async () => {
       if (shuttingDown) return;
       shuttingDown = true;
-      console.log("\n🛑 Shutting down gracefully...");
+      console.log("\n Shutting down gracefully...");
       server.close();
       await cleanupPool();
       await closeConnection();
@@ -176,7 +172,7 @@ async function startServer() {
     process.on("SIGINT", shutdown);
     process.on("SIGTERM", shutdown);
   } catch (error) {
-    console.error("❌ Failed to start server:", error.message);
+    console.error(" Failed to start server:", error.message);
     process.exit(1);
   }
 }

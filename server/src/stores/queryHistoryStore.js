@@ -13,6 +13,7 @@ const { requireTenant, toObjectId } = require('./tenant');
 const COLLECTION = 'query_history';
 const RESULT_SNAPSHOT_LIMIT = 100;
 const DEFAULT_LIST_LIMIT = 20;
+const MAX_PINNED = 50;
 
 function historyCollection() {
     return connection.getDb().collection(COLLECTION);
@@ -68,55 +69,94 @@ async function record(entry) {
     }
 }
 
+const LIST_PROJECTION = {
+    _id: 1,
+    naturalLanguage: 1,
+    timestamp: 1,
+    collection: 1,
+    resultCount: 1,
+    schemaContext: 1,
+    generatedPipeline: 1,
+    chartType: 1,
+    results: 1,
+    explanation: 1,
+    executionTimeMs: 1,
+    confidenceScore: 1,
+    scope: 1,
+    pinned: 1,
+};
+
 /**
  * Most recent history items for a tenant, shaped for the client sidebar.
+ * Pinned items are always included, even when older than the recent window.
  * The newest item is marked `active`.
  */
 async function listRecent(connectionId, { limit = DEFAULT_LIST_LIMIT, now = Date.now() } = {}) {
     requireTenant(connectionId, 'listing query history');
 
-    const rows = await historyCollection()
-        .find({ connectionId })
-        .sort({ timestamp: -1 })
-        .limit(limit)
-        .project({
-            _id: 1,
-            naturalLanguage: 1,
-            timestamp: 1,
-            collection: 1,
-            resultCount: 1,
-            schemaContext: 1,
-            generatedPipeline: 1,
-            chartType: 1,
-            results: 1,
-        })
-        .toArray();
+    const coll = historyCollection();
+    const [recent, pinned] = await Promise.all([
+        coll.find({ connectionId }).sort({ timestamp: -1 }).limit(limit).project(LIST_PROJECTION).toArray(),
+        coll.find({ connectionId, pinned: true }).sort({ timestamp: -1 }).limit(MAX_PINNED).project(LIST_PROJECTION).toArray(),
+    ]);
+
+    const seen = new Set();
+    const rows = [...(recent || []), ...(pinned || [])].filter((item) => {
+        const key = item._id.toString();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+    rows.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
     return rows.map((item, index) => ({
         id: item._id.toString(),
         query: item.naturalLanguage,
         time: relativeTimeLabel(item.timestamp, now),
+        timestamp: item.timestamp ? new Date(item.timestamp).toISOString() : null,
         collection: item.collection || '',
         resultCount: item.resultCount || 0,
         schemaContext: item.schemaContext || '',
         pipeline: item.generatedPipeline || [],
         chartType: item.chartType || 'table',
         results: item.results || [],
+        explanation: item.explanation || '',
+        executionTimeMs: typeof item.executionTimeMs === 'number' ? item.executionTimeMs : null,
+        confidenceScore: typeof item.confidenceScore === 'number' ? item.confidenceScore : null,
+        scope: Array.isArray(item.scope) ? item.scope : null,
+        pinned: item.pinned === true,
         active: index === 0,
     }));
 }
 
-/** @returns {Promise<boolean>} false when the item does not exist for this tenant */
-async function rename(connectionId, id, name) {
-    requireTenant(connectionId, 'renaming query history');
+/**
+ * Rename and/or pin a history item.
+ * @param {{ name?: string, pinned?: boolean }} changes
+ * @returns {Promise<boolean>} false when the item does not exist for this tenant
+ */
+async function update(connectionId, id, changes = {}) {
+    requireTenant(connectionId, 'updating query history');
     const _id = toObjectId(id);
     if (!_id) return false;
 
-    const result = await historyCollection().updateOne(
-        { _id, connectionId },
-        { $set: { naturalLanguage: name, renamedAt: new Date() } }
-    );
+    const $set = {};
+    if (typeof changes.name === 'string') {
+        $set.naturalLanguage = changes.name;
+        $set.renamedAt = new Date();
+    }
+    if (typeof changes.pinned === 'boolean') {
+        $set.pinned = changes.pinned;
+        $set.pinnedAt = changes.pinned ? new Date() : null;
+    }
+    if (Object.keys($set).length === 0) return false;
+
+    const result = await historyCollection().updateOne({ _id, connectionId }, { $set });
     return result.matchedCount > 0;
+}
+
+/** @returns {Promise<boolean>} false when the item does not exist for this tenant */
+async function rename(connectionId, id, name) {
+    return update(connectionId, id, { name });
 }
 
 /** @returns {Promise<boolean>} false when the item does not exist for this tenant */
@@ -154,6 +194,7 @@ module.exports = {
     record,
     listRecent,
     rename,
+    update,
     remove,
     purgeOlderThan,
     ensureIndexes,

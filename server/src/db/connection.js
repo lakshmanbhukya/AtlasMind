@@ -48,17 +48,6 @@ function getDb() {
 }
 
 /**
- * Get the raw MongoClient instance.
- * @returns {MongoClient}
- */
-function getClient() {
-    if (!client) {
-        throw new Error('Client not initialized. Call connectToDatabase() first.');
-    }
-    return client;
-}
-
-/**
  * Close the MongoDB connection gracefully.
  */
 async function closeConnection() {
@@ -73,4 +62,4 @@ async function closeConnection() {
 // Shutdown is owned by index.js, which closes the user DB pool first and then
 // calls closeConnection(); registering exit handlers here raced that sequence.
 
-module.exports = { connectToDatabase, getDb, getClient, closeConnection };
+module.exports = { connectToDatabase, getDb, closeConnection };

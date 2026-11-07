@@ -31,5 +31,3 @@ function configureDns() {
 
 // Automatically configure DNS when imported
 configureDns();
-
-module.exports = { configureDns };

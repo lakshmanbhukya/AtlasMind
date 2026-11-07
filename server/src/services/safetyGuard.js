@@ -120,19 +120,27 @@ function findBlockedOperator(obj) {
  * @param {string} collectionName
  * @returns {{ safe: boolean, reason?: string }}
  */
+const PROTECTED_PREFIXES = ['system', 'admin', 'local', 'config'];
+const IDENTIFIER_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+
+/** Intentionally prefix-based: names such as "system_users" or "config_backup" are protected too. */
+function isProtectedName(name) {
+    const n = String(name);
+    return PROTECTED_PREFIXES.some((p) => n.startsWith(p));
+}
+
 function validateCollectionName(collectionName) {
     if (!collectionName || typeof collectionName !== 'string') {
         return { safe: false, reason: 'Collection name is required and must be a string' };
     }
 
     // Block system collections
-    const blockedCollections = ['system', 'admin', 'local', 'config'];
-    if (blockedCollections.some((blocked) => collectionName.startsWith(blocked))) {
+    if (isProtectedName(collectionName)) {
         return { safe: false, reason: `Access to "${collectionName}" is not allowed` };
     }
 
     // Only allow alphanumeric + underscores
-    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(collectionName)) {
+    if (!IDENTIFIER_RE.test(collectionName)) {
         return { safe: false, reason: `Invalid collection name: "${collectionName}"` };
     }
 
@@ -187,11 +195,10 @@ function extractAndValidateCollectionReferences(stages, options = {}) {
 
                     // Validate database separately first if present
                     if (from.db !== undefined) {
-                        if (typeof from.db !== 'string' || !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(from.db)) {
+                        if (typeof from.db !== 'string' || !IDENTIFIER_RE.test(from.db)) {
                             return { safe: false, reason: `Invalid database name "${from.db}" in $lookup.from`, code: 'scope_violation', violatingCollections: [from.coll || 'unknown'] };
                         }
-                        const blockedDbs = ['admin', 'local', 'config', 'system'];
-                        if (blockedDbs.some((b) => from.db.startsWith(b))) {
+                        if (isProtectedName(from.db)) {
                             return { safe: false, reason: `Access to database "${from.db}" in $lookup.from is not allowed`, code: 'scope_violation', violatingCollections: [from.coll || 'unknown'] };
                         }
                         if (targetDatabase && from.db !== targetDatabase) {
@@ -300,16 +307,6 @@ function extractAndValidateCollectionReferences(stages, options = {}) {
 }
 
 /**
- * Backward-compatible helper to find referenced collections in pipeline.
- * @param {Array} stages
- * @returns {string[]}
- */
-function findReferencedCollections(stages) {
-    const res = extractAndValidateCollectionReferences(stages);
-    return res.referenced || [];
-}
-
-/**
  * Recursively validate that all stages (top-level and nested inside $facet, $lookup.pipeline, $unionWith.pipeline)
  * belong to ALLOWED_STAGES and do not contain BLOCKED_STAGES or BLOCKED_OPERATORS.
  *
@@ -341,12 +338,14 @@ function validateStagesRecursively(stages, context = '') {
                     safe: false,
                     reason: `Blocked stage "${key}" found at ${stageLoc}. Write operations are not permitted.`,
                     isWrite: true,
+                    reference: key,
                 };
             }
             if (!ALLOWED_STAGES.has(key)) {
                 return {
                     safe: false,
                     reason: `Unrecognized or restricted pipeline stage "${key}" at ${stageLoc}. Only standard analytical stages are permitted.`,
+                    reference: key,
                 };
             }
         }
@@ -358,6 +357,7 @@ function validateStagesRecursively(stages, context = '') {
                 safe: false,
                 reason: `Blocked operator "${blockedOp}" found at ${stageLoc}. Mutating operations are not permitted.`,
                 isWrite: true,
+                reference: blockedOp,
             };
         }
 
@@ -393,7 +393,7 @@ function validateStagesRecursively(stages, context = '') {
  * @returns {{ safe: boolean, reason?: string, pipeline: object[], code?: string, violatingCollections?: string[], isWrite?: boolean }}
  *   Returns the (potentially modified) pipeline with a $limit injected if needed.
  */
-function validatePipeline(pipeline, options = {}) {
+function validatePipelineCore(pipeline, options = {}) {
     if (!Array.isArray(pipeline)) {
         return { safe: false, reason: 'Pipeline must be an array', pipeline: [] };
     }
@@ -413,6 +413,7 @@ function validatePipeline(pipeline, options = {}) {
             safe: false,
             code: 'hard_blocked_operator',
             reason: `Arbitrary code execution operator "${hardDenyOp}" is strictly forbidden.`,
+            reference: hardDenyOp,
             pipeline,
         };
     }
@@ -425,6 +426,7 @@ function validatePipeline(pipeline, options = {}) {
             reason: stageCheck.reason,
             isWrite: stageCheck.isWrite,
             code: stageCheck.code,
+            reference: stageCheck.reference,
             pipeline,
         };
     }
@@ -490,15 +492,178 @@ function validatePipeline(pipeline, options = {}) {
     return { safe: true, pipeline: safePipeline };
 }
 
+const COLLECTION_REFERENCE_STAGES = ['$lookup', '$unionWith', '$graphLookup'];
+const PROTECTED_RULE = 'System and internal collections (system, admin, local, config) cannot be read.';
+
+/** Index of the first top-level stage whose JSON contains `"reference"`, or -1. */
+function locateReference(pipeline, reference) {
+    if (!Array.isArray(pipeline) || !reference) return -1;
+    const needle = JSON.stringify(String(reference));
+    return pipeline.findIndex((stage) => {
+        try {
+            return JSON.stringify(stage).includes(needle);
+        } catch {
+            return false;
+        }
+    });
+}
+
+function firstKey(stage) {
+    return stage && typeof stage === 'object' && !Array.isArray(stage) ? Object.keys(stage)[0] || null : null;
+}
+
+/**
+ * Structured description of why a pipeline was rejected, for the "Query blocked" UI.
+ * @returns {{ code: string, rule: string, stage: string|null, stageIndex: number|null, referenceType: string, reference: string|null }}
+ */
+function describeBlock(result, pipeline, options = {}) {
+    const stages = Array.isArray(pipeline) ? pipeline : [];
+    const at = (reference) => {
+        const idx = locateReference(stages, reference);
+        return idx >= 0 ? { stage: firstKey(stages[idx]), stageIndex: idx } : { stage: null, stageIndex: null };
+    };
+
+    if (result.code === 'hard_blocked_operator') {
+        return {
+            code: 'hard_blocked_operator',
+            rule: 'Code execution operators ($function, $accumulator, $where) are never allowed.',
+            referenceType: 'Operator',
+            reference: result.reference || null,
+            ...at(result.reference),
+        };
+    }
+
+    if (result.isWrite) {
+        const isStage = BLOCKED_STAGES.has(result.reference);
+        return {
+            code: isStage ? 'blocked_write_stage' : 'blocked_write_operator',
+            rule: isStage
+                ? 'Write stages need a Write Approval Token before they run.'
+                : 'Mutating operators are not permitted inside an aggregation pipeline.',
+            referenceType: isStage ? 'Write stage' : 'Operator',
+            reference: result.reference || null,
+            ...at(result.reference),
+        };
+    }
+
+    const violating = Array.isArray(result.violatingCollections) ? result.violatingCollections : [];
+    if (violating.length > 0) {
+        const reference = violating[0];
+        const inPipeline = locateReference(stages, reference) >= 0;
+        const isProtected = isProtectedName(reference)
+            || !validateCollectionName(reference).safe;
+        const loc = inPipeline ? at(reference) : { stage: null, stageIndex: null };
+        const refStage = COLLECTION_REFERENCE_STAGES.includes(loc.stage) ? loc.stage : null;
+        return {
+            code: isProtected ? 'protected_collection' : 'out_of_scope_collection',
+            rule: isProtected ? PROTECTED_RULE : 'Pipelines may only read collections inside the active workspace scope.',
+            referenceType: refStage ? `${refStage} collection` : (options.targetCollection === reference ? 'Target collection' : 'Collection'),
+            reference,
+            ...loc,
+        };
+    }
+
+    if (result.reference) {
+        return {
+            code: 'restricted_stage',
+            rule: 'Only standard analytical aggregation stages are permitted.',
+            referenceType: 'Stage',
+            reference: result.reference,
+            ...at(result.reference),
+        };
+    }
+
+    const posMatch = /position (\d+)|stage (\d+)/.exec(result.reason || '');
+    const stageIndex = posMatch ? Number(posMatch[1] ?? posMatch[2]) : null;
+    return {
+        code: 'malformed_pipeline',
+        rule: 'Pipelines must be a non-empty array of at most 20 well-formed stage objects.',
+        referenceType: 'Pipeline',
+        reference: null,
+        stage: stageIndex !== null ? firstKey(stages[stageIndex]) : null,
+        stageIndex,
+    };
+}
+
+/**
+ * Validate an aggregation pipeline for safety.
+ * Unsafe results also carry `block` (see describeBlock) for the client's "Query blocked" card.
+ *
+ * @param {object[]} pipeline - The MongoDB aggregation pipeline
+ * @param {object} [options={}] - Validation options (allowedCollections, targetCollection, targetDatabase)
+ */
+function validatePipeline(pipeline, options = {}) {
+    const result = validatePipelineCore(pipeline, options);
+    if (!result.safe) {
+        result.block = describeBlock(result, pipeline, options);
+    }
+    return result;
+}
+
+/** Structured block info for a rejected target collection name. */
+function describeCollectionBlock(collectionName) {
+    const name = typeof collectionName === 'string' ? collectionName : null;
+    const isProtected = Boolean(name) && isProtectedName(name);
+    return {
+        code: isProtected ? 'protected_collection' : 'invalid_collection',
+        rule: isProtected ? PROTECTED_RULE : 'Collection names must be simple identifiers.',
+        referenceType: 'Target collection',
+        reference: name,
+        stage: null,
+        stageIndex: null,
+    };
+}
+
+/**
+ * Describe a staged write for the approval UI: the write stage, its target and the fields it writes.
+ * @param {object[]} pipeline
+ * @param {string} [sourceCollection]
+ * @returns {{ writeStage: string|null, writeStageIndex: number|null, sourceCollection: string|null, targetCollection: string|null, fieldsWritten: string[] }}
+ */
+function describeWrite(pipeline, sourceCollection) {
+    const stages = Array.isArray(pipeline) ? pipeline : [];
+    const isObj = (s) => s && typeof s === 'object' && !Array.isArray(s);
+    let idx = stages.findIndex((s) => isObj(s) && (s.$merge !== undefined || s.$out !== undefined));
+    if (idx < 0) idx = stages.findIndex((s) => isObj(s) && Object.keys(s).some((k) => BLOCKED_STAGES.has(k)));
+    const stageObj = idx >= 0 ? stages[idx] : null;
+    const writeStage = stageObj ? (Object.keys(stageObj).find((k) => BLOCKED_STAGES.has(k)) || firstKey(stageObj)) : null;
+
+    let targetCollection = null;
+    if (writeStage === '$out' || writeStage === '$merge') {
+        const spec = stageObj[writeStage];
+        if (typeof spec === 'string') targetCollection = spec;
+        else if (isObj(spec)) {
+            const into = writeStage === '$merge' ? spec.into : spec.coll;
+            if (typeof into === 'string') targetCollection = into;
+            else if (isObj(into) && typeof into.coll === 'string') targetCollection = into.coll;
+        }
+    }
+
+    const fields = new Set();
+    const upTo = idx >= 0 ? idx : stages.length;
+    for (let i = 0; i < upTo; i++) {
+        const st = stages[i];
+        if (!isObj(st)) continue;
+        for (const key of ['$set', '$addFields']) {
+            if (isObj(st[key])) Object.keys(st[key]).forEach((f) => fields.add(f));
+        }
+        if (st.$unset !== undefined) {
+            (Array.isArray(st.$unset) ? st.$unset : [st.$unset]).forEach((f) => typeof f === 'string' && fields.add(f));
+        }
+    }
+
+    return {
+        writeStage,
+        writeStageIndex: idx >= 0 ? idx : null,
+        sourceCollection: sourceCollection || null,
+        targetCollection,
+        fieldsWritten: Array.from(fields),
+    };
+}
+
 module.exports = {
+    describeCollectionBlock,
+    describeWrite,
     validatePipeline,
     validateCollectionName,
-    findReferencedCollections,
-    extractAndValidateCollectionReferences,
-    validateStagesRecursively,
-    MAX_RESULT_LIMIT,
-    ALLOWED_STAGES,
-    BLOCKED_STAGES,
-    HARD_DENY_OPERATORS,
-    BLOCKED_OPERATORS,
 };

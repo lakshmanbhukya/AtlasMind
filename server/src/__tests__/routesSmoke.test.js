@@ -21,7 +21,7 @@ const {
     SafetyViolationError,
     ExecutionError,
     RateLimitError,
-} = jest.requireActual('../services/queryExecutionEngine');
+} = jest.requireActual('../services/engineErrors');
 
 jest.mock('../services/queryExecutionEngine', () => ({
     ...jest.requireActual('../services/queryExecutionEngine'),
@@ -32,11 +32,13 @@ jest.mock('../services/queryExecutionEngine', () => ({
 }));
 
 // Central DB mock for query router history endpoints
+const mockHistoryUpdateOne = jest.fn();
 const mockCentralDb = {
     collection: jest.fn().mockReturnValue({
         find: jest.fn().mockReturnValue({
             sort: () => ({ limit: () => ({ project: () => ({ toArray: () => [] }) }) }),
         }),
+        updateOne: (...args) => mockHistoryUpdateOne(...args),
     }),
 };
 jest.mock('../db/connection', () => ({
@@ -263,6 +265,37 @@ describe('Route Adapters Smoke Tests (POST /api/query and POST /api/voice)', () 
             );
         });
 
+        test('parses multipart "collections" JSON and forwards workspaceId to the engine', async () => {
+            transcribeAudio.mockResolvedValueOnce({ text: 'top orders' });
+            mockExecuteNaturalLanguageQuery.mockResolvedValueOnce({
+                type: 'success',
+                data: { success: true, results: [] },
+            });
+
+            const res = await request(app)
+                .post('/api/voice')
+                .field('collections', '["orders"]')
+                .field('workspaceId', 'ws-1')
+                .attach('audio', Buffer.from('fake audio data'), 'speech.mp3');
+
+            expect(res.status).toBe(200);
+            expect(mockExecuteNaturalLanguageQuery).toHaveBeenCalledWith(
+                expect.objectContaining({ collections: ['orders'], workspaceId: 'ws-1', source: 'voice' })
+            );
+        });
+
+        test.each([['not json'], ['{"a":1}']])('rejects malformed multipart "collections" %p with HTTP 400', async (raw) => {
+            const res = await request(app)
+                .post('/api/voice')
+                .field('collections', raw)
+                .attach('audio', Buffer.from('fake audio data'), 'speech.mp3');
+
+            expect(res.status).toBe(400);
+            expect(res.body.error.code).toBe('validation_error');
+            expect(transcribeAudio).not.toHaveBeenCalled();
+            expect(mockExecuteNaturalLanguageQuery).not.toHaveBeenCalled();
+        });
+
         test('voice queries inherit ambiguity gating and map "clarification_required" to HTTP 200', async () => {
             transcribeAudio.mockResolvedValueOnce({
                 text: 'top orders',
@@ -349,6 +382,71 @@ describe('Route Adapters Smoke Tests (POST /api/query and POST /api/voice)', () 
             expect(res.body.success).toBe(false);
             expect(res.body.error.code).toBe('safety_violation');
             expect(res.body.transcript).toBe('drop system users');
+        });
+    });
+
+    describe('PATCH /api/query/history/:id', () => {
+        const historyId = '64b7f0000000000000000abc';
+
+        test('pins a history item for this connection', async () => {
+            mockHistoryUpdateOne.mockResolvedValueOnce({ matchedCount: 1 });
+
+            const res = await request(app)
+                .patch(`/api/query/history/${historyId}`)
+                .send({ pinned: true });
+
+            expect(res.status).toBe(200);
+            expect(res.body.success).toBe(true);
+            const [filter, update] = mockHistoryUpdateOne.mock.calls[0];
+            expect(filter.connectionId).toBe(testConnectionId);
+            expect(filter._id.toString()).toBe(historyId);
+            expect(update.$set.pinned).toBe(true);
+            expect(update.$set.naturalLanguage).toBeUndefined();
+        });
+
+        test('renames and unpins in one request', async () => {
+            mockHistoryUpdateOne.mockResolvedValueOnce({ matchedCount: 1 });
+
+            const res = await request(app)
+                .patch(`/api/query/history/${historyId}`)
+                .send({ name: '  Revenue by region  ', pinned: false });
+
+            expect(res.status).toBe(200);
+            const update = mockHistoryUpdateOne.mock.calls[0][1];
+            expect(update.$set).toMatchObject({ naturalLanguage: 'Revenue by region', pinned: false, pinnedAt: null });
+        });
+
+        test.each([
+            [{}],
+            [{ pinned: 'yes' }],
+            [{ name: '   ' }],
+        ])('rejects invalid body %p with 400', async (body) => {
+            const res = await request(app).patch(`/api/query/history/${historyId}`).send(body);
+            expect(res.status).toBe(400);
+            expect(res.body.error.code).toBe('validation_error');
+            expect(mockHistoryUpdateOne).not.toHaveBeenCalled();
+        });
+
+        test('returns 404 when the item belongs to no history of this connection', async () => {
+            mockHistoryUpdateOne.mockResolvedValueOnce({ matchedCount: 0 });
+            const res = await request(app).patch(`/api/query/history/${historyId}`).send({ pinned: true });
+            expect(res.status).toBe(404);
+        });
+    });
+
+    describe('multi-select clarifications', () => {
+        test('POST /api/query forwards array clarification values to the engine unchanged', async () => {
+            mockExecuteNaturalLanguageQuery.mockResolvedValueOnce({ type: 'success', data: { success: true } });
+            const clarifications = [{ id: 'metric', value: ['total', 'subtotal'] }];
+
+            const res = await request(app)
+                .post('/api/query')
+                .send({ text: 'compare sales', clarifications });
+
+            expect(res.status).toBe(200);
+            expect(mockExecuteNaturalLanguageQuery).toHaveBeenCalledWith(
+                expect.objectContaining({ clarifications })
+            );
         });
     });
 });

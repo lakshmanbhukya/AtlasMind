@@ -112,20 +112,31 @@ router.get('/history', async (req, res) => {
 /**
  * PATCH /api/query/history/:id
  *
- * Rename a history item (its naturalLanguage display label) for this connection.
+ * Rename and/or pin a history item for this connection. Body: `{ name?, pinned? }`
+ * (at least one).
  */
 router.patch('/history/:id', async (req, res) => {
     try {
-        const { name } = req.body;
+        const { name, pinned } = req.body || {};
+        const hasName = name !== undefined;
+        const hasPinned = pinned !== undefined;
 
-        if (!name || typeof name !== 'string' || !name.trim()) {
+        if ((!hasName && !hasPinned)
+            || (hasName && (typeof name !== 'string' || !name.trim()))
+            || (hasPinned && typeof pinned !== 'boolean')) {
             return res.status(400).json({
                 success: false,
-                error: { code: 'validation_error', message: '"name" string is required in request body' },
+                error: {
+                    code: 'validation_error',
+                    message: 'Provide a non-empty "name" string and/or a boolean "pinned" in the request body',
+                },
             });
         }
 
-        const renamed = await queryHistoryStore.rename(req.connectionId, req.params.id, name.trim());
+        const renamed = await queryHistoryStore.update(req.connectionId, req.params.id, {
+            ...(hasName ? { name: name.trim() } : {}),
+            ...(hasPinned ? { pinned } : {}),
+        });
         if (!renamed) {
             return res.status(404).json({
                 success: false,
@@ -133,7 +144,7 @@ router.patch('/history/:id', async (req, res) => {
             });
         }
 
-        return res.json({ success: true, message: 'History item renamed successfully' });
+        return res.json({ success: true, message: 'History item updated successfully' });
     } catch (error) {
         console.error('❌ Rename history error:', error);
         return res.status(500).json({

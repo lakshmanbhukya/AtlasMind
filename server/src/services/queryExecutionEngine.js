@@ -4,72 +4,32 @@ const { signApprovalToken, verifyApprovalToken, APPROVAL_TOKEN_TYPE } = require(
 const { formatMinifiedSchema, formatFieldNamesOnly, profileSchema } = require('./schemaProfiler');
 const { getSimilarExamples, addExample } = require('./fewShotRetriever');
 const { generateMQL } = require('./groqService');
-const { validatePipeline, validateCollectionName } = require('./safetyGuard');
+const jwt = require('jsonwebtoken');
+const { validatePipeline, validateCollectionName, describeCollectionBlock, describeWrite } = require('./safetyGuard');
 const { executePipeline } = require('./queryExecutor');
 const queryHistoryStore = require('../stores/queryHistoryStore');
 const { getUserDb } = require('./userDbPool');
-const { listUserCollections } = require('./tenantSchema');
 const { getDb } = require('../db/connection');
 const ambiguityGate = require('./ambiguityGate');
 const { verifyInterpretationCompliance } = require('./interpretationComplianceVerifier');
 const { resolveExperiment } = require('./experiment');
+const { resolve: resolveEffectiveScope } = require('./effectiveScope');
+const {
+    QueryEngineError,
+    ValidationError,
+    ScopeError,
+    TokenExpiredError,
+    UnauthorizedTokenError,
+    TokenAlreadyUsedError,
+    SafetyViolationError,
+    ExecutionError,
+    RateLimitError,
+} = require('./engineErrors');
 
-// Domain Error Hierarchy
-class QueryEngineError extends Error {
-    constructor(message, code, statusCode) {
-        super(message);
-        this.name = this.constructor.name;
-        this.code = code;
-        this.statusCode = statusCode;
-    }
-}
-
-class ValidationError extends QueryEngineError {
-    constructor(message, code = 'validation_error') {
-        super(message, code, 400);
-    }
-}
-
-class ScopeError extends QueryEngineError {
-    constructor(message, code = 'validation_error') {
-        super(message, code, 400);
-    }
-}
-
-class TokenExpiredError extends QueryEngineError {
-    constructor(message = 'Approval draft has expired or is invalid. Please resend query.') {
-        super(message, 'expired_token', 401);
-    }
-}
-
-class UnauthorizedTokenError extends QueryEngineError {
-    constructor(message = 'Access denied: token connectionId does not match current session') {
-        super(message, 'forbidden', 403);
-    }
-}
-
-class TokenAlreadyUsedError extends QueryEngineError {
-    constructor(message = 'Approval token has already been used') {
-        super(message, 'token_already_used', 409);
-    }
-}
-
-class SafetyViolationError extends QueryEngineError {
-    constructor(message, code = 'safety_violation') {
-        super(message, code, 422);
-    }
-}
-
-class ExecutionError extends QueryEngineError {
-    constructor(message, code = 'execution_error') {
-        super(message, code, 500);
-    }
-}
-
-class RateLimitError extends QueryEngineError {
-    constructor(message = 'The language model is rate limited. Please retry shortly.', code = 'rate_limited') {
-        super(message, code, 429);
-    }
+/** ISO expiry of a signed Write Approval Token (from its JWT `exp`). */
+function approvalExpiresAt(token) {
+    const decoded = jwt.decode(token);
+    return decoded && decoded.exp ? new Date(decoded.exp * 1000).toISOString() : null;
 }
 
 /**
@@ -102,81 +62,6 @@ function normalizeParams(contextOrParams, inputParams) {
     return { ...(contextOrParams || {}) };
 }
 
-/**
- * Validate requested collection scope against the user's real DB collections.
- *
- * @param {import('mongodb').Db} userDb
- * @param {string[]|undefined|null} collections
- * @param {object} [options={}]
- * @param {boolean} [options.dropMissing=false]
- * @returns {Promise<{ valid: boolean, error?: { status: number, code: string, message: string }, effectiveScope: string[], allUserCollections: string[] }>}
- */
-async function validateRequestedCollections(userDb, collections, options = {}) {
-    const allUserCollections = await listUserCollections(userDb);
-    const userCollSet = new Set(allUserCollections);
-
-    if (collections === undefined || collections === null) {
-        return { valid: true, effectiveScope: allUserCollections, allUserCollections };
-    }
-
-    if (!Array.isArray(collections)) {
-        return {
-            valid: false,
-            error: {
-                status: 400,
-                code: 'validation_error',
-                message: '"collections" must be an array of collection names',
-            },
-            effectiveScope: allUserCollections,
-            allUserCollections,
-        };
-    }
-
-    if (collections.length === 0) {
-        return { valid: true, effectiveScope: allUserCollections, allUserCollections };
-    }
-
-    const { dropMissing = false } = options;
-
-    for (const name of collections) {
-        if (typeof name !== 'string' || !name.trim()) {
-            return {
-                valid: false,
-                error: {
-                    status: 400,
-                    code: 'validation_error',
-                    message: 'Each collection in "collections" must be a non-empty string',
-                },
-                effectiveScope: allUserCollections,
-                allUserCollections,
-            };
-        }
-        if (!userCollSet.has(name) && !dropMissing) {
-            return {
-                valid: false,
-                error: {
-                    status: 400,
-                    code: 'validation_error',
-                    kind: 'unknown_collection',
-                    message: `Unknown collection: "${name}"`,
-                },
-                effectiveScope: allUserCollections,
-                allUserCollections,
-            };
-        }
-    }
-
-    const filteredCollections = dropMissing
-        ? collections.filter((c) => userCollSet.has(c))
-        : collections;
-
-    const effectiveScope = filteredCollections.length > 0
-        ? Array.from(new Set(filteredCollections))
-        : allUserCollections;
-
-    return { valid: true, effectiveScope, allUserCollections };
-}
-
 let approvalIndexesInitialized = false;
 async function ensureApprovalIndexes(db) {
     if (approvalIndexesInitialized) return;
@@ -187,7 +72,9 @@ async function ensureApprovalIndexes(db) {
             await approvalTokens.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
             approvalIndexesInitialized = true;
         }
-    } catch (_) {}
+    } catch (err) {
+        console.warn('Could not ensure approval_tokens indexes:', err.message);
+    }
 }
 
 class QueryExecutionEngine {
@@ -323,33 +210,21 @@ async function runNaturalLanguageQuery(params) {
     // 1. Get User DB from pool (an experiment may supply its own)
     const userDb = evalOpts.db || await getUserDb(connectionId);
 
-    // If workspaceId was provided, resolve its collections
-    let effectiveCollections = collections;
-    if (workspaceId && !collections) {
-        const Workspace = require('../models/Workspace');
-        const ws = await Workspace.getWorkspaceById(workspaceId, connectionId);
-        if (ws && Array.isArray(ws.collections)) {
-            effectiveCollections = ws.collections;
-        }
-    }
-
-    // 2. Validate collection scope against DB
-    const scopeCheck = await validateRequestedCollections(userDb, effectiveCollections, {
-        dropMissing: Boolean(dropMissing || workspaceId),
+    // 2. Resolve the Effective Scope (explicit collections, else workspace, else all); fails closed
+    const scope = await resolveEffectiveScope({
+        userDb,
+        connectionId,
+        collections,
+        workspaceId,
+        dropMissing,
     });
-    if (!scopeCheck.valid) {
-        if (scopeCheck.error.kind === 'unknown_collection') {
-            throw new ScopeError(scopeCheck.error.message, scopeCheck.error.code || 'validation_error');
-        }
-        throw new ValidationError(scopeCheck.error.message, scopeCheck.error.code || 'validation_error');
-    }
 
-    let { effectiveScope } = scopeCheck;
-    let isRestrictedScope = Array.isArray(collections) && collections.length > 0;
+    let effectiveScope = scope.collections;
+    let isRestrictedScope = scope.restricted;
 
     // experiment.disableScope: override scoping to all user collections
     if (evalOpts.disableScope) {
-        effectiveScope = scopeCheck.allUserCollections;
+        effectiveScope = scope.all;
         isRestrictedScope = false;
     }
 
@@ -515,7 +390,9 @@ async function runNaturalLanguageQuery(params) {
 
     // 7.5 Interpretation Compliance Check (Post-Clarification Verification)
     if (sanitizedClarifications && sanitizedClarifications.length > 0 && Array.isArray(llmResult.pipeline) && llmResult.pipeline.length > 0) {
-        const targetClarification = sanitizedClarifications.find((c) => c.value && c.value !== '__other__') || sanitizedClarifications[0];
+        const targetClarification = sanitizedClarifications.find((c) => typeof c.value === 'string' && c.value && c.value !== '__other__')
+            || sanitizedClarifications.find((c) => typeof c.value === 'string')
+            || null;
         const compRes = verifyInterpretationCompliance(llmResult.pipeline, targetClarification, query);
         complianceInfo = {
             checked: true,
@@ -548,8 +425,12 @@ async function runNaturalLanguageQuery(params) {
                     naturalLanguage: query,
                     aiMessage: collectionCheck.reason,
                     explanation: llmResult.explanation,
-                    safetyStatus: 'approval-required',
+                    pipeline: Array.isArray(llmResult.pipeline) ? llmResult.pipeline : [],
+                    mql: Array.isArray(llmResult.pipeline) ? llmResult.pipeline : [],
+                    collection: typeof llmResult.collection === 'string' ? llmResult.collection : '',
+                    safetyStatus: 'blocked',
                     safetyBlocked: true,
+                    safetyBlock: { ...describeCollectionBlock(llmResult.collection), reason: collectionCheck.reason },
                     similarQueriesCount,
                     schemaContext,
                     scope: effectiveScope,
@@ -566,7 +447,9 @@ async function runNaturalLanguageQuery(params) {
 
         if (!pipelineCheck.safe) {
             // Missing collection / scope violation fallback
-            if (pipelineCheck.code === 'scope_violation') {
+            // A protected collection is never "add it to scope" — it is blocked outright.
+            const isProtectedReference = pipelineCheck.block?.code === 'protected_collection';
+            if (pipelineCheck.code === 'scope_violation' && !isProtectedReference) {
                 return {
                     type: 'success',
                     data: buildOutcomePayload({
@@ -620,6 +503,10 @@ async function runNaturalLanguageQuery(params) {
                     safetyStatus: 'approval-required',
                     safetyBlocked: false,
                     approvalToken,
+                    approval: {
+                        expiresAt: approvalExpiresAt(approvalToken),
+                        ...describeWrite(llmResult.pipeline, llmResult.collection),
+                    },
                     scope: effectiveScope,
                     results: [],
                     result: [],
@@ -649,9 +536,11 @@ async function runNaturalLanguageQuery(params) {
                     aiMessage: pipelineCheck.reason,
                     pipeline: llmResult.pipeline,
                     mql: llmResult.pipeline,
+                    collection: llmResult.collection,
                     explanation: llmResult.explanation,
-                    safetyStatus: 'approval-required',
+                    safetyStatus: 'blocked',
                     safetyBlocked: true,
+                    safetyBlock: pipelineCheck.block ? { ...pipelineCheck.block, reason: pipelineCheck.reason } : null,
                     similarQueriesCount,
                     schemaContext,
                     scope: effectiveScope,
@@ -688,6 +577,8 @@ async function runNaturalLanguageQuery(params) {
         generatedPipeline: pipelineCheck.pipeline,
         collection: llmResult.collection,
         chartType: llmResult.chartType,
+        explanation: llmResult.explanation || '',
+        executionTimeMs,
         resultCount: results.length,
         confidenceScore,
         similarQueriesCount,
@@ -873,18 +764,4 @@ async function runApprovedWrite(params) {
     };
 }
 
-module.exports = {
-    QueryExecutionEngine,
-    executeNaturalLanguageQuery: QueryExecutionEngine.executeNaturalLanguageQuery,
-    executeApprovedWrite: QueryExecutionEngine.executeApprovedWrite,
-    validateRequestedCollections,
-    QueryEngineError,
-    ValidationError,
-    ScopeError,
-    TokenExpiredError,
-    UnauthorizedTokenError,
-    TokenAlreadyUsedError,
-    SafetyViolationError,
-    ExecutionError,
-    RateLimitError,
-};
+module.exports = { QueryExecutionEngine };

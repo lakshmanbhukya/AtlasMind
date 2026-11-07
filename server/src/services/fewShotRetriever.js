@@ -82,7 +82,7 @@ async function getSimilarExamples(queryText, limit = 3, connectionId = null, col
 
     // Try Atlas Search first (requires a search index)
     try {
-        const vectorResults = await attemptVectorSearch(collection, queryText, limit, tenantFilter);
+        const vectorResults = await attemptAtlasSearch(collection, queryText, limit, tenantFilter);
         if (vectorResults.length > 0) {
             return vectorResults;
         }
@@ -115,7 +115,7 @@ function sampleExamples(collection, limit, tenantFilter) {
  * @param {object} tenantFilter - from buildExampleFilter
  * @returns {Promise<object[]>}
  */
-async function attemptVectorSearch(collection, queryText, limit, tenantFilter) {
+async function attemptAtlasSearch(collection, queryText, limit, tenantFilter) {
     // For vector search, we need an embedding of the query text.
     // In a production system, you'd call an embedding API here.
     // For now, we use Atlas Search text-based approach as a proxy.
@@ -245,7 +245,7 @@ async function addExample({ naturalLanguage, mqlPipeline, collection, connection
         };
 
         await coll.insertOne(doc);
-        console.log(`✅ Saved new memory example: "${naturalLanguage}"`);
+        if (process.env.NODE_ENV !== 'production') console.log('Saved new few-shot memory example');
     } catch (error) {
         console.error('❌ Failed to save memory example:', error.message);
     }

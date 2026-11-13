@@ -47,10 +47,18 @@ export default function ChatThread({
   const voicePending = pending === 'voice';
   const dbName = connectionMeta?.dbName || 'your database';
 
-  // Keep the newest turn in view.
+  // Keep the newest turn in view. A finished response is aligned by its top, so a tall answer
+  // reads from its title instead of being scrolled past to its end; while waiting, follow the bottom.
+  // Keyed on the last message's identity so in-place updates (discard, approval error) don't scroll.
+  const lastMessage = messages[messages.length - 1];
+  const lastId = lastMessage?.id;
+  const lastIsAssistant = lastMessage?.role === 'assistant';
   useEffect(() => {
-    if (!highlightedMessageId) endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [messages, busy, highlightedMessageId]);
+    if (highlightedMessageId) return;
+    const answerEl = !busy && lastIsAssistant ? document.getElementById(`msg-${lastId}`) : null;
+    if (answerEl) answerEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    else endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [lastId, lastIsAssistant, busy, highlightedMessageId]);
 
   // A history item was opened: briefly ring its answer.
   useEffect(() => {
@@ -193,7 +201,7 @@ export default function ChatThread({
             const prev = messages[i - 1];
             const gap = i === 0 ? '' : msg.role === 'assistant' && prev?.role === 'user' ? 'mt-6' : 'mt-10';
             return (
-              <div key={msg.id} id={`msg-${msg.id}`} className={cn(gap, 'transition-shadow duration-500')}>
+              <div key={msg.id} id={`msg-${msg.id}`} className={cn(gap, 'scroll-mt-5 transition-shadow duration-500')}>
                 {msg.role === 'user' ? <UserTurn message={msg} /> : renderAssistant(msg)}
               </div>
             );

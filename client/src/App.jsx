@@ -25,8 +25,9 @@ import {
  */
 export default function App() {
   const { isAuthenticated, connectionMeta, isLoading, logout, refetch } = useAuth();
-  const { workspaces, createWorkspace, updateWorkspace, deleteWorkspace } = useWorkspaces();
-  const schemaState = useSchema();
+  const connectionId = isAuthenticated ? connectionMeta?.connectionId : undefined;
+  const { workspaces, createWorkspace, updateWorkspace, deleteWorkspace } = useWorkspaces(connectionId);
+  const schemaState = useSchema(connectionId);
 
   const [activeWorkspaceId, setActiveWorkspaceId] = useState(null);
   const [scopeMode, setScopeMode] = useState('all');

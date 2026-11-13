@@ -38,6 +38,7 @@ jest.mock('../services/userDbPool', () => ({
 
 // Query executor mock
 jest.mock('../services/queryExecutor', () => ({
+    ...jest.requireActual('../services/queryExecutor'),
     executePipeline: jest.fn().mockResolvedValue({
         results: [{ modified: 1 }],
         executionTimeMs: 15,
@@ -154,6 +155,38 @@ describe('B3: POST /api/query/approve security guards', () => {
         expect(res.body.success).toBe(false);
         expect(res.body.error.code).toBe('safety_violation');
         expect(executePipeline).not.toHaveBeenCalled();
+    });
+
+    test.each([
+        ['an out-of-scope $lookup', ['orders', 'archived_orders'], [{ $lookup: { from: 'secrets', localField: 'a', foreignField: 'b', as: 'c' } }, { $merge: { into: 'archived_orders' } }]],
+        ['a protected $lookup', null, [{ $lookup: { from: 'system_users', localField: 'a', foreignField: 'b', as: 'c' } }, { $merge: { into: 'archived_orders' } }]],
+        ['a cross-database write target', null, [{ $match: {} }, { $merge: { into: { db: 'otherdb', coll: 'archived_orders' } } }]],
+        ['a write target outside the scope', ['orders'], [{ $match: {} }, { $merge: { into: 'archived_orders' } }]],
+        ['a write stage that is not last', null, [{ $out: 'archived_orders' }, { $match: {} }]],
+    ])('rejects a token carrying %s with 422 and never touches the tenant DB', async (_label, scope, pipeline) => {
+        const token = createTestToken({ pipeline, scope });
+
+        const res = await request(app)
+            .post('/api/query/approve')
+            .send({ approvalToken: token });
+
+        expect(res.status).toBe(422);
+        expect(res.body.error.code).toBe('safety_violation');
+        expect(executePipeline).not.toHaveBeenCalled();
+        expect(mockUserDb.collection).not.toHaveBeenCalled();
+        expect(mockApprovalTokensCollection.insertOne).not.toHaveBeenCalled();
+    });
+
+    test('maps an executor safety rejection to 422, not 500', async () => {
+        const { UnsafePipelineError } = jest.requireActual('../services/queryExecutor');
+        executePipeline.mockRejectedValueOnce(new UnsafePipelineError('blocked at execution'));
+
+        const res = await request(app)
+            .post('/api/query/approve')
+            .send({ approvalToken: createTestToken() });
+
+        expect(res.status).toBe(422);
+        expect(res.body.error.code).toBe('safety_violation');
     });
 
     test('rejects token without jti with 400 invalid_token', async () => {

@@ -473,7 +473,7 @@ async function runNaturalLanguageQuery(params) {
             const payloadData = buildOutcomePayload({
                 success: true,
                 naturalLanguage: query,
-                aiMessage: `⚠️ Database Write Intercepted: This action will modify your collection "${llmResult.collection}". To execute this change, review and approve it.`,
+                aiMessage: `⚠️ Database Write Intercepted: This action will write to your collection "${verdict.write?.targetCollection || llmResult.collection}". To execute this change, review and approve it.`,
                 pipeline: llmResult.pipeline,
                 mql: llmResult.pipeline,
                 collection: llmResult.collection,
@@ -729,7 +729,7 @@ async function runApprovedWrite(params) {
         data: {
             success: true,
             naturalLanguage: query,
-            aiMessage: `✅ Transaction Authorized: Successfully executed approved write/update operation on database collection "${collection}".`,
+            aiMessage: `✅ Transaction Authorized: Successfully executed the approved write to collection "${verdict.write?.targetCollection || collection}".`,
             pipeline,
             mql: pipeline,
             collection,

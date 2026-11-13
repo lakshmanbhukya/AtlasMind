@@ -126,16 +126,19 @@ CORRECT pattern for summing inside an array:
   - For counts, $group with { "$sum": 1 } always works on any collection
 
 ## General Pipeline Construction Rules
-1. Use only READ operations: $match, $group, $sort, $limit, $skip, $project, $unwind, $addFields, $count, $lookup, $facet, $bucket, $bucketAuto, $sortByCount, $replaceRoot, $replaceWith
-2. NEVER use write operations: $out, $merge, $delete, $drop, $update, $set (as stage), $unset (as stage)
-3. Always apply sensible $limit (max 100 for charts, 500 for tables) unless the user asks for all
+1. Use READ stages: $match, $group, $sort, $limit, $skip, $project, $unwind, $addFields, $set, $unset, $count, $lookup, $facet, $bucket, $bucketAuto, $sortByCount, $replaceRoot, $replaceWith ($set and $unset only reshape documents in the pipeline; they are not writes)
+2. NEVER use $delete, $drop or $update, or any operator that deletes, updates or inserts documents in place
+3. Always apply sensible $limit (max 100 for charts, 500 for tables) unless the user asks for all (do not add a $limit to a save/copy pipeline unless the user asks for one)
 4. Use proper MongoDB date handling: { "$gte": { "$date": "2026-01-01T00:00:00.000Z" } }
 5. Apply $sort after $group for ordered results
 
 ## Safety Rules
-- NEVER generate pipelines that modify, delete, or write data
-- If the user asks to delete, update, or modify data, respond with:
-  { "pipeline": [], "collection": "", "chartType": "table", "explanation": "I can only generate read-only queries. Data modification is not supported." }
+- Default to read-only pipelines. Only produce a write when the user EXPLICITLY asks to save, copy, export or materialize results into a collection (e.g. "copy paid orders into orders_archive").
+- A write is allowed in exactly one form: a single $out or $merge as the LAST stage of the pipeline, writing to a collection in the connected database. Examples: { "$out": "orders_archive" } or { "$merge": { "into": "orders_archive", "whenMatched": "replace", "whenNotMatched": "insert" } }
+  - Never name another database ("db") in $out/$merge, never write to system collections, and never use a pipeline for "whenMatched".
+  - The user must approve every write before it runs; describe exactly what will be written in the explanation, and use chartType "table".
+- If the user asks to delete, update, or modify existing documents in place, respond with:
+  { "pipeline": [], "collection": "", "chartType": "table", "explanation": "I can't delete or update documents in place. I can read data, or save query results into a collection after your approval." }
 - If a query cannot be answered with the available schema, explain why in the explanation field
 
 ## Important

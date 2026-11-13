@@ -158,7 +158,8 @@ function validateCollectionName(collectionName) {
 function extractAndValidateCollectionReferences(stages, options = {}) {
     if (!Array.isArray(stages)) return { safe: true, referenced: [] };
     const referenced = [];
-    const { targetDatabase, allowedDatabases } = options;
+    // requireTargetDatabase: an explicit db must equal targetDatabase; with no targetDatabase, any explicit db fails.
+    const { targetDatabase, allowedDatabases, requireTargetDatabase = false } = options;
 
     for (let i = 0; i < stages.length; i++) {
         const stage = stages[i];
@@ -195,18 +196,23 @@ function extractAndValidateCollectionReferences(stages, options = {}) {
 
                     // Validate database separately first if present
                     if (from.db !== undefined) {
+                        // `database` marks a database-level violation: never fixable by widening the collection scope.
+                        const database = String(from.db);
                         if (typeof from.db !== 'string' || !IDENTIFIER_RE.test(from.db)) {
-                            return { safe: false, reason: `Invalid database name "${from.db}" in $lookup.from`, code: 'scope_violation', violatingCollections: [from.coll || 'unknown'] };
+                            return { safe: false, reason: `Invalid database name "${from.db}" in $lookup.from`, code: 'scope_violation', violatingCollections: [from.coll || 'unknown'], database };
                         }
                         if (isProtectedName(from.db)) {
-                            return { safe: false, reason: `Access to database "${from.db}" in $lookup.from is not allowed`, code: 'scope_violation', violatingCollections: [from.coll || 'unknown'] };
+                            return { safe: false, reason: `Access to database "${from.db}" in $lookup.from is not allowed`, code: 'scope_violation', violatingCollections: [from.coll || 'unknown'], database };
                         }
-                        if (targetDatabase && from.db !== targetDatabase) {
+                        if ((targetDatabase || requireTargetDatabase) && from.db !== targetDatabase) {
                             return {
                                 safe: false,
-                                reason: `Cross-database access to "${from.db}" in $lookup.from is outside authorized scope (authorized: "${targetDatabase}")`,
+                                reason: targetDatabase
+                                    ? `Cross-database access to "${from.db}" in $lookup.from is outside authorized scope (authorized: "${targetDatabase}")`
+                                    : `Cross-database access to "${from.db}" in $lookup.from is outside authorized scope (connected database unknown)`,
                                 code: 'scope_violation',
                                 violatingCollections: [from.coll || 'unknown'],
+                                database,
                             };
                         }
                         if (allowedDatabases && !allowedDatabases.includes(from.db)) {
@@ -215,6 +221,7 @@ function extractAndValidateCollectionReferences(stages, options = {}) {
                                 reason: `Database "${from.db}" in $lookup.from is not among allowed databases`,
                                 code: 'scope_violation',
                                 violatingCollections: [from.coll || 'unknown'],
+                                database,
                             };
                         }
                     }
@@ -432,7 +439,7 @@ function validatePipelineCore(pipeline, options = {}) {
     }
 
     // Target collection and referenced collections scope validation
-    const { allowedCollections, targetCollection, targetDatabase } = options;
+    const { allowedCollections, targetCollection, targetDatabase, requireTargetDatabase } = options;
     if (allowedCollections !== undefined && allowedCollections !== null) {
         const allowedSet = allowedCollections instanceof Set ? allowedCollections : new Set(allowedCollections);
 
@@ -446,13 +453,14 @@ function validatePipelineCore(pipeline, options = {}) {
             };
         }
 
-        const collResult = extractAndValidateCollectionReferences(pipeline, { targetDatabase, allowedCollections });
+        const collResult = extractAndValidateCollectionReferences(pipeline, { targetDatabase, requireTargetDatabase, allowedCollections });
         if (!collResult.safe) {
             return {
                 safe: false,
                 code: collResult.code || 'scope_violation',
                 violatingCollections: collResult.violatingCollections || [],
                 reason: collResult.reason,
+                ...(collResult.database !== undefined ? { database: collResult.database } : {}),
                 pipeline,
             };
         }
@@ -470,13 +478,14 @@ function validatePipelineCore(pipeline, options = {}) {
         }
     } else {
         // Even if allowedCollections not specified, validate collection name integrity and malformed document forms
-        const collResult = extractAndValidateCollectionReferences(pipeline, { targetDatabase });
+        const collResult = extractAndValidateCollectionReferences(pipeline, { targetDatabase, requireTargetDatabase });
         if (!collResult.safe) {
             return {
                 safe: false,
                 code: collResult.code || 'scope_violation',
                 violatingCollections: collResult.violatingCollections || [],
                 reason: collResult.reason,
+                ...(collResult.database !== undefined ? { database: collResult.database } : {}),
                 pipeline,
             };
         }
@@ -493,7 +502,9 @@ function validatePipelineCore(pipeline, options = {}) {
 }
 
 const COLLECTION_REFERENCE_STAGES = ['$lookup', '$unionWith', '$graphLookup'];
-const PROTECTED_RULE = 'System and internal collections (system, admin, local, config) cannot be read.';
+const PROTECTED_RULE = 'System and internal collections (system, admin, local, config) cannot be read or written.';
+const WRITE_SCOPE_RULE = 'An approved write may only target a collection inside the active workspace scope.';
+const DATABASE_RULE = 'Pipelines may only read and write the connected database.';
 
 /** Index of the first top-level stage whose JSON contains `"reference"`, or -1. */
 function locateReference(pipeline, reference) {
@@ -533,6 +544,48 @@ function describeBlock(result, pipeline, options = {}) {
         };
     }
 
+    // Write target of an approvable $out/$merge (set by classifyExecution); located at the write stage itself.
+    if (result.writeTarget) {
+        const { name, database, stageIndex } = result.writeTarget;
+        const loc = { stage: firstKey(stages[stageIndex]), stageIndex };
+        if (result.whenMatchedPipeline) {
+            return {
+                code: 'restricted_stage',
+                rule: 'A $merge may not run a whenMatched pipeline; use replace, keepExisting, merge or fail.',
+                referenceType: 'Write stage',
+                reference: 'whenMatched',
+                ...loc,
+            };
+        }
+        if (database !== undefined) {
+            return {
+                code: isProtectedName(database) ? 'protected_collection' : 'out_of_scope_collection',
+                rule: isProtectedName(database) ? PROTECTED_RULE : DATABASE_RULE,
+                referenceType: 'Write target database',
+                reference: database,
+                ...loc,
+            };
+        }
+        const nameCheck = validateCollectionName(name);
+        const isProtected = typeof name === 'string' && isProtectedName(name);
+        let code = 'out_of_scope_collection';
+        let rule = WRITE_SCOPE_RULE;
+        if (isProtected) {
+            code = 'protected_collection';
+            rule = PROTECTED_RULE;
+        } else if (!nameCheck.safe) {
+            code = 'invalid_collection';
+            rule = 'Collection names must be simple identifiers.';
+        }
+        return {
+            code,
+            rule,
+            referenceType: 'Write target collection',
+            reference: typeof name === 'string' ? name : null,
+            ...loc,
+        };
+    }
+
     if (result.isWrite) {
         const isStage = BLOCKED_STAGES.has(result.reference);
         return {
@@ -543,6 +596,19 @@ function describeBlock(result, pipeline, options = {}) {
             referenceType: isStage ? 'Write stage' : 'Operator',
             reference: result.reference || null,
             ...at(result.reference),
+        };
+    }
+
+    // Database-level violation in a $lookup.from: never resolvable by widening the collection scope.
+    if (result.database !== undefined) {
+        const isProtected = isProtectedName(result.database);
+        const loc = at(result.database);
+        return {
+            code: isProtected ? 'protected_collection' : 'out_of_scope_collection',
+            rule: isProtected ? PROTECTED_RULE : DATABASE_RULE,
+            referenceType: '$lookup database',
+            reference: result.database,
+            ...loc,
         };
     }
 
@@ -630,13 +696,8 @@ function describeWrite(pipeline, sourceCollection) {
 
     let targetCollection = null;
     if (writeStage === '$out' || writeStage === '$merge') {
-        const spec = stageObj[writeStage];
-        if (typeof spec === 'string') targetCollection = spec;
-        else if (isObj(spec)) {
-            const into = writeStage === '$merge' ? spec.into : spec.coll;
-            if (typeof into === 'string') targetCollection = into;
-            else if (isObj(into) && typeof into.coll === 'string') targetCollection = into.coll;
-        }
+        const target = parseWriteTarget(writeStage, stageObj[writeStage]);
+        if (typeof target.name === 'string') targetCollection = target.name;
     }
 
     const fields = new Set();
@@ -661,7 +722,222 @@ function describeWrite(pipeline, sourceCollection) {
     };
 }
 
+// ---------------------------------------------------------------------------
+// Safe Execution verdict
+// ---------------------------------------------------------------------------
+
+const APPROVABLE_WRITE_STAGES = new Set(['$out', '$merge']);
+const OUT_SPEC_KEYS = new Set(['db', 'coll']);
+const MERGE_SPEC_KEYS = new Set(['into', 'on', 'let', 'whenMatched', 'whenNotMatched']);
+const INTO_SPEC_KEYS = new Set(['db', 'coll']);
+
+function isPlainObject(value) {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+/**
+ * Parse the destination of a `$out` / `$merge` stage.
+ * `database` is present only when the stage names a db explicitly.
+ * @returns {{ name: *, database?: *, whenMatchedPipeline: boolean, malformed: string|null }}
+ */
+function parseWriteTarget(stageName, spec) {
+    const result = { name: null, whenMatchedPipeline: false, malformed: null };
+    const fromDocument = (doc, allowedKeys, label) => {
+        const extra = Object.keys(doc).filter((k) => !allowedKeys.has(k));
+        if (extra.length > 0) {
+            result.malformed = `Malformed ${label}: unexpected keys [${extra.join(', ')}]`;
+            return;
+        }
+        result.name = doc.coll;
+        if (Object.prototype.hasOwnProperty.call(doc, 'db')) result.database = doc.db;
+    };
+
+    if (typeof spec === 'string') {
+        result.name = spec;
+    } else if (stageName === '$out' && isPlainObject(spec)) {
+        fromDocument(spec, OUT_SPEC_KEYS, '$out');
+    } else if (stageName === '$merge' && isPlainObject(spec)) {
+        const extra = Object.keys(spec).filter((k) => !MERGE_SPEC_KEYS.has(k));
+        if (extra.length > 0) {
+            result.malformed = `Malformed $merge: unexpected keys [${extra.join(', ')}]`;
+        } else if (typeof spec.into === 'string') {
+            result.name = spec.into;
+        } else if (isPlainObject(spec.into)) {
+            fromDocument(spec.into, INTO_SPEC_KEYS, '$merge.into');
+        } else {
+            result.malformed = 'Malformed $merge.into: must be a collection name or { db, coll } document';
+        }
+        result.whenMatchedPipeline = Array.isArray(spec.whenMatched);
+    } else {
+        result.malformed = `Malformed ${stageName} stage: must be a collection name or a specification document`;
+    }
+
+    if (!result.malformed && typeof result.name !== 'string') {
+        result.malformed = `Malformed ${stageName} stage: the target collection must be a string`;
+    }
+    return result;
+}
+
+/** The single approvable write: exactly one $out/$merge key, in the last top-level stage. */
+function splitFinalWrite(pipeline) {
+    const index = pipeline.length - 1;
+    const last = pipeline[index];
+    if (!isPlainObject(last)) return null;
+    const keys = Object.keys(last);
+    if (keys.length !== 1 || !APPROVABLE_WRITE_STAGES.has(keys[0])) return null;
+    return { stage: keys[0], stageIndex: index, spec: last[keys[0]], readPart: pipeline.slice(0, index) };
+}
+
+/** Read-part checks. An empty read part is legal next to a write; only the target collection's scope applies. */
+function checkReadPart(readPart, options) {
+    if (readPart.length > 0) return validatePipelineCore(readPart, options);
+    const { allowedCollections, targetCollection } = options;
+    if (allowedCollections && !allowedCollections.includes(targetCollection)) {
+        return {
+            safe: false,
+            code: 'scope_violation',
+            violatingCollections: [targetCollection],
+            reason: `Target collection "${targetCollection}" is outside the allowed scope`,
+            pipeline: readPart,
+        };
+    }
+    return { safe: true, pipeline: readPart };
+}
+
+const MISPLACED_WRITE_RULE = 'A write is only approvable as a single $out or $merge in the final top-level stage.';
+
+function blockedVerdict(result, pipeline, options) {
+    const block = describeBlock(result, pipeline, options);
+    if (result.isWrite && block.code === 'blocked_write_stage') block.rule = MISPLACED_WRITE_RULE;
+    return {
+        kind: 'blocked',
+        reason: result.reason,
+        code: result.code || 'safety_violation',
+        isWrite: Boolean(result.isWrite),
+        block,
+    };
+}
+
+/**
+ * Safe Execution's one classification of (collection, pipeline, Effective Scope).
+ *
+ * Scope convention: a non-empty array is restricted; null, undefined or [] is unrestricted.
+ * `tenantDatabase` is the connected database's name; when it is unknown, any explicit `db` is blocked.
+ *
+ * @param {{ collection: string, pipeline: object[], scope?: string[]|null, tenantDatabase?: string|null }} input
+ * @returns {{ kind: 'runnable', pipeline: object[] }
+ *   | { kind: 'needs_approval', pipeline: object[], write: { stage: string, stageIndex: number, targetCollection: string } }
+ *   | { kind: 'scope_insufficient', reason: string, code: string, violatingCollections: string[], block: object }
+ *   | { kind: 'blocked', reason: string, code: string, isWrite: boolean, block: object }}
+ */
+function classifyExecution({ collection, pipeline, scope = null, tenantDatabase = null } = {}) {
+    // 1. Target collection
+    const collectionCheck = validateCollectionName(collection);
+    if (!collectionCheck.safe) {
+        return {
+            kind: 'blocked',
+            reason: collectionCheck.reason,
+            code: 'safety_violation',
+            isWrite: false,
+            block: describeCollectionBlock(collection),
+        };
+    }
+
+    const restricted = Array.isArray(scope) && scope.length > 0;
+    const options = {
+        allowedCollections: restricted ? scope : null,
+        targetCollection: collection,
+        targetDatabase: tenantDatabase || undefined,
+        requireTargetDatabase: true,
+    };
+
+    // 2. Whole-pipeline checks: shape, length, code-execution operators
+    if (!Array.isArray(pipeline) || pipeline.length === 0 || pipeline.length > 20 || findHardDenyOperator(pipeline)) {
+        return blockedVerdict(validatePipelineCore(pipeline, options), pipeline, options);
+    }
+
+    // 3. Split off the one approvable write stage
+    const write = splitFinalWrite(pipeline);
+
+    // 4. The read part gets the full read checks
+    const readResult = checkReadPart(write ? write.readPart : pipeline, options);
+    let scopeInsufficient = null;
+    if (!readResult.safe) {
+        const block = describeBlock(readResult, pipeline, options);
+        const fixableByScope = !readResult.isWrite
+            && readResult.database === undefined
+            && block.code === 'out_of_scope_collection';
+        if (!fixableByScope) return blockedVerdict(readResult, pipeline, options);
+        scopeInsufficient = {
+            kind: 'scope_insufficient',
+            reason: readResult.reason,
+            code: readResult.code || 'scope_violation',
+            violatingCollections: readResult.violatingCollections || [],
+            block,
+        };
+    }
+
+    if (write) {
+        // 5-6. The write stage itself: shape, mutating operators, whenMatched, target db and collection
+        const target = parseWriteTarget(write.stage, write.spec);
+        const writeTarget = { name: target.name, stageIndex: write.stageIndex };
+        const blockWrite = (reason, code, extra = {}) => blockedVerdict(
+            { reason, code, writeTarget: { ...writeTarget, ...extra.target }, ...extra.result },
+            pipeline,
+            options
+        );
+
+        if (target.malformed) {
+            return blockedVerdict({ reason: `${target.malformed} (stage ${write.stageIndex})`, code: 'safety_violation' }, pipeline, options);
+        }
+        const blockedOp = findBlockedOperator(pipeline[write.stageIndex]);
+        if (blockedOp) {
+            return blockedVerdict({
+                reason: `Blocked operator "${blockedOp}" found at stage ${write.stageIndex}. Mutating operations are not permitted.`,
+                isWrite: true,
+                reference: blockedOp,
+            }, pipeline, options);
+        }
+        if (target.whenMatchedPipeline) {
+            return blockWrite(
+                '$merge.whenMatched may not be a pipeline; use replace, keepExisting, merge or fail.',
+                'safety_violation',
+                { result: { whenMatchedPipeline: true } }
+            );
+        }
+        if (target.database !== undefined) {
+            const db = target.database;
+            const validDb = typeof db === 'string' && IDENTIFIER_RE.test(db) && !isProtectedName(db);
+            if (!validDb || !tenantDatabase || db !== tenantDatabase) {
+                return blockWrite(
+                    `Write target database "${db}" is not the connected database`,
+                    'scope_violation',
+                    { target: { database: String(db) } }
+                );
+            }
+        }
+        const nameCheck = validateCollectionName(target.name);
+        if (!nameCheck.safe) {
+            return blockWrite(nameCheck.reason, 'safety_violation');
+        }
+        if (restricted && !scope.includes(target.name)) {
+            return blockWrite(`Write target "${target.name}" is outside the allowed scope`, 'scope_violation');
+        }
+
+        if (scopeInsufficient) return scopeInsufficient;
+        return {
+            kind: 'needs_approval',
+            pipeline,
+            write: { stage: write.stage, stageIndex: write.stageIndex, targetCollection: target.name },
+        };
+    }
+
+    if (scopeInsufficient) return scopeInsufficient;
+    return { kind: 'runnable', pipeline: readResult.pipeline };
+}
+
 module.exports = {
+    classifyExecution,
     describeCollectionBlock,
     describeWrite,
     validatePipeline,

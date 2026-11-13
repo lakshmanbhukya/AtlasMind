@@ -10,7 +10,7 @@ AtlasMind is a conversational BI app for MongoDB: a user connects their own Mong
 
 Server (`cd server`):
 - `npm run dev`: nodemon on port 3001 (needs `server/.env`; see `server/.env.example`: `MONGODB_URI`, `GROQ_API_KEY`, `ENCRYPTION_KEY` (64 hex chars), `JWT_SECRET`, optional `CORS_ALLOWED_ORIGINS`)
-- `npm test`: Jest (`jest --verbose`). CI runs this on Node 24 when `server/**` changes
+- `npm test`: Jest (`jest --verbose`). CI runs only this, on Node 24, and only when `server/**` changes; on a push to `main` it then builds and pushes the `atlasmind-server` image
 - Single test: `npx jest src/__tests__/routesSmoke.test.js` or `npx jest -t "test name"`
 - `npm run test:coverage`, `npm run seed` (seeds the `sample_sales` collection)
 
@@ -18,7 +18,7 @@ Client (`cd client`):
 - `npm run dev`: Vite on 5173; proxies `/api` to `localhost:3001`
 - `npm test`: Vitest unit tests (`src/**/*.test.js`, node environment); single file: `npx vitest run src/lib/conversation.test.js`
 - `npm run build`, `npm run lint` (ESLint flat config), `npm run test:e2e` (Playwright, `client/tests/e2e/`; `chat.spec.ts` stubs `/api` with fixtures from `src/lib/__fixtures__/`, so it needs no server)
-- CI runs lint, unit tests, build and the Playwright specs when `client/**` changes. The client deploys to Netlify; only the server gets a Docker image
+- CI does not run for the client: run these locally. The client deploys to Netlify; CI builds only the server image
 - `VITE_SERVER_URL` sets the API base URL; it defaults to same-origin `/api/`
 
 `start.bat` starts both dev servers in separate windows (Windows).

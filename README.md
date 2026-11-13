@@ -4,7 +4,6 @@
 
   <p>
     <a href="https://atlasmind19.netlify.app/"><strong>Live Demo</strong></a> ·
-    <a href="https://lakshmanbhukya.github.io/AtlasMind/"><strong>Interactive Architecture</strong></a> ·
     <a href="./docs/SETUP.md"><strong>Docs</strong></a>
   </p>
 
@@ -36,38 +35,13 @@
 
 ## How it works
 
-```mermaid
-flowchart LR
-    A["1. Ask<br/>text or voice"] --> B["2. Resolve<br/>workspace scope"]
-    B --> C["3. Schema +<br/>few-shot context"]
-    C --> D{"4. Ambiguity<br/>Gate"}
-    D -- vague --> CL["Clarification card"]
-    CL -- user picks a field --> E
-    D -- clear --> E["5. Generate MQL<br/>(Groq)"]
-    E --> F{"6. Safety Guard<br/>AST check"}
-    F -- read --> G["7. Execute<br/>with $limit cap"]
-    F -- write --> H["Write approval token<br/>10 min, single use"]
-    H -- approved --> G
-    G --> I["8. Chart +<br/>explanation"]
-```
+![How AtlasMind works](./assets/how-it-works.png)
 
 ---
 
 ## Architecture
 
-```mermaid
-flowchart LR
-    SPA["React 19 SPA<br/>text + voice chat"] --> API["Express API<br/>cookie auth, rate limit"]
-    API --> ENG["Query Execution Engine"]
-    ENG --> GROQ["Groq LLM + Whisper STT"]
-    ENG --> GATE["Ambiguity Gate"]
-    GATE --> SCH["Schema Profiler +<br/>Few-Shot Memory"]
-    GROQ --> GUARD["Safety Guard<br/>read-only + HITL"]
-    GUARD --> EXEC["Query Executor"]
-    EXEC --> UDB[("User MongoDB<br/>connection pool")]
-    API -.-> CDB[("Central DB<br/>history, pins, tokens")]
-    SCH -.-> UDB
-```
+![How AtlasMind works](./assets/NL-to-MQL-App-Architecture.png)
 
 - **Two kinds of database.** The central DB holds app state. Your own databases are reached only through a per-connection pool.
 - **Thin routes, deep engine.** Routes are HTTP adapters; all orchestration lives in `services/queryExecutionEngine.js`.

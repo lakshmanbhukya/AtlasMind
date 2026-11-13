@@ -38,7 +38,8 @@ Frontend:
 cd client
 npm run dev
 npm run lint
-npm run test:e2e
+npm test            # Vitest unit tests (src/**/*.test.js)
+npm run test:e2e    # Playwright; chat.spec.ts stubs /api, no server needed
 ```
 
 ## Testing Notes
@@ -53,6 +54,12 @@ Backend tests cover core services and route integration paths, including:
 - routes integration
 
 Run test:coverage to inspect current coverage numbers for your branch.
+
+Frontend tests:
+
+- Unit (Vitest, node environment): the Conversation module `src/lib/conversation.js` (server response to chat turn, reducer, selectors) and `src/lib/apiError.js`.
+- End to end (Playwright): `tests/e2e/chat.spec.ts` walks one chat turn of each kind against a stubbed API, using the response fixtures in `src/lib/__fixtures__/`. Run `npx playwright install chromium` once before the first run.
+- CI runs only the server tests, so run the frontend checks locally before opening a client PR. If a server response shape changes, update the fixtures in the same PR.
 
 ## Code Workflow
 

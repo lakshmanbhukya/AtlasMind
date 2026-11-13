@@ -1,4 +1,7 @@
 import axios from 'axios';
+import { apiErrorMessage } from '../lib/apiError';
+
+export { apiErrorMessage };
 
 /**
  * Axios instance for all AtlasMind API calls.
@@ -14,17 +17,6 @@ const api = axios.create({
         'Content-Type': 'application/json',
     },
 });
-
-/**
- * Best human-readable message for a failed request.
- * @param {unknown} err
- * @param {string} [fallback]
- */
-export function apiErrorMessage(err, fallback = 'An unexpected error occurred') {
-    const data = err?.response?.data;
-    const fromBody = data?.error?.message || (typeof data?.error === 'string' ? data.error : null);
-    return fromBody || err?.message || fallback;
-}
 
 // Response interceptor — log errors (dev only) but preserve the full response for callers
 api.interceptors.response.use(
@@ -54,7 +46,7 @@ export async function listDatabases(connectionString) {
 /**
  * Send a natural language query → MQL → execute → visualize.
  * @param {{ text: string, model?: string, collections?: string[], bypassAmbiguity?: boolean,
- *           clarifications?: object, workspaceId?: string, dropMissing?: boolean, isEdit?: boolean }} payload
+ *           clarifications?: object, workspaceId?: string }} payload
  * @returns {Promise<object>} { aiMessage, pipeline, results, chartType, ... }
  */
 export async function sendQuery(payload) {

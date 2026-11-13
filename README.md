@@ -25,7 +25,7 @@
     <img alt="Groq" src="https://img.shields.io/badge/Groq-LLM-F55036?style=for-the-badge" />
     <img alt="Whisper" src="https://img.shields.io/badge/Whisper-Voice-0EA5E9?style=for-the-badge" />
     <img alt="Jest" src="https://img.shields.io/badge/Jest-30-C21325?style=for-the-badge&logo=jest&logoColor=white" />
-    <img alt="Docker" src="https://img.shields.io/badge/Docker-Images-2496ED?style=for-the-badge&logo=docker&logoColor=white" />
+    <img alt="Docker server image" src="https://img.shields.io/badge/Docker-Server_Image-2496ED?style=for-the-badge&logo=docker&logoColor=white" />
     <img alt="GitHub Actions" src="https://img.shields.io/badge/GitHub_Actions-CI-2088FF?style=for-the-badge&logo=githubactions&logoColor=white" />
     <img alt="Netlify" src="https://img.shields.io/badge/Netlify-Frontend-00C7B7?style=for-the-badge&logo=netlify&logoColor=white" />
     <img alt="Render" src="https://img.shields.io/badge/Render-Backend-46E3B7?style=for-the-badge&logo=render&logoColor=black" />

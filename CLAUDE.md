@@ -10,13 +10,15 @@ AtlasMind is a conversational BI app for MongoDB: a user connects their own Mong
 
 Server (`cd server`):
 - `npm run dev`: nodemon on port 3001 (needs `server/.env`; see `server/.env.example`: `MONGODB_URI`, `GROQ_API_KEY`, `ENCRYPTION_KEY` (64 hex chars), `JWT_SECRET`, optional `CORS_ALLOWED_ORIGINS`)
-- `npm test`: Jest (`jest --verbose`). CI runs only this, on Node 24, and only when `server/**` changes
+- `npm test`: Jest (`jest --verbose`). CI runs only this, on Node 24, and only when `server/**` changes; on a push to `main` it then builds and pushes the `atlasmind-server` image
 - Single test: `npx jest src/__tests__/routesSmoke.test.js` or `npx jest -t "test name"`
 - `npm run test:coverage`, `npm run seed` (seeds the `sample_sales` collection)
 
 Client (`cd client`):
 - `npm run dev`: Vite on 5173; proxies `/api` to `localhost:3001`
-- `npm run build`, `npm run lint` (ESLint flat config), `npm run test:e2e` (Playwright, `client/tests/e2e/`)
+- `npm test`: Vitest unit tests (`src/**/*.test.js`, node environment); single file: `npx vitest run src/lib/conversation.test.js`
+- `npm run build`, `npm run lint` (ESLint flat config), `npm run test:e2e` (Playwright, `client/tests/e2e/`; `chat.spec.ts` stubs `/api` with fixtures from `src/lib/__fixtures__/`, so it needs no server)
+- CI does not run for the client: run these locally. The client deploys to Netlify; CI builds only the server image
 - `VITE_SERVER_URL` sets the API base URL; it defaults to same-origin `/api/`
 
 `start.bat` starts both dev servers in separate windows (Windows).
@@ -44,10 +46,10 @@ There are no user accounts. A session is a "connected DB". `auth/session.js` own
 
 Research switches never come from env vars or request bodies. In-process evaluation code passes an `experiment` (`services/experiment.js`, ADR 0002) to `executeNaturalLanguageQuery`.
 
-Response envelope: `{ success: true, ... }` or `{ success: false, error: { code, message } }`. Query responses also carry fields the client uses: `aiMessage`, `pipeline`/`mql`, `collection`, `chartType`, `results`/`result`, `safetyStatus`, and `meta`. If you change a route, keep `client/src/services/api.js` and `docs/API.md` in sync.
+Response envelope: `{ success: true, ... }` or `{ success: false, error: { code, message } }`. Query responses also carry fields the client uses: `aiMessage`, `pipeline`/`mql`, `collection`, `chartType`, `results`/`result`, `safetyStatus`, and `meta`. If you change a route, keep `client/src/services/api.js`, `client/src/lib/conversation.js` (and its fixtures in `client/src/lib/__fixtures__/`) and `docs/API.md` in sync.
 
 ### Client
-The authenticated chat app lives in `client/src/components/app/` (`AppShell` > `ChatThread` and one `*Turn` component per message kind) and the marketing page in `components/landing/`; React Router pages are in `client/src/pages/` (Dashboard, SharedDashboard). Server-state hooks are in `client/src/hooks/` (`useChat`, `useSchema`, `useAuth`, `useVoice`, `useWorkspaces`), built on TanStack Query and the shared axios instance. `ChartRenderer.jsx` (Recharts) renders results based on the server's `chartType`. Shared Verdigris primitives are in `components/ui/vg/`; Tailwind colors are the `vg-*` tokens backed by the `--vg-*` CSS variables in `index.css`. Use relative imports (there is no `@` alias).
+The authenticated chat app lives in `client/src/components/app/` (`AppShell` > `ChatThread` and one `*Turn` component per message kind) and the marketing page in `components/landing/`; React Router pages are in `client/src/pages/` (Dashboard, SharedDashboard). Hooks are in `client/src/hooks/` (`useChat`, `useSchema`, `useAuth`, `useVoice`, `useWorkspaces`) and use the shared axios instance; only `useSchema` and `useWorkspaces` use TanStack Query. `useChat` holds the conversation state with the reducer from `lib/conversation.js` (the Conversation module), which is the only code that maps server responses to chat turns and reads the response field names; `ChatThread` only draws. `ChartRenderer.jsx` (Recharts) renders results based on the server's `chartType`. Shared Verdigris primitives are in `components/ui/vg/`; Tailwind colors are the `vg-*` tokens backed by the `--vg-*` CSS variables in `index.css`. Use relative imports (there is no `@` alias).
 
 ## Conventions
 - Keep route handlers thin: put orchestration and business logic in `server/src/services`, and central-DB access in `server/src/stores`.

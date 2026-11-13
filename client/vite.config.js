@@ -22,4 +22,9 @@ export default defineConfig({
           }
         : false, // Disable HMR in production
   },
+  // Unit tests (Vitest) cover the pure modules in src/; Playwright owns tests/e2e/*.spec.ts.
+  test: {
+    environment: "node",
+    include: ["src/**/*.test.js"],
+  },
 });

@@ -3,6 +3,9 @@
   publish = "dist"
   base = "client"
 
+[build.environment]
+  NODE_VERSION = "24"
+
 [[redirects]]
   from = "/*"
   to = "/index.html"

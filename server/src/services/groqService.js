@@ -17,10 +17,21 @@ function getGroqClient() {
         }
         groqClient = new Groq({
             apiKey,
-            fetch: typeof globalThis.fetch === 'function' ? globalThis.fetch : undefined,
+            fetch: typeof globalThis.fetch === 'function' ? nativeFetchWithStreamBodies : undefined,
         });
     }
     return groqClient;
+}
+
+/**
+ * Node's built-in fetch refuses a streamed request body unless `duplex: 'half'` is set
+ * ("RequestInit: duplex option is required when sending a body"). The SDK sends multipart
+ * uploads (Whisper transcription) as a Node stream, so add it for those; JSON bodies are unchanged.
+ */
+function nativeFetchWithStreamBodies(url, init) {
+    const body = init && init.body;
+    const isStream = body && typeof body === 'object' && typeof body.pipe === 'function';
+    return globalThis.fetch(url, isStream ? { ...init, duplex: 'half' } : init);
 }
 
 const DEFAULT_MODEL = 'openai/gpt-oss-120b';

@@ -5,8 +5,8 @@ const { formatMinifiedSchema, formatFieldNamesOnly, profileSchema } = require('.
 const { getSimilarExamples, addExample } = require('./fewShotRetriever');
 const { generateMQL } = require('./groqService');
 const jwt = require('jsonwebtoken');
-const { validatePipeline, validateCollectionName, describeCollectionBlock, describeWrite } = require('./safetyGuard');
-const { executePipeline } = require('./queryExecutor');
+const { describeWrite } = require('./safetyGuard');
+const { executePipeline, classifyExecution, UnsafePipelineError } = require('./queryExecutor');
 const queryHistoryStore = require('../stores/queryHistoryStore');
 const { getUserDb } = require('./userDbPool');
 const { getDb } = require('../db/connection');
@@ -25,6 +25,11 @@ const {
     ExecutionError,
     RateLimitError,
 } = require('./engineErrors');
+
+/** The connected database's name, or null when the handle does not expose one (fails closed on explicit `db`). */
+function tenantDatabaseOf(db) {
+    return db && typeof db.databaseName === 'string' ? db.databaseName : null;
+}
 
 /** ISO expiry of a signed Write Approval Token (from its JWT `exp`). */
 function approvalExpiresAt(token) {
@@ -405,108 +410,39 @@ async function runNaturalLanguageQuery(params) {
         }
     }
 
-    // 8. Safety validation & Scope enforcement
-    let pipelineCheck;
+    // 8. Safe Execution verdict: one classification of (collection, pipeline, Effective Scope)
+    let pipelineToRun;
 
     if (evalOpts.disableSafetyGuard) {
-        pipelineCheck = { safe: true, pipeline: llmResult.pipeline };
+        pipelineToRun = llmResult.pipeline;
         safetyInfo = { code: null, reason: null };
     } else {
         const tValStart = hrNow();
-        const collectionCheck = validateCollectionName(llmResult.collection);
-        if (!collectionCheck.safe) {
-            validateMs = toMs(tValStart);
-            safetyInfo = { code: 'safety_violation', reason: collectionCheck.reason };
-            return {
-                type: 'safety_blocked',
-                data: buildOutcomePayload({
-                    success: false,
-                    error: { code: 'safety_violation', message: collectionCheck.reason },
-                    naturalLanguage: query,
-                    aiMessage: collectionCheck.reason,
-                    explanation: llmResult.explanation,
-                    pipeline: Array.isArray(llmResult.pipeline) ? llmResult.pipeline : [],
-                    mql: Array.isArray(llmResult.pipeline) ? llmResult.pipeline : [],
-                    collection: typeof llmResult.collection === 'string' ? llmResult.collection : '',
-                    safetyStatus: 'blocked',
-                    safetyBlocked: true,
-                    safetyBlock: { ...describeCollectionBlock(llmResult.collection), reason: collectionCheck.reason },
-                    similarQueriesCount,
-                    schemaContext,
-                    scope: effectiveScope,
-                }),
-            };
-        }
-
-        pipelineCheck = validatePipeline(llmResult.pipeline, {
-            allowedCollections: isRestrictedScope ? effectiveScope : null,
-            targetCollection: llmResult.collection,
+        const verdict = classifyExecution({
+            collection: llmResult.collection,
+            pipeline: llmResult.pipeline,
+            scope: isRestrictedScope ? effectiveScope : null,
+            tenantDatabase: tenantDatabaseOf(userDb),
         });
         validateMs = toMs(tValStart);
-        safetyInfo = { code: pipelineCheck.code || null, reason: pipelineCheck.reason || null };
+        safetyInfo = { code: verdict.code || null, reason: verdict.reason || null };
 
-        if (!pipelineCheck.safe) {
-            // Missing collection / scope violation fallback
-            // A protected collection is never "add it to scope" — it is blocked outright.
-            const isProtectedReference = pipelineCheck.block?.code === 'protected_collection';
-            if (pipelineCheck.code === 'scope_violation' && !isProtectedReference) {
-                return {
-                    type: 'success',
-                    data: buildOutcomePayload({
-                        success: true,
-                        needsClarification: false,
-                        naturalLanguage: query,
-                        aiMessage: pipelineCheck.reason,
-                        explanation: llmResult.explanation || pipelineCheck.reason,
-                        pipeline: [],
-                        mql: [],
-                        collection: '',
-                        chartType: 'table',
-                        safetyStatus: 'scope-insufficient',
-                        safetyBlocked: false,
-                        suggestedCollections: pipelineCheck.violatingCollections || [],
-                        scope: effectiveScope,
-                        results: [],
-                        result: [],
-                        meta: {
-                            resultCount: 0,
-                            executionTimeMs: 0,
-                            totalTimeMs: Date.now() - startTime,
-                            similarQueriesCount,
-                            confidenceScore: 0,
-                            scope: effectiveScope,
-                        },
-                        schemaContext,
-                    }),
-                };
-            }
-
-            // Mutating write intercepted for human approval
-            if (pipelineCheck.isWrite) {
-                const approvalToken = signApprovalToken({
-                    connectionId,
-                    collection: llmResult.collection,
-                    pipeline: llmResult.pipeline,
-                    query,
-                    scope: effectiveScope,
-                });
-
-                const payloadData = buildOutcomePayload({
+        if (verdict.kind === 'scope_insufficient') {
+            return {
+                type: 'success',
+                data: buildOutcomePayload({
                     success: true,
+                    needsClarification: false,
                     naturalLanguage: query,
-                    aiMessage: `⚠️ Database Write Intercepted: This action will modify your collection "${llmResult.collection}". To execute this change, review and approve it.`,
-                    pipeline: llmResult.pipeline,
-                    mql: llmResult.pipeline,
-                    collection: llmResult.collection,
-                    chartType: llmResult.chartType || 'table',
-                    explanation: llmResult.explanation,
-                    safetyStatus: 'approval-required',
+                    aiMessage: verdict.reason,
+                    explanation: llmResult.explanation || verdict.reason,
+                    pipeline: [],
+                    mql: [],
+                    collection: '',
+                    chartType: 'table',
+                    safetyStatus: 'scope-insufficient',
                     safetyBlocked: false,
-                    approvalToken,
-                    approval: {
-                        expiresAt: approvalExpiresAt(approvalToken),
-                        ...describeWrite(llmResult.pipeline, llmResult.collection),
-                    },
+                    suggestedCollections: verdict.violatingCollections || [],
                     scope: effectiveScope,
                     results: [],
                     result: [],
@@ -515,38 +451,84 @@ async function runNaturalLanguageQuery(params) {
                         executionTimeMs: 0,
                         totalTimeMs: Date.now() - startTime,
                         similarQueriesCount,
-                        confidenceScore: 100,
+                        confidenceScore: 0,
                         scope: effectiveScope,
                     },
-                });
+                    schemaContext,
+                }),
+            };
+        }
 
-                return {
-                    type: 'approval_required',
-                    approvalToken,
-                    data: payloadData,
-                };
-            }
+        // A write that is safe in every other respect: intercepted for human approval
+        if (verdict.kind === 'needs_approval') {
+            const approvalToken = signApprovalToken({
+                connectionId,
+                collection: llmResult.collection,
+                pipeline: llmResult.pipeline,
+                query,
+                // Unrestricted scope is signed as null so the approve path classifies it the same way.
+                scope: isRestrictedScope ? effectiveScope : null,
+            });
 
+            const payloadData = buildOutcomePayload({
+                success: true,
+                naturalLanguage: query,
+                aiMessage: `⚠️ Database Write Intercepted: This action will modify your collection "${llmResult.collection}". To execute this change, review and approve it.`,
+                pipeline: llmResult.pipeline,
+                mql: llmResult.pipeline,
+                collection: llmResult.collection,
+                chartType: llmResult.chartType || 'table',
+                explanation: llmResult.explanation,
+                safetyStatus: 'approval-required',
+                safetyBlocked: false,
+                approvalToken,
+                approval: {
+                    expiresAt: approvalExpiresAt(approvalToken),
+                    ...describeWrite(llmResult.pipeline, llmResult.collection),
+                },
+                scope: effectiveScope,
+                results: [],
+                result: [],
+                meta: {
+                    resultCount: 0,
+                    executionTimeMs: 0,
+                    totalTimeMs: Date.now() - startTime,
+                    similarQueriesCount,
+                    confidenceScore: 100,
+                    scope: effectiveScope,
+                },
+            });
+
+            return {
+                type: 'approval_required',
+                approvalToken,
+                data: payloadData,
+            };
+        }
+
+        if (verdict.kind === 'blocked') {
             return {
                 type: 'safety_blocked',
                 data: buildOutcomePayload({
                     success: false,
-                    error: { code: 'safety_violation', message: pipelineCheck.reason },
+                    error: { code: 'safety_violation', message: verdict.reason },
                     naturalLanguage: query,
-                    aiMessage: pipelineCheck.reason,
-                    pipeline: llmResult.pipeline,
-                    mql: llmResult.pipeline,
-                    collection: llmResult.collection,
+                    aiMessage: verdict.reason,
                     explanation: llmResult.explanation,
+                    pipeline: Array.isArray(llmResult.pipeline) ? llmResult.pipeline : [],
+                    mql: Array.isArray(llmResult.pipeline) ? llmResult.pipeline : [],
+                    collection: typeof llmResult.collection === 'string' ? llmResult.collection : '',
                     safetyStatus: 'blocked',
                     safetyBlocked: true,
-                    safetyBlock: pipelineCheck.block ? { ...pipelineCheck.block, reason: pipelineCheck.reason } : null,
+                    safetyBlock: verdict.block ? { ...verdict.block, reason: verdict.reason } : null,
                     similarQueriesCount,
                     schemaContext,
                     scope: effectiveScope,
                 }),
             };
         }
+
+        pipelineToRun = verdict.pipeline;
     }
 
     // 9. Execute aggregation against USER DB
@@ -554,7 +536,7 @@ async function runNaturalLanguageQuery(params) {
     const { results, executionTimeMs } = await executePipeline(
         userDb,
         llmResult.collection,
-        pipelineCheck.pipeline,
+        pipelineToRun,
         {
             scope: isRestrictedScope ? effectiveScope : null,
             unsafeSkipGuard: Boolean(evalOpts.disableSafetyGuard),
@@ -574,7 +556,7 @@ async function runNaturalLanguageQuery(params) {
         naturalLanguage: query,
         clarifications: sanitizedClarifications || null,
         isEdit: Boolean(isEdit),
-        generatedPipeline: pipelineCheck.pipeline,
+        generatedPipeline: pipelineToRun,
         collection: llmResult.collection,
         chartType: llmResult.chartType,
         explanation: llmResult.explanation || '',
@@ -592,7 +574,7 @@ async function runNaturalLanguageQuery(params) {
     if (results && results.length > 0 && !evalOpts.disableMemoryWrite) {
         addExample({
             naturalLanguage: query,
-            mqlPipeline: pipelineCheck.pipeline,
+            mqlPipeline: pipelineToRun,
             collection: llmResult.collection,
             connectionId,
         });
@@ -609,8 +591,8 @@ async function runNaturalLanguageQuery(params) {
             clarifications: sanitizedClarifications || null,
             aiMessage: llmResult.explanation || `Generated pipeline for "${llmResult.collection}" collection.`,
             explanation: llmResult.explanation,
-            pipeline: pipelineCheck.pipeline,
-            mql: pipelineCheck.pipeline,
+            pipeline: pipelineToRun,
+            mql: pipelineToRun,
             collection: llmResult.collection,
             chartType: llmResult.chartType,
             safetyStatus: 'read-only',
@@ -665,26 +647,33 @@ async function runApprovedWrite(params) {
         throw new UnauthorizedTokenError('Access denied: token connectionId does not match current session');
     }
 
-    // Safety verification: collection & pipeline
-    const collectionCheck = validateCollectionName(collection);
-    if (!collectionCheck.safe) {
-        throw new SafetyViolationError(collectionCheck.reason, 'safety_violation');
-    }
-
-    const pipelineCheck = validatePipeline(pipeline, {
-        allowedCollections: scope || null,
-        targetCollection: collection,
-    });
-
-    if (!pipelineCheck.safe && !pipelineCheck.isWrite) {
-        throw new SafetyViolationError(pipelineCheck.reason, 'safety_violation');
-    }
-
-    // Atomic single-use jti via unique index in central DB
     if (!jti) {
         throw new ValidationError('Token missing unique identifier (jti)', 'invalid_token');
     }
 
+    // Get User DB (pooled connection); its name is the only database a write may target
+    let userDb;
+    try {
+        userDb = await getUserDb(connectionId);
+    } catch (err) {
+        throw new ExecutionError(err.message || 'Failed to connect to user database');
+    }
+
+    // Safe Execution verdict with the token's scope: only needs_approval (or a plain read) may run
+    const verdict = classifyExecution({
+        collection,
+        pipeline,
+        scope: scope || null,
+        tenantDatabase: tenantDatabaseOf(userDb),
+    });
+    if (verdict.kind !== 'needs_approval' && verdict.kind !== 'runnable') {
+        throw new SafetyViolationError(
+            verdict.reason || 'Pipeline failed the safety guard',
+            'safety_violation'
+        );
+    }
+
+    // Atomic single-use jti via unique index in central DB (spent only after the verdict passes)
     const centralDb = getDb();
     await ensureApprovalIndexes(centralDb);
     const approvalTokens = centralDb.collection('approval_tokens');
@@ -703,26 +692,21 @@ async function runApprovedWrite(params) {
         throw new ExecutionError(err.message);
     }
 
-    // Get User DB (pooled connection)
-    let userDb;
-    try {
-        userDb = await getUserDb(connectionId);
-    } catch (err) {
-        throw new ExecutionError(err.message || 'Failed to connect to user database');
-    }
-
     // Run mutating aggregation pipeline directly on database collection
     let results, executionTimeMs;
     try {
         const execRes = await executePipeline(
             userDb,
             collection,
-            pipelineCheck.pipeline || pipeline,
+            verdict.pipeline,
             { scope: scope || null, approvedWrite: true }
         );
         results = execRes.results;
         executionTimeMs = execRes.executionTimeMs;
     } catch (err) {
+        if (err instanceof UnsafePipelineError) {
+            throw new SafetyViolationError(err.message, 'safety_violation');
+        }
         throw new ExecutionError(err.message || 'Failed to apply approved write transaction');
     }
 

@@ -69,6 +69,30 @@ describe('executePipeline always applies the safety guard', () => {
         expect(aggregate).not.toHaveBeenCalled();
     });
 
+    test.each([
+        ['an out-of-scope lookup', [{ $lookup: { from: 'secrets', localField: 'a', foreignField: 'b', as: 'c' } }, { $merge: { into: 'orders' } }]],
+        ['a protected lookup', [{ $lookup: { from: 'system_users', localField: 'a', foreignField: 'b', as: 'c' } }, { $merge: { into: 'orders' } }]],
+        ['a cross-database target', [{ $match: {} }, { $merge: { into: { db: 'otherdb', coll: 'orders' } } }]],
+        ['an out-of-scope target', [{ $match: {} }, { $merge: { into: 'elsewhere' } }]],
+    ])('approvedWrite does not unlock %s', async (_label, pipeline) => {
+        const { db, aggregate } = fakeUserDb();
+        db.databaseName = 'shop';
+        await expect(executePipeline(db, 'orders', pipeline, { scope: ['orders'], approvedWrite: true }))
+            .rejects.toMatchObject({ name: 'UnsafePipelineError', isWrite: false });
+        expect(aggregate).not.toHaveBeenCalled();
+    });
+
+    test('reads the tenant database name from the db handle', async () => {
+        const { db, aggregate } = fakeUserDb();
+        db.databaseName = 'shop';
+        const pipeline = [{ $lookup: { from: { db: 'shop', coll: 'customers' }, localField: 'a', foreignField: 'b', as: 'c' } }];
+        await executePipeline(db, 'orders', pipeline);
+        expect(aggregate).toHaveBeenCalledTimes(1);
+
+        await expect(executePipeline(db, 'orders', [{ $lookup: { from: { db: 'otherdb', coll: 'customers' }, as: 'c' } }]))
+            .rejects.toBeInstanceOf(UnsafePipelineError);
+    });
+
     test('appends the result $limit to a safe read', async () => {
         const { db, aggregate } = fakeUserDb();
         await executePipeline(db, 'orders', [{ $match: {} }]);

@@ -23,7 +23,7 @@ AtlasMind is a conversational analytics experience for MongoDB with session-base
 
 ## Safety and Guardrails
 
-- Write/mutate stages and operators are blocked before execution.
+- Write/mutate stages and operators are blocked before execution. The one exception is a single final `$out`/`$merge` whose other stages are safe reads and whose target is in the connected database and the active scope: it is shown for approval and runs only after the user approves it.
 - Collection names are validated and restricted.
 - If no limit stage exists, a max result limit is automatically added.
 - Unsafe output is returned as a safety violation response.

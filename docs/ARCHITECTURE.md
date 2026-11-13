@@ -199,9 +199,9 @@ sequenceDiagram
     User->>Frontend: Clicks "Approve & Execute"
     Frontend->>Gateway: POST /api/query/approve { approvalToken }
     Gateway->>Engine: executeApprovedWrite({ approvalToken, connectionId })
-    Note over Engine: Cryptographic & Replay Verification:<br/>1. Verifies JWT signature & expiration<br/>2. Validates connectionId matches active session<br/>3. Inserts unique jti into approval_tokens (prevents replay)<br/>4. Re-validates AST safety on approved pipeline
-    Engine->>CentralDB: insertOne({ jti, connectionId, usedAt, expiresAt })
+    Note over Engine: Cryptographic & Replay Verification:<br/>1. Verifies JWT signature & expiration<br/>2. Validates connectionId matches active session<br/>3. Re-classifies the pipeline with the token's scope and the tenant DB name (must be needs_approval)<br/>4. Inserts unique jti into approval_tokens (prevents replay)
     Engine->>Pool: getUserDb(connectionId)
+    Engine->>CentralDB: insertOne({ jti, connectionId, usedAt, expiresAt })
     Engine->>UserDB: Execute mutation transaction
     UserDB-->>Engine: { acknowledged: true, deletedCount: 14 }
     Engine-->>Gateway: { type: "success", data: { safetyStatus: "write-executed", ... } }
@@ -272,10 +272,10 @@ Protects against hallucinated business logic:
 - **Telemetry Observability Engine**: Records granular events (`ambiguity_asked`, `ambiguity_skipped`, `ambiguity_resolved`, `ambiguity_bypassed`, `clarification_edit`) to calculate empirical KPIs (Ask Rate, Resolution Rate, Edit-after-Result Rate).
 
 ### 3.3 Cryptographic Human-in-the-Loop Write Guard (`QueryExecutionEngine.executeApprovedWrite`)
-- **Mutating Write Interception**: Inspects collection names and aggregation stages. Any pipeline containing `$out`, `$merge`, or collection mutating commands (`deleteMany`, `updateMany`, `insertOne`) is intercepted during query execution.
-- **Signed Approval Tokens**: Generates an HMAC-SHA256 signed JWT (`approvalToken`) with a 10-minute expiration containing `jti` (UUID), `connectionId`, `collection`, `pipeline`, and `scope`.
+- **Mutating Write Interception**: The Safe Execution verdict (`classifyExecution`, ADR 0004) decides. Only a pipeline whose single final top-level stage is `$out` or `$merge`, whose other stages pass every read check, and whose write target is in the connected database, not protected, and inside a restricted scope, is intercepted for approval (`needs_approval`). Write stages elsewhere and mutating operators (`$deleteMany`, `$updateMany`, `$insertOne`, ...) are blocked.
+- **Signed Approval Tokens**: Generates an HMAC-SHA256 signed JWT (`approvalToken`) with a 10-minute expiration containing `jti` (UUID), `connectionId`, `collection`, `pipeline`, and `scope` (`null` when the scope is unrestricted).
 - **Atomic Replay Prevention**: Write execution atomically inserts the token's `jti` into the central database's `approval_tokens` unique collection index. Duplicate submissions fail fast with `TokenAlreadyUsedError` (HTTP 409).
-- **Execution Endpoint (`POST /api/query/approve`)**: Thin route adapter delegating directly to `QueryExecutionEngine.executeApprovedWrite`. Validates connection ownership, re-runs safety AST checks, and applies mutating transactions to the user database.
+- **Execution Endpoint (`POST /api/query/approve`)**: Thin route adapter delegating directly to `QueryExecutionEngine.executeApprovedWrite`. Validates connection ownership, re-classifies the pipeline with the token's scope (anything other than `needs_approval` is a 422) before spending the `jti`, and applies the write to the user database.
 
 ### 3.4 Dynamic Workspace Scoping & Suggestion (`server/src/routes/workspaces.js`, `server/src/routes/scopeSuggest.js`)
 - **Workspace Scoping**: Restricts query context to curated collection subsets, reducing LLM prompt size and preventing cross-domain confusion.
@@ -298,8 +298,11 @@ Protects against hallucinated business logic:
 - **Multimodal STT (Whisper Large v3 Turbo)**: Transcribes audio buffers at the `POST /api/voice` intake boundary and hands normalized transcripts to `QueryExecutionEngine` with `source: 'voice'`.
 
 ### 3.8 AST Safety Guard (`server/src/services/safetyGuard.js`)
-- Rejects destructive stages: `$out`, `$merge`, `$writeConcern`, `$collStats`.
-- Automatic limit clamping: Appends a `$limit: 100` stage if omitted by the LLM.
+- `classifyExecution` returns one verdict per `(collection, pipeline, Effective Scope, tenant database)`: `runnable`, `needs_approval`, `scope_insufficient` or `blocked` (ADR 0004).
+- Enforces a stage allowlist recursively (`$facet`, `$lookup.pipeline`, `$unionWith.pipeline`); hard-denies `$function`, `$accumulator`, `$where`.
+- Blocks protected collections and any explicit `db` other than the connected database, in reads and write targets.
+- `$out` / `$merge` are approvable only as the single final top-level stage; a `$merge.whenMatched` pipeline is blocked.
+- Automatic limit clamping: appends a `$limit: 1000` stage to a runnable read that has none.
 
 ### 3.9 Connection Pool Manager (`server/src/services/userDbPool.js`)
 - Maintains an LRU cache of `MongoClient` instances mapped by encrypted `connectionId`.

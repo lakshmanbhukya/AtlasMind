@@ -65,6 +65,7 @@ jest.mock('../services/groqService', () => ({
 const mockExecutePipeline = jest.fn();
 const mockSaveQueryHistory = jest.fn();
 jest.mock('../services/queryExecutor', () => ({
+    ...jest.requireActual('../services/queryExecutor'),
     executePipeline: (...args) => mockExecutePipeline(...args),
 }));
 jest.mock('../stores/queryHistoryStore', () => ({
@@ -265,6 +266,102 @@ describe('QueryExecutionEngine Interface Tests', () => {
             });
             expect(outcome.data.safetyBlock.rule).toEqual(expect.any(String));
             expect(mockExecutePipeline).not.toHaveBeenCalled();
+        });
+
+        test('a write that reads outside the scope returns scope-insufficient with no approval token', async () => {
+            mockGenerateMQL.mockResolvedValueOnce({
+                pipeline: [
+                    { $lookup: { from: 'customers', localField: 'customerId', foreignField: '_id', as: 'c' } },
+                    { $merge: { into: 'orders' } },
+                ],
+                collection: 'orders',
+                chartType: 'table',
+                explanation: 'Copy customers onto orders',
+            });
+
+            const outcome = await QueryExecutionEngine.executeNaturalLanguageQuery({
+                connectionId: testConnectionId,
+                text: 'copy customer details into orders',
+                collections: ['orders'],
+            });
+
+            expect(outcome.type).toBe('success');
+            expect(outcome.data.safetyStatus).toBe('scope-insufficient');
+            expect(outcome.data.suggestedCollections).toEqual(['customers']);
+            expect(outcome.approvalToken).toBeUndefined();
+            expect(outcome.data.approvalToken).toBeUndefined();
+            expect(mockExecutePipeline).not.toHaveBeenCalled();
+        });
+
+        test('a write that reads a protected collection is blocked', async () => {
+            mockGenerateMQL.mockResolvedValueOnce({
+                pipeline: [
+                    { $lookup: { from: 'system_users', localField: 'userId', foreignField: '_id', as: 'u' } },
+                    { $merge: { into: 'orders' } },
+                ],
+                collection: 'orders',
+                chartType: 'table',
+                explanation: 'Copy users onto orders',
+            });
+
+            const outcome = await QueryExecutionEngine.executeNaturalLanguageQuery({
+                connectionId: testConnectionId,
+                text: 'copy user details into orders',
+            });
+
+            expect(outcome.type).toBe('safety_blocked');
+            expect(outcome.data.safetyBlock).toMatchObject({ code: 'protected_collection', reference: 'system_users' });
+            expect(outcome.approvalToken).toBeUndefined();
+            expect(mockExecutePipeline).not.toHaveBeenCalled();
+        });
+
+        test('a write target outside the restricted scope is blocked', async () => {
+            mockGenerateMQL.mockResolvedValueOnce({
+                pipeline: [{ $match: { status: 'paid' } }, { $merge: { into: 'customers' } }],
+                collection: 'orders',
+                chartType: 'table',
+                explanation: 'Copy paid orders into customers',
+            });
+
+            const outcome = await QueryExecutionEngine.executeNaturalLanguageQuery({
+                connectionId: testConnectionId,
+                text: 'copy paid orders into customers',
+                collections: ['orders'],
+            });
+
+            expect(outcome.type).toBe('safety_blocked');
+            expect(outcome.data.safetyBlock).toMatchObject({
+                code: 'out_of_scope_collection',
+                referenceType: 'Write target collection',
+                reference: 'customers',
+                stage: '$merge',
+                stageIndex: 1,
+            });
+            expect(outcome.approvalToken).toBeUndefined();
+        });
+
+        test('the approval token carries the scope only when it is restricted', async () => {
+            const write = {
+                pipeline: [{ $match: { status: 'cancelled' } }, { $merge: { into: 'orders' } }],
+                collection: 'orders',
+                chartType: 'table',
+                explanation: 'Rewrite orders',
+            };
+
+            mockGenerateMQL.mockResolvedValueOnce(write);
+            const open = await QueryExecutionEngine.executeNaturalLanguageQuery({
+                connectionId: testConnectionId,
+                text: 'rewrite cancelled orders',
+            });
+            expect(jwt.verify(open.approvalToken, testSecret).scope).toBeNull();
+
+            mockGenerateMQL.mockResolvedValueOnce(write);
+            const restricted = await QueryExecutionEngine.executeNaturalLanguageQuery({
+                connectionId: testConnectionId,
+                text: 'rewrite cancelled orders',
+                collections: ['orders'],
+            });
+            expect(jwt.verify(restricted.approvalToken, testSecret).scope).toEqual(['orders']);
         });
 
         test('a hard-denied operator is blocked with the operator as the reference', async () => {

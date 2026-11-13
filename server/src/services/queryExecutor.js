@@ -1,9 +1,9 @@
 const { normalizeBson } = require('../utils/normalizeBson');
-const { validateCollectionName, validatePipeline } = require('./safetyGuard');
+const { classifyExecution } = require('./safetyGuard');
 
 /**
  * Thrown when a pipeline fails the safety guard at execution time.
- * `isWrite` is true when the only problem is a write stage that was not approved.
+ * `isWrite` is true when the only problem is an approvable write stage that was not approved.
  */
 class UnsafePipelineError extends Error {
     constructor(reason, { code = 'safety_violation', isWrite = false } = {}) {
@@ -17,33 +17,35 @@ class UnsafePipelineError extends Error {
 /**
  * Apply the safety guard to (collection, pipeline). Returns the pipeline to run
  * (the guard may append a $limit) or throws UnsafePipelineError.
+ *
+ * @param {string} collectionName
+ * @param {object[]} pipeline
+ * @param {object} [options]
+ * @param {string[]|null} [options.scope] - Effective Scope (non-empty array = restricted)
+ * @param {boolean} [options.approvedWrite=false] - Permit a `needs_approval` pipeline
+ * @param {string|null} [options.tenantDatabase] - Connected database name; unknown blocks any explicit `db`
  */
-function guardPipeline(collectionName, pipeline, { scope = null, approvedWrite = false } = {}) {
-    const collectionCheck = validateCollectionName(collectionName);
-    if (!collectionCheck.safe) {
-        throw new UnsafePipelineError(collectionCheck.reason);
+function guardPipeline(collectionName, pipeline, { scope = null, approvedWrite = false, tenantDatabase = null } = {}) {
+    const verdict = classifyExecution({ collection: collectionName, pipeline, scope, tenantDatabase });
+    if (verdict.kind === 'runnable') return verdict.pipeline;
+    if (verdict.kind === 'needs_approval') {
+        if (approvedWrite) return verdict.pipeline;
+        throw new UnsafePipelineError(
+            `Write stage "${verdict.write.stage}" needs a Write Approval Token before it runs.`,
+            { code: 'safety_violation', isWrite: true }
+        );
     }
-
-    const pipelineCheck = validatePipeline(pipeline, {
-        allowedCollections: Array.isArray(scope) && scope.length > 0 ? scope : null,
-        targetCollection: collectionName,
-    });
-    if (pipelineCheck.safe) return pipelineCheck.pipeline;
-    if (pipelineCheck.isWrite && approvedWrite) return pipeline;
-
-    throw new UnsafePipelineError(pipelineCheck.reason, {
-        code: pipelineCheck.code || 'safety_violation',
-        isWrite: Boolean(pipelineCheck.isWrite),
-    });
+    throw new UnsafePipelineError(verdict.reason, { code: verdict.code || 'safety_violation' });
 }
 
 /**
  * Execute an aggregation pipeline against a tenant collection.
  *
- * The safety guard ALWAYS runs here: callers cannot execute a pipeline that
- * fails validateCollectionName / validatePipeline, so a forgotten check at a
- * call site (e.g. dashboard refresh of a stored pipeline) cannot run $out,
- * $merge or $function against a user's database.
+ * The safety guard ALWAYS runs here (classifyExecution): callers cannot run a
+ * pipeline whose verdict is not `runnable`, or `needs_approval` with
+ * approvedWrite, so a forgotten check at a call site (e.g. dashboard refresh of
+ * a stored pipeline) cannot run $out, $merge or $function against a user's
+ * database. The tenant database name is read from `db.databaseName`.
  *
  * @param {import('mongodb').Db} db - The user's database instance
  * @param {string} collectionName - Target collection name
@@ -68,7 +70,11 @@ async function executePipeline(db, collectionName, pipeline, options = {}) {
 
     const pipelineToRun = unsafeSkipGuard
         ? pipeline
-        : guardPipeline(collectionName, pipeline, { scope, approvedWrite });
+        : guardPipeline(collectionName, pipeline, {
+            scope,
+            approvedWrite,
+            tenantDatabase: (db && typeof db.databaseName === 'string') ? db.databaseName : null,
+        });
 
     const collection = db.collection(collectionName);
 
@@ -88,6 +94,7 @@ async function executePipeline(db, collectionName, pipeline, options = {}) {
 
 module.exports = {
     executePipeline,
+    classifyExecution,
     assertSafePipeline: guardPipeline,
     UnsafePipelineError,
 };

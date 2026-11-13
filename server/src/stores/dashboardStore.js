@@ -43,7 +43,11 @@ async function list(connectionId) {
  */
 async function pin(connectionId, { query, pipeline, collection, chartType, name, results, scope }) {
     requireTenant(connectionId, 'pinning to the dashboard');
-    assertSafePipeline(collection, pipeline, { scope: scope || null });
+    const userDb = await getUserDb(connectionId);
+    assertSafePipeline(collection, pipeline, {
+        scope: scope || null,
+        tenantDatabase: userDb && typeof userDb.databaseName === 'string' ? userDb.databaseName : null,
+    });
 
     const doc = {
         connectionId,

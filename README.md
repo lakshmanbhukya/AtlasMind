@@ -98,3 +98,9 @@ npm run dev            # http://localhost:5173
 ```
 
 More in [docs/SETUP.md](./docs/SETUP.md).
+
+---
+
+## Note
+
+Chat UI design takes inspiration from the clean, minimalist chat interface of Claude Web.

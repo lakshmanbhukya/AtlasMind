@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useChat } from '../../hooks/useChat';
 import { useVoice } from '../../hooks/useVoice';
-import { sendVoice, pinToDashboard } from '../../services/api';
+import { pinToDashboard } from '../../services/api';
+import { questionOf, answerableClarificationId } from '../../lib/conversation';
 import { cn } from '../../lib/utils';
 import Composer from './Composer';
 import EmptyState from './EmptyState';
@@ -30,21 +31,20 @@ export default function ChatThread({
 }) {
   const {
     messages,
-    isLoading,
+    pending,
     selectedModel,
     setSelectedModel,
     sendMessage,
+    sendVoiceMessage,
     approveWrite,
     discardApproval,
-    addVoiceResult,
-    addVoiceError,
   } = useChat(highlightedMessageId, onQuerySuccess);
   const { isRecording, startRecording, stopRecording, cancelRecording, error: voiceError } = useVoice();
-  const [voiceLoading, setVoiceLoading] = useState(false);
   const [draft, setDraft] = useState(null);
   const endRef = useRef(null);
 
-  const busy = isLoading || voiceLoading;
+  const busy = pending !== null;
+  const voicePending = pending === 'voice';
   const dbName = connectionMeta?.dbName || 'your database';
 
   // Keep the newest turn in view.
@@ -73,8 +73,6 @@ export default function ChatThread({
 
   const ask = useCallback((text) => sendMessage(text, buildScopeOptions()), [sendMessage, buildScopeOptions]);
 
-  const questionOf = (msg) => msg.naturalLanguage || msg.content;
-
   const handleClarify = (msg) => (clarifications) =>
     sendMessage(questionOf(msg), { ...buildScopeOptions(), clarifications, skipUserMessage: true });
   const handleBypass = (msg) => () =>
@@ -100,20 +98,11 @@ export default function ChatThread({
   const voiceSend = async () => {
     const blob = await stopRecording();
     if (!blob) return;
-    setVoiceLoading(true);
-    try {
-      const response = await sendVoice(blob, selectedModel, buildScopeOptions());
-      addVoiceResult(response);
-    } catch (err) {
-      addVoiceError(err);
-    } finally {
-      setVoiceLoading(false);
-    }
+    await sendVoiceMessage(blob, buildScopeOptions());
   };
 
   // The newest clarification is the only one still answerable.
-  const lastClarificationId = [...messages].reverse().find((m) => m.kind === 'clarification')?.id;
-  const hasLaterTurn = (msg) => messages.findIndex((m) => m.id === msg.id) < messages.length - 1;
+  const answerableId = answerableClarificationId(messages);
 
   const composer = (
     <Composer
@@ -131,7 +120,7 @@ export default function ChatThread({
       onDraftConsumed={() => setDraft(null)}
       voice={{
         isRecording,
-        isProcessing: voiceLoading,
+        isProcessing: voicePending,
         error: voiceError,
         onStart: startRecording,
         onCancel: cancelRecording,
@@ -162,7 +151,7 @@ export default function ChatThread({
             onSubmit={handleClarify(msg)}
             onBypass={handleBypass(msg)}
             isLoading={busy}
-            answered={msg.id !== lastClarificationId || hasLaterTurn(msg)}
+            answered={msg.id !== answerableId}
           />
         );
       case 'scope':
@@ -211,7 +200,7 @@ export default function ChatThread({
           })}
           {busy && (
             <div className={messages.length ? 'mt-6' : ''}>
-              <PendingTurn label={voiceLoading ? 'Transcribing and generating pipeline…' : 'Generating pipeline…'} />
+              <PendingTurn label={voicePending ? 'Transcribing and generating pipeline…' : 'Generating pipeline…'} />
             </div>
           )}
           {/* Clearance for the floating composer; also the scroll anchor, so the newest turn lands above it. */}

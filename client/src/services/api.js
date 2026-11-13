@@ -46,7 +46,7 @@ export async function listDatabases(connectionString) {
 /**
  * Send a natural language query → MQL → execute → visualize.
  * @param {{ text: string, model?: string, collections?: string[], bypassAmbiguity?: boolean,
- *           clarifications?: object, workspaceId?: string, dropMissing?: boolean, isEdit?: boolean }} payload
+ *           clarifications?: object, workspaceId?: string }} payload
  * @returns {Promise<object>} { aiMessage, pipeline, results, chartType, ... }
  */
 export async function sendQuery(payload) {

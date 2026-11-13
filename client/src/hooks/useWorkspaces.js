@@ -4,7 +4,7 @@ import { fetchWorkspaces, createWorkspace, updateWorkspace, deleteWorkspace } fr
 /**
  * Hook for managing saved workspaces with TanStack Query.
  */
-export function useWorkspaces() {
+export function useWorkspaces(connectionId) {
     const queryClient = useQueryClient();
 
     const {
@@ -13,9 +13,11 @@ export function useWorkspaces() {
         error,
         refetch,
     } = useQuery({
-        queryKey: ['workspaces'],
+        // Per connection, and only once a session exists (see useSchema).
+        queryKey: ['workspaces', connectionId],
         queryFn: fetchWorkspaces,
         staleTime: 60000,
+        enabled: Boolean(connectionId),
     });
 
     const createMutation = useMutation({

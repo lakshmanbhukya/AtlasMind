@@ -205,7 +205,7 @@ Returned when a query specifies a database write, deletion, or modification:
 `approval` describes the staged write for the approval UI. `expiresAt` is the token's JWT `exp` (10 minutes after issue). `writeStage` / `writeStageIndex` locate the `$merge`/`$out` stage, `targetCollection` is its destination, and `fieldsWritten` lists the `$set`/`$addFields`/`$unset` keys before it. Nothing has been written until `POST /api/query/approve` succeeds.
 
 #### E2. Query Blocked Response (HTTP 422)
-Returned when the pipeline fails the safety guard and is not approvable (code execution operators, protected/system collections, restricted stages, malformed pipelines). Nothing is executed.
+Returned when the pipeline fails the safety guard and is not approvable (code execution operators, protected/system collections, restricted stages, malformed pipelines, a write stage that is not the single final top-level `$out`/`$merge`, or a write whose target is another database, a protected collection, or a collection outside a restricted workspace scope). A write is approvable only when everything except its final write stage would pass as a read. Nothing is executed.
 ```json
 {
   "success": false,
@@ -219,7 +219,7 @@ Returned when the pipeline fails the safety guard and is not approvable (code ex
   ],
   "safetyBlock": {
     "code": "protected_collection",
-    "rule": "System and internal collections (system, admin, local, config) cannot be read.",
+    "rule": "System and internal collections (system, admin, local, config) cannot be read or written.",
     "stage": "$lookup",
     "stageIndex": 1,
     "referenceType": "$lookup collection",
@@ -229,7 +229,7 @@ Returned when the pipeline fails the safety guard and is not approvable (code ex
 }
 ```
 
-`safetyBlock.code` is one of `hard_blocked_operator`, `blocked_write_operator`, `protected_collection`, `out_of_scope_collection`, `invalid_collection`, `restricted_stage` or `malformed_pipeline`. `stageIndex` is the top-level stage that contains `reference` (`null` when the problem is the target collection or the whole pipeline). A reference to a valid collection outside the workspace is not blocked: it returns the scope-expansion response (D).
+`safetyBlock.code` is one of `hard_blocked_operator`, `blocked_write_stage`, `blocked_write_operator`, `protected_collection`, `out_of_scope_collection`, `invalid_collection`, `restricted_stage` or `malformed_pipeline`. A blocked write target has `referenceType: "Write target collection"` (or `"Write target database"`) and is located at the write stage. A `$lookup.from` naming another database is blocked with `referenceType: "$lookup database"`. `stageIndex` is the top-level stage that contains `reference` (`null` when the problem is the target collection or the whole pipeline). A read of a valid collection outside the workspace is not blocked: it returns the scope-expansion response (D), with no approval token even when the pipeline ends in a write.
 
 #### F. Final Execution Response (HTTP 200)
 Returned when a query is unambiguous or has been successfully clarified:
@@ -293,7 +293,7 @@ Safely executes an intercepted mutating query using the signed `approvalToken` i
 }
 ```
 
-Before executing, the server verifies the token signature and 10-minute expiry, checks that the token's `connectionId` matches the session, re-runs the safety guard (write stages are permitted only here), and records the token's `jti` so it can be used once.
+Before executing, the server verifies the token signature and 10-minute expiry, checks that the token's `connectionId` matches the session, re-runs the safety guard with the token's scope (the pipeline must still be approvable; see E2), and only then records the token's `jti` so it can be used once.
 
 | Status | `error.code` | Cause |
 |---|---|---|
@@ -301,7 +301,7 @@ Before executing, the server verifies the token signature and 10-minute expiry, 
 | 401 | `expired_token` | Signature invalid or token expired |
 | 403 | `forbidden` | Token belongs to a different connection |
 | 409 | `token_already_used` | Token was already executed |
-| 422 | `safety_violation` | Pipeline fails the safety guard (beyond the approved write stage) |
+| 422 | `safety_violation` | Pipeline is not approvable: it fails the safety guard beyond its final write stage, or the write target is not allowed |
 
 **Error Response (Expired or Tampered Token - HTTP 401)**:
 ```json
@@ -516,7 +516,7 @@ Common Error Codes:
 - `workspace_empty` (400): None of the workspace's collections exist in the database any more.
 - `connection_not_found` (404): The session's stored connection no longer exists.
 - `expired_token` (401), `forbidden` (403), `token_already_used` (409): Write approval failures (see section 4).
-- `safety_violation` (422): Unsafe stage or operator (`$function`, `$where`, system collection, restricted stage). On `POST /api/query` and `/api/voice` the body also carries `safetyBlock` (see section 3, E2). Write stages (`$out`, `$merge`) are not a 422 there: they return the approval response (E).
+- `safety_violation` (422): Unsafe stage or operator (`$function`, `$where`, system collection, restricted stage). On `POST /api/query` and `/api/voice` the body also carries `safetyBlock` (see section 3, E2). An approvable write (a single final `$out`/`$merge`) is not a 422 there: it returns the approval response (E).
 - `scope_violation` (422): Dashboard pin/refresh only. The stored pipeline references a collection outside its scope. `POST /api/query` never returns this code: an out-of-scope collection is the HTTP 200 scope-expansion response (`safetyStatus: "scope-insufficient"`, section 3, D).
 - `rate_limited` (429): The upstream LLM is rate limited; retry shortly.
 - `execution_error` / `query_error` / `voice_pipeline_error` (500): Unexpected failure while running the query.

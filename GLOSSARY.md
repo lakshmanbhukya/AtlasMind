@@ -85,7 +85,7 @@ Mapped by HTTP adapters to status codes (`200`, `422`, etc.).
 
 ### `Safe Execution`
 **Type**: Invariant of `queryExecutor.executePipeline`  
-**Definition**: Every pipeline run against a tenant DB passes `validateCollectionName` and `validatePipeline` (with the Effective Scope) inside `executePipeline`; it throws `UnsafePipelineError` otherwise. Write stages run only with `approvedWrite: true`, set by the Write Approval Token flow. Callers (engine, approve flow, dashboard refresh) cannot forget the check.
+**Definition**: One classification of `(collection, pipeline, Effective Scope, tenant database)`, `classifyExecution`, returns a verdict: `runnable` (safe read, `$limit` appended), `needs_approval` (safe in every respect except one final top-level `$out`/`$merge`), `scope_insufficient` (reads a valid collection outside a restricted scope) or `blocked`. "Approvable" means safe except the final write stage: the read part gets the full read checks, and the write target must be the tenant's own database, not protected, and inside a restricted scope. Every pipeline run against a tenant DB is classified inside `executePipeline`, which throws `UnsafePipelineError` unless the verdict is `runnable`, or `needs_approval` with `approvedWrite: true` (set only by the Write Approval Token flow). The engine, approve flow and dashboard pins map the same verdict. See ADR 0004.
 
 ---
 

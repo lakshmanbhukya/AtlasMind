@@ -1,0 +1,1 @@
+{"success":true,"data":{"collections":[{"name":"sample_sales","documentCount":120,"fields":[{"name":"region","type":"string"},{"name":"amount","type":"number"},{"name":"quantity","type":"number"}]},{"name":"orders","documentCount":40,"fields":[{"name":"status","type":"string"}]}]}}

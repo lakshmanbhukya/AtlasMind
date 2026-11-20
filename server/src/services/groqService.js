@@ -18,6 +18,10 @@ function getGroqClient() {
         groqClient = new Groq({
             apiKey,
             fetch: typeof globalThis.fetch === 'function' ? nativeFetchWithStreamBodies : undefined,
+            // Fail fast: generateMQL's loop is the only retry layer, and no call
+            // may hold a request open for the SDK's long default timeout.
+            maxRetries: 0,
+            timeout: 30_000,
         });
     }
     return groqClient;
@@ -35,6 +39,13 @@ function nativeFetchWithStreamBodies(url, init) {
 }
 
 const DEFAULT_MODEL = 'openai/gpt-oss-120b';
+
+/** generateMQL retries on 429/5xx: 1 call + MAX_RETRIES retries, each delay capped. */
+const MAX_RETRIES = 2;
+const MAX_RETRY_DELAY_MS = 8000;
+
+/** Whisper uploads (up to 25 MB) get longer than the client's 30 s default. */
+const TRANSCRIPTION_TIMEOUT_MS = 60_000;
 
 /**
  * Generate an MQL aggregation pipeline from natural language.
@@ -85,7 +96,7 @@ async function generateMQL(naturalLanguage, schemaContext, fewShotExamples, mode
         ? await llm.beforeCall({ model: targetModel, messages, maxTokens })
         : null;
 
-    const maxRetries = 6;
+    const maxRetries = MAX_RETRIES;
     let retries = 0;
     let chatCompletion = null;
     const callStart = Date.now();
@@ -109,7 +120,7 @@ async function generateMQL(naturalLanguage, schemaContext, fewShotExamples, mode
                 retries++;
                 const retryAfterSec = err.headers?.['retry-after'] || (typeof err.headers?.get === 'function' ? err.headers.get('retry-after') : null);
                 let delayMs = retryAfterSec ? parseFloat(retryAfterSec) * 1000 : (1000 * Math.pow(2, attempt));
-                delayMs = Math.min(delayMs, 32000) + Math.random() * 500;
+                delayMs = Math.min(delayMs, MAX_RETRY_DELAY_MS) + Math.random() * 500;
                 await new Promise((r) => setTimeout(r, delayMs));
                 continue;
             }
@@ -259,7 +270,7 @@ async function transcribeAudio(audioBuffer, filename = 'recording.webm') {
             file,
             language: 'en',
             response_format: 'verbose_json',
-        });
+        }, { timeout: TRANSCRIPTION_TIMEOUT_MS });
     } catch (err) {
         console.warn('⚠️ whisper-large-v3-turbo transcription failed, trying whisper-large-v3:', err.message);
         const fallbackFile = await toFile(audioBuffer, filename);
@@ -268,7 +279,7 @@ async function transcribeAudio(audioBuffer, filename = 'recording.webm') {
             file: fallbackFile,
             language: 'en',
             response_format: 'verbose_json',
-        });
+        }, { timeout: TRANSCRIPTION_TIMEOUT_MS });
     }
 
     return {

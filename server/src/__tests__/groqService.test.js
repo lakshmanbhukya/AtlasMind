@@ -146,4 +146,31 @@ describe('groqService.generateMQL', () => {
             expect(result.jsonModeUsed).toBe(false);
         });
     });
+    describe('fail-fast retries', () => {
+        afterEach(() => jest.restoreAllMocks());
+
+        test('a persistent 429 is retried twice, then thrown, with capped delays', async () => {
+            const delays = [];
+            jest.spyOn(global, 'setTimeout').mockImplementation((fn, ms) => {
+                delays.push(ms);
+                fn();
+                return 0;
+            });
+            const rateLimited = Object.assign(new Error('rate limited'), {
+                status: 429,
+                headers: { 'retry-after': '60' },
+            });
+            const mockCreate = jest.fn().mockRejectedValue(rateLimited);
+            setGroqClient({ chat: { completions: { create: mockCreate } } });
+
+            await expect(generateMQL('find users', 'Database: db', [])).rejects.toBe(rateLimited);
+            expect(mockCreate).toHaveBeenCalledTimes(3);
+            expect(delays).toHaveLength(2);
+            // retry-after (60 s) is honored only up to the 8 s cap (+ <500 ms jitter)
+            delays.forEach((ms) => {
+                expect(ms).toBeGreaterThanOrEqual(8000);
+                expect(ms).toBeLessThan(8500);
+            });
+        });
+    });
 });

@@ -491,10 +491,14 @@ function validatePipelineCore(pipeline, options = {}) {
         }
     }
 
-    // Check if a $limit stage exists — inject one if not
-    const hasLimit = pipeline.some((stage) => '$limit' in stage);
+    // Always cap the result size. Only a final top-level `$limit` within the
+    // cap leaves the pipeline as-is: an earlier `$limit` can be multiplied by
+    // a later `$unwind`/`$lookup`, and a huge one is no cap at all.
+    const last = pipeline[pipeline.length - 1];
+    const lastLimit = last && typeof last === 'object' ? last.$limit : undefined;
+    const alreadyCapped = Number.isInteger(lastLimit) && lastLimit >= 1 && lastLimit <= MAX_RESULT_LIMIT;
 
-    const safePipeline = hasLimit
+    const safePipeline = alreadyCapped
         ? pipeline
         : [...pipeline, { $limit: MAX_RESULT_LIMIT }];
 

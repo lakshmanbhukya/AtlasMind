@@ -59,6 +59,19 @@ describe('classifyExecution', () => {
         expect(classify([{ $match: {} }]).pipeline).toEqual([{ $match: {} }, { $limit: 1000 }]);
     });
 
+    test.each([
+        ['a huge $limit', [{ $limit: 5000000 }], [{ $limit: 5000000 }, { $limit: 1000 }]],
+        ['a $limit before an $unwind', [{ $limit: 5 }, { $unwind: '$x' }], [{ $limit: 5 }, { $unwind: '$x' }, { $limit: 1000 }]],
+        ['a non-integer final $limit', [{ $limit: 2.5 }], [{ $limit: 2.5 }, { $limit: 1000 }]],
+    ])('runnable still caps %s', (_label, pipeline, expected) => {
+        expect(classify(pipeline).pipeline).toEqual(expected);
+    });
+
+    test('a final $limit within the cap is left unchanged', () => {
+        const pipeline = [{ $match: {} }, { $limit: 50 }];
+        expect(classify(pipeline).pipeline).toEqual(pipeline);
+    });
+
     test('needs_approval returns the pipeline unchanged and names the target', () => {
         const pipeline = [{ $match: { status: 'old' } }, { $merge: { into: 'orders_archive' } }];
         const verdict = classify(pipeline);

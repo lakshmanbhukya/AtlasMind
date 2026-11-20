@@ -13,6 +13,7 @@ const {
   startCleanupCron,
 } = require("./services/cleanupService");
 const { requireAuth } = require("./middleware/auth");
+const dashboardStore = require("./stores/dashboardStore");
 const { generalLimiter, authLimiter } = require("./middleware/rateLimiter");
 const { cleanupPool, getPoolSize } = require("./services/userDbPool");
 
@@ -149,6 +150,7 @@ async function startServer() {
     await initializeCollection();
     await initializeWorkspaceCollection();
     await initializeCleanupIndexes();
+    await dashboardStore.initializeIndexes();
     startCleanupCron();
 
     const server = app.listen(PORT, () => {

@@ -1,38 +1,36 @@
 const express = require('express');
-const { ObjectId } = require('mongodb');
 const dashboardStore = require('../stores/dashboardStore');
 
 const router = express.Router();
 
-/**
- * GET /api/dashboard/shared/:id
- *
- * Public endpoint (no auth) for a shared dashboard widget. The store projects
- * display fields only, so connectionId and other internals never leave.
- */
-router.get('/:id', async (req, res) => {
-    try {
-        if (!ObjectId.isValid(req.params.id)) {
-            return res.status(400).json({
-                success: false,
-                error: { code: 'validation_error', message: 'Invalid pin ID' },
-            });
-        }
+function notFound(res) {
+    return res.status(404).json({
+        success: false,
+        error: { code: 'not_found', message: 'Shared dashboard widget not found' },
+    });
+}
 
-        const pin = await dashboardStore.getShared(req.params.id);
-        if (!pin) {
-            return res.status(404).json({
-                success: false,
-                error: { code: 'not_found', message: 'Shared dashboard widget not found' },
-            });
-        }
+/**
+ * GET /api/dashboard/shared/:token
+ *
+ * Public endpoint (no auth) for a shared dashboard widget. Only pins shared
+ * explicitly (POST /api/dashboard/:id/share) are reachable, by their secret
+ * token. A malformed token is a plain 404, so the route does not reveal which
+ * tokens are well-formed. The store projects display fields only.
+ */
+router.get('/:token', async (req, res) => {
+    try {
+        if (!dashboardStore.SHARE_TOKEN_PATTERN.test(req.params.token)) return notFound(res);
+
+        const pin = await dashboardStore.getShared(req.params.token);
+        if (!pin) return notFound(res);
 
         return res.json({ success: true, data: pin });
     } catch (error) {
         console.error('❌ Shared dashboard fetch error:', error);
         return res.status(500).json({
             success: false,
-            error: { code: 'dashboard_error', message: error.message },
+            error: { code: 'dashboard_error', message: 'Failed to load shared dashboard widget' },
         });
     }
 });

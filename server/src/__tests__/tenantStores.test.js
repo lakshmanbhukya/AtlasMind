@@ -48,6 +48,7 @@ describe.each([undefined, null, ''])('connectionId = %p', (missing) => {
         ['dashboard pin', () => dashboardStore.pin(missing, { query: 'q', pipeline: [{ $match: {} }], collection: 'c' })],
         ['dashboard remove', () => dashboardStore.remove(missing, new ObjectId().toString())],
         ['dashboard refresh', () => dashboardStore.refresh(missing, new ObjectId().toString())],
+        ['dashboard share', () => dashboardStore.share(missing, new ObjectId().toString())],
     ])('%s throws TenantRequiredError and touches nothing', async (_label, call) => {
         await expect(call()).rejects.toBeInstanceOf(TenantRequiredError);
         expect(coll.find).not.toHaveBeenCalled();
@@ -98,11 +99,55 @@ describe('queries are filtered by the caller', () => {
         expect(coll.findOne).toHaveBeenCalledWith({ _id: id, connectionId: 'tenant-a' });
     });
 
-    test('shared view projects out connectionId', async () => {
-        const id = new ObjectId();
-        await dashboardStore.getShared(id.toString());
-        const options = coll.findOne.mock.calls[0][1];
+    test('shared view looks up by share token and projects out connectionId', async () => {
+        const token = 'a'.repeat(32);
+        await dashboardStore.getShared(token);
+        const [filter, options] = coll.findOne.mock.calls[0];
+        expect(filter).toEqual({ shareToken: token });
         expect(options.projection.connectionId).toBeUndefined();
+        expect(options.projection.shareToken).toBeUndefined();
         expect(Object.values(options.projection).every((v) => v === 1)).toBe(true);
+    });
+
+    test.each([
+        ['an ObjectId string', new ObjectId().toString()],
+        ['a short token', 'abc'],
+        ['a token with bad characters', `${'a'.repeat(31)}$`],
+        ['a non-string', { $ne: null }],
+        ['undefined', undefined],
+    ])('shared view rejects %s without a DB call', async (_label, token) => {
+        await expect(dashboardStore.getShared(token)).resolves.toBeNull();
+        expect(coll.findOne).not.toHaveBeenCalled();
+    });
+
+    test("share is tenant-filtered and returns null for another tenant's pin", async () => {
+        const id = new ObjectId();
+        await expect(dashboardStore.share('tenant-a', id.toString())).resolves.toBeNull();
+        expect(coll.findOne.mock.calls[0][0]).toEqual({ _id: id, connectionId: 'tenant-a' });
+        expect(coll.updateOne).not.toHaveBeenCalled();
+    });
+
+    test('share creates a 32-char token with a tenant-filtered update', async () => {
+        const id = new ObjectId();
+        coll.findOne.mockResolvedValue({ _id: id });
+        const { shareToken } = await dashboardStore.share('tenant-a', id.toString());
+        expect(shareToken).toMatch(dashboardStore.SHARE_TOKEN_PATTERN);
+        expect(coll.updateOne).toHaveBeenCalledWith(
+            { _id: id, connectionId: 'tenant-a' },
+            { $set: { shareToken } }
+        );
+    });
+
+    test('share reuses an existing token', async () => {
+        const id = new ObjectId();
+        const existing = 'b'.repeat(32);
+        coll.findOne.mockResolvedValue({ _id: id, shareToken: existing });
+        await expect(dashboardStore.share('tenant-a', id.toString())).resolves.toEqual({ shareToken: existing });
+        expect(coll.updateOne).not.toHaveBeenCalled();
+    });
+
+    test('share with an invalid id is "not found" without a DB call', async () => {
+        await expect(dashboardStore.share('tenant-a', 'not-an-id')).resolves.toBeNull();
+        expect(coll.findOne).not.toHaveBeenCalled();
     });
 });

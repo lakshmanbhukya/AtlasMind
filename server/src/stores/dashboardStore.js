@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto = require('crypto');
 const connection = require('../db/connection');
 const { getUserDb } = require('../services/userDbPool');
 const { executePipeline, assertSafePipeline } = require('../services/queryExecutor');
@@ -28,8 +29,23 @@ const PUBLIC_PROJECTION = {
     scope: 1,
 };
 
+/** Share tokens are 24 random bytes, base64url-encoded (32 chars). */
+const SHARE_TOKEN_PATTERN = /^[A-Za-z0-9_-]{32}$/;
+
 function pinsCollection() {
     return connection.getDb().collection(COLLECTION);
+}
+
+/** Ensure the dashboards indexes exist. Logs and continues on failure. */
+async function initializeIndexes() {
+    try {
+        const pins = pinsCollection();
+        await pins.createIndex({ connectionId: 1, pinnedAt: -1 });
+        await pins.createIndex({ shareToken: 1 }, { unique: true, sparse: true });
+        console.log(`✅ Initialized indexes for ${COLLECTION} collection`);
+    } catch (err) {
+        console.error(`❌ Failed to initialize indexes for ${COLLECTION}:`, err.message);
+    }
 }
 
 async function list(connectionId) {
@@ -106,11 +122,35 @@ async function refresh(connectionId, id) {
     };
 }
 
-/** Public, unauthenticated view of a shared pin (display fields only). */
-async function getShared(id) {
+/**
+ * Make a pin publicly shareable. Reuses the pin's token if it already has one.
+ * @returns {Promise<{shareToken: string}|null>} null when the pin does not exist for this tenant
+ */
+async function share(connectionId, id) {
+    requireTenant(connectionId, 'sharing a dashboard pin');
     const _id = toObjectId(id);
     if (!_id) return null;
-    return pinsCollection().findOne({ _id }, { projection: PUBLIC_PROJECTION });
+
+    const pins = pinsCollection();
+    const existing = await pins.findOne({ _id, connectionId }, { projection: { shareToken: 1 } });
+    if (!existing) return null;
+    if (existing.shareToken) return { shareToken: existing.shareToken };
+
+    const shareToken = crypto.randomBytes(24).toString('base64url');
+    await pins.updateOne({ _id, connectionId }, { $set: { shareToken } });
+    return { shareToken };
 }
 
-module.exports = { list, pin, remove, refresh, getShared, PUBLIC_PROJECTION };
+/**
+ * Public, unauthenticated view of a shared pin (display fields only).
+ * Only pins explicitly shared via share() are reachable, by their secret token.
+ */
+async function getShared(token) {
+    if (typeof token !== 'string' || !SHARE_TOKEN_PATTERN.test(token)) return null;
+    return pinsCollection().findOne({ shareToken: token }, { projection: PUBLIC_PROJECTION });
+}
+
+module.exports = {
+    list, pin, remove, refresh, share, getShared, initializeIndexes,
+    PUBLIC_PROJECTION, SHARE_TOKEN_PATTERN,
+};

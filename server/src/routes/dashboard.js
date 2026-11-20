@@ -120,4 +120,22 @@ router.post('/:id/refresh', async (req, res) => {
     }
 });
 
+/**
+ * POST /api/dashboard/:id/share
+ *
+ * Create (or reuse) the pin's secret share token for its public link.
+ */
+router.post('/:id/share', async (req, res) => {
+    try {
+        if (!ObjectId.isValid(req.params.id)) return invalidId(res);
+
+        const shared = await dashboardStore.share(req.connectionId, req.params.id);
+        if (!shared) return notFound(res);
+
+        return res.json({ success: true, data: { shareToken: shared.shareToken } });
+    } catch (error) {
+        return sendDashboardError(res, error, 'share');
+    }
+});
+
 module.exports = router;

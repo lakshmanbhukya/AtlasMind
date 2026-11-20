@@ -6,6 +6,7 @@ import {
 import { motion } from 'framer-motion';
 import { TrendingUp, Download, Share2 } from 'lucide-react';
 import { downloadCsv } from '../lib/csv';
+import { shareDashboardPin } from '../services/api';
 
 // Verdigris: accent, clay, amber, text-2, accent-deep, red
 const COLORS = ['#4FC79B', '#C98F5C', '#D4A961', '#A9B5AC', '#2A8467', '#DF6A57'];
@@ -42,21 +43,32 @@ const InsightDashboard = ({ data, type = 'bar', title, pinId, hideActions = fals
 
     const { nameKey, valueKey } = getChartKeys(data);
 
-    const handleShare = () => {
+    const showToast = (msg) => {
+        setToastMsg(msg);
+        setTimeout(() => setToastMsg(null), 3000);
+    };
+
+    const handleShare = async () => {
         if (!pinId) {
-            setToastMsg('Cannot share: pin ID is missing');
-            setTimeout(() => setToastMsg(null), 3000);
+            showToast('Cannot share: pin ID is missing');
             return;
         }
-        const url = `${window.location.origin}/shared/${pinId}`;
-        navigator.clipboard.writeText(url).then(() => {
-            setToastMsg('Public link copied!');
-            setTimeout(() => setToastMsg(null), 3000);
-        }).catch(err => {
+        let shareToken;
+        try {
+            ({ shareToken } = await shareDashboardPin(pinId));
+        } catch (err) {
+            if (import.meta.env.DEV) console.error('Failed to create share link', err);
+            showToast('Failed to create share link');
+            return;
+        }
+        const url = `${window.location.origin}/shared/${shareToken}`;
+        try {
+            await navigator.clipboard.writeText(url);
+            showToast('Public link copied!');
+        } catch (err) {
             if (import.meta.env.DEV) console.error('Failed to copy link', err);
-            setToastMsg('Failed to copy link');
-            setTimeout(() => setToastMsg(null), 3000);
-        });
+            showToast('Failed to copy link');
+        }
     };
 
     const handleDownload = () => {

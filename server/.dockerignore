@@ -3,3 +3,6 @@ node_modules
 src/__tests__
 uploads
 *.log
+.git
+coverage
+*.md

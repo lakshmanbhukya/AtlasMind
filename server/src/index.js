@@ -14,7 +14,7 @@ const {
 } = require("./services/cleanupService");
 const { requireAuth } = require("./middleware/auth");
 const dashboardStore = require("./stores/dashboardStore");
-const { generalLimiter, authLimiter } = require("./middleware/rateLimiter");
+const { generalLimiter, authLimiter, llmLimiter } = require("./middleware/rateLimiter");
 const { cleanupPool, getPoolSize } = require("./services/userDbPool");
 
 // Import routes
@@ -110,8 +110,8 @@ app.get("/api/health", (_req, res) => {
 // ---------------------------------------------------------------------------
 // Protected Routes (require valid JWT cookie)
 // ---------------------------------------------------------------------------
-app.use("/api/query", requireAuth, queryRoutes);
-app.use("/api/voice", requireAuth, voiceRoutes);
+app.use("/api/query", requireAuth, llmLimiter, queryRoutes);
+app.use("/api/voice", requireAuth, llmLimiter, voiceRoutes);
 app.use("/api/schema", requireAuth, schemaRoutes);
 app.use("/api/dashboard", requireAuth, dashboardRoutes);
 app.use("/api/workspaces", requireAuth, workspaceRoutes);

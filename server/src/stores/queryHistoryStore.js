@@ -2,6 +2,7 @@
 
 const connection = require('../db/connection');
 const { requireTenant, toObjectId } = require('./tenant');
+const log = require('../utils/logger').logger.child({ module: 'queryHistoryStore' });
 
 /**
  * Query History store: the only module that touches the central
@@ -65,7 +66,7 @@ async function record(entry) {
 
         await coll.insertOne({ ...doc, timestamp: new Date() });
     } catch (error) {
-        console.warn('⚠️ Failed to save query history:', error.message);
+        log.warn({ err: error }, 'Failed to save query history');
     }
 }
 

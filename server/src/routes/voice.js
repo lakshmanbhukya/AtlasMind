@@ -3,6 +3,7 @@ const multer = require('multer');
 const { transcribeAudio } = require('../services/groqService');
 const { QueryExecutionEngine } = require('../services/queryExecutionEngine');
 const { sendOutcome, sendError } = require('./engineHttp');
+const { forRequest } = require('../utils/logger');
 
 const router = express.Router();
 
@@ -76,7 +77,7 @@ router.post('/', upload.single('audio'), async (req, res) => {
         }
         const { collections } = parsed;
 
-        console.log(`🎙️ Transcribing audio: ${originalname} (${(size / 1024).toFixed(1)} KB)`);
+        forRequest(req).info({ sizeBytes: size }, 'Transcribing audio');
 
         // Step 1: Transcribe audio → text
         const transcription = await transcribeAudio(buffer, originalname);
@@ -91,9 +92,7 @@ router.post('/', upload.single('audio'), async (req, res) => {
             });
         }
 
-        if (process.env.NODE_ENV !== 'production') {
-            console.log(`Transcribed voice query (model: ${model || 'default'}, ${queryText.length} chars)`);
-        }
+        forRequest(req).debug({ model: model || 'default', chars: queryText.length }, 'Transcribed voice query');
 
         // Step 2: Delegate to deep QueryExecutionEngine with source: 'voice'
         const outcome = await QueryExecutionEngine.executeNaturalLanguageQuery({
@@ -125,7 +124,7 @@ router.post('/', upload.single('audio'), async (req, res) => {
 
         return sendOutcome(res, outcome, voiceData);
     } catch (error) {
-        console.error('❌ Voice pipeline error:', error);
+        forRequest(req).error({ err: error }, 'Voice pipeline error');
         if (error instanceof multer.MulterError) {
             return res.status(400).json({
                 success: false,

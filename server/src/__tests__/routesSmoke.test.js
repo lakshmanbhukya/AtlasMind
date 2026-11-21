@@ -460,3 +460,32 @@ describe('security headers (full app)', () => {
         expect(res.headers['x-powered-by']).toBeUndefined();
     });
 });
+
+describe('request IDs (full app)', () => {
+    const app = require('../index');
+    const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+    test('every response carries a generated X-Request-Id', async () => {
+        const res = await request(app).get('/api/health');
+        expect(res.status).toBe(200);
+        expect(res.headers['x-request-id']).toMatch(UUID);
+    });
+
+    test('a safe incoming x-request-id is echoed back', async () => {
+        const res = await request(app).get('/api/health').set('x-request-id', 'abc-123');
+        expect(res.headers['x-request-id']).toBe('abc-123');
+    });
+
+    test('an unsafe or oversized x-request-id is replaced', async () => {
+        const bad = await request(app).get('/api/health').set('x-request-id', 'a b<script>');
+        expect(bad.headers['x-request-id']).toMatch(UUID);
+        const long = await request(app).get('/api/health').set('x-request-id', 'a'.repeat(65));
+        expect(long.headers['x-request-id']).toMatch(UUID);
+    });
+
+    test('a 404 also carries X-Request-Id', async () => {
+        const res = await request(app).get('/api/nope');
+        expect(res.status).toBe(404);
+        expect(res.headers['x-request-id']).toMatch(UUID);
+    });
+});

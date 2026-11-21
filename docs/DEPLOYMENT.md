@@ -22,6 +22,9 @@ Set environment variables:
 - GROQ_API_KEY=your_groq_api_key
 - JWT_SECRET=your_long_random_secret
 - ENCRYPTION_KEY=64_hex_chars
+- Optional: `LOG_LEVEL` (`fatal`, `error`, `warn`, `info`, `debug`, `trace` or `silent`; default `info`)
+
+The server logs one JSON object per line to stdout (pino), which Render's log view shows as is. Each request gets an `X-Request-Id` response header (an incoming `x-request-id` of up to 64 letters, digits, `_` or `-` is reused), and its "request completed" line carries the same ID as `req.id`, plus `connectionId` once the session is known. `/api/health` hits are not logged.
 
 ## One-off migrations
 

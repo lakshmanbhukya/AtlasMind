@@ -26,6 +26,7 @@ Status: `todo` · `in progress` · `done` · `won't do`. Effort: S (under an hou
 | F21 | `/connect` and `/databases` return 400 `validation_error` for a URI the driver cannot parse (e.g. `mongodb://host:notaport`) instead of 500 | `6af5fde` | `openTemporaryClient` wraps the synchronous `new MongoClient` throw in `InvalidConnectionStringError`. `mongodb-connection-string-url` was not used: it accepts a non-numeric port. |
 | F22 | CSP enforced (`Content-Security-Policy`, no longer Report-Only) with `connect-src 'self' https://atlasmind-on2d.onrender.com` | `dc29fd1` | Checked in headless Chromium against the production build: no violations on `/` or `/shared/*`. If the API moves off Render, update all three CSP blocks in `client/netlify.toml`. |
 | F15 | `connectionId` = `connectionIdFor(uri, dbName)`, so one cluster connected with two databases gives two separate sessions | `da81f33` | **Run the migration once after deploying:** `npm run migrate:connection-ids -- --dry-run`, then without the flag (see `docs/DEPLOYMENT.md`). Users reconnect once. If the migration is skipped, old history, dashboards and workspaces stay under the old ID. |
+| F17 | pino JSON logging (`utils/logger.js`, `LOG_LEVEL`, default `info`) and `pino-http` with an `X-Request-Id` on every response; `requireAuth` adds `connectionId` to the request's log lines | `eb369a5`, `7bf1ad8` | All `console.*` in `routes/`, `services/`, `stores/`, `models/`, `db/connection.js`, `utils/` and `index.js` replaced; `db/seed.js` and migrations stay on `console`. Redacts URIs, cookies and auth headers; the raw LLM output and voice filenames are no longer logged. `/api/health` is not logged. |
 
 ## To do: quick wins (S)
 
@@ -42,7 +43,6 @@ Status: `todo` · `in progress` · `done` · `won't do`. Effort: S (under an hou
 | ID | Fix | Status | Notes |
 |----|-----|--------|-------|
 | F16 | Stream LLM progress and explanations over SSE | todo | |
-| F17 | Structured logging with pino and a request ID | todo | |
 | F18 | Split `ambiguityGate.js` (1033 lines), `safetyGuard.js` and `queryExecutionEngine.js` by stage | todo | |
 | F19 | `// @ts-check` plus JSDoc on the server | todo | |
 

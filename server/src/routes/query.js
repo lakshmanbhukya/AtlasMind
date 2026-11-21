@@ -2,6 +2,7 @@ const express = require('express');
 const { QueryExecutionEngine } = require('../services/queryExecutionEngine');
 const queryHistoryStore = require('../stores/queryHistoryStore');
 const { sendOutcome, sendError } = require('./engineHttp');
+const { forRequest } = require('../utils/logger');
 
 const router = express.Router();
 
@@ -45,7 +46,7 @@ router.post('/', async (req, res) => {
 
         return sendOutcome(res, outcome);
     } catch (error) {
-        console.error('❌ Query pipeline error:', error);
+        forRequest(req).error({ err: error }, 'Query pipeline error');
         return sendError(res, error, 'query_error', 'Failed to process query');
     }
 });
@@ -78,7 +79,7 @@ router.post('/export', async (req, res) => {
         res.setHeader('Content-Type', 'application/json');
         return res.json(exportPayload);
     } catch (error) {
-        console.error('❌ Export error:', error);
+        forRequest(req).error({ err: error }, 'Export error');
         return res.status(500).json({
             success: false,
             error: { code: 'export_error', message: error.message },
@@ -101,7 +102,7 @@ router.get('/history', async (req, res) => {
             meta: { count: items.length },
         });
     } catch (error) {
-        console.error('❌ Chat history error:', error);
+        forRequest(req).error({ err: error }, 'Chat history error');
         return res.status(500).json({
             success: false,
             error: { code: 'history_error', message: error.message },
@@ -146,7 +147,7 @@ router.patch('/history/:id', async (req, res) => {
 
         return res.json({ success: true, message: 'History item updated successfully' });
     } catch (error) {
-        console.error('❌ Rename history error:', error);
+        forRequest(req).error({ err: error }, 'Rename history error');
         return res.status(500).json({
             success: false,
             error: { code: 'rename_error', message: error.message },
@@ -174,7 +175,7 @@ router.delete('/history/:id', async (req, res) => {
             message: 'History item deleted successfully',
         });
     } catch (error) {
-        console.error('❌ Delete history error:', error);
+        forRequest(req).error({ err: error }, 'Delete history error');
         return res.status(500).json({
             success: false,
             error: { code: 'delete_error', message: error.message },
@@ -200,7 +201,7 @@ router.post('/approve', async (req, res) => {
 
         return sendOutcome(res, outcome);
     } catch (error) {
-        console.error('❌ Approved write execution error:', error);
+        forRequest(req).error({ err: error }, 'Approved write execution error');
         return sendError(res, error, 'execution_error', 'Failed to apply approved write transaction');
     }
 });

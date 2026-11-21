@@ -2,6 +2,7 @@ const express = require('express');
 const { ObjectId } = require('mongodb');
 const dashboardStore = require('../stores/dashboardStore');
 const { UnsafePipelineError } = require('../services/queryExecutor');
+const { forRequest } = require('../utils/logger');
 
 const router = express.Router();
 
@@ -28,7 +29,7 @@ function sendDashboardError(res, error, label) {
             error: { code: error.code, message: error.message },
         });
     }
-    console.error(`❌ Dashboard ${label} error:`, error);
+    forRequest(res.req).error({ err: error, op: label }, 'Dashboard operation failed');
     return res.status(500).json({
         success: false,
         error: { code: 'dashboard_error', message: 'Dashboard operation failed' },

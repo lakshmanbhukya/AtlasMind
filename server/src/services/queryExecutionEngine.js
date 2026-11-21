@@ -14,6 +14,7 @@ const ambiguityGate = require('./ambiguityGate');
 const { verifyInterpretationCompliance } = require('./interpretationComplianceVerifier');
 const { resolveExperiment } = require('./experiment');
 const { resolve: resolveEffectiveScope } = require('./effectiveScope');
+const log = require('../utils/logger').logger.child({ module: 'queryExecutionEngine' });
 const {
     QueryEngineError,
     ValidationError,
@@ -78,7 +79,7 @@ async function ensureApprovalIndexes(db) {
             approvalIndexesInitialized = true;
         }
     } catch (err) {
-        console.warn('Could not ensure approval_tokens indexes:', err.message);
+        log.warn({ err }, 'Could not ensure approval_tokens indexes');
     }
 }
 
@@ -406,7 +407,7 @@ async function runNaturalLanguageQuery(params) {
             details: compRes.details || null,
         };
         if (!compRes.compliant) {
-            console.warn(`⚠️ [COMPLIANCE WARNING] Pipeline failed interpretation compliance: ${compRes.reason}`);
+            log.warn({ reason: compRes.reason }, 'Pipeline failed interpretation compliance');
         }
     }
 

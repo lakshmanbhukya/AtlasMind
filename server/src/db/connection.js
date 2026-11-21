@@ -1,5 +1,6 @@
 require('../utils/dnsConfig');
 const { MongoClient } = require('mongodb');
+const log = require('../utils/logger').logger.child({ module: 'db' });
 
 /** @type {MongoClient|null} */
 let client = null;
@@ -32,7 +33,7 @@ async function connectToDatabase() {
     await client.connect();
     db = client.db(DB_NAME);
 
-    console.log(`✅ Connected to MongoDB — database: ${DB_NAME}`);
+    log.info({ db: DB_NAME }, 'Connected to MongoDB');
     return db;
 }
 
@@ -55,7 +56,7 @@ async function closeConnection() {
         await client.close();
         client = null;
         db = null;
-        console.log('🔌 MongoDB connection closed');
+        log.info('MongoDB connection closed');
     }
 }
 

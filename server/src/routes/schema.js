@@ -1,5 +1,6 @@
 const express = require('express');
 const { getSchema } = require('../services/tenantSchema');
+const { forRequest } = require('../utils/logger');
 
 const router = express.Router();
 
@@ -21,7 +22,7 @@ router.get('/', async (req, res) => {
             data: schema,
         });
     } catch (error) {
-        console.error('❌ Schema profiling error:', error);
+        forRequest(req).error({ err: error }, 'Schema profiling error');
         return res.status(500).json({
             success: false,
             error: {
@@ -47,7 +48,7 @@ router.get('/refresh', async (req, res) => {
             meta: { cacheRefreshed: true },
         });
     } catch (error) {
-        console.error('❌ Schema refresh error:', error);
+        forRequest(req).error({ err: error }, 'Schema refresh error');
         return res.status(500).json({
             success: false,
             error: {

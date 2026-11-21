@@ -8,6 +8,7 @@ const { requireAuth } = require('../middleware/auth');
 const { evictUserDb } = require('../services/userDbPool');
 const { listUserDatabases, discoverDatabases, openTemporaryClient, InvalidConnectionStringError } = require('../services/databaseDiscovery');
 const { listUserCollections } = require('../services/tenantSchema');
+const { forRequest } = require('../utils/logger');
 
 const isMongoUri = (s) => typeof s === 'string' && /^mongodb(\+srv)?:\/\//.test(s);
 
@@ -98,7 +99,7 @@ router.post('/connect', async (req, res) => {
     } catch (err) {
         if (err instanceof InvalidConnectionStringError) return res.status(400).json(INVALID_URI_RESPONSE);
 
-        console.error('❌ [CONNECT_ERROR]', err);
+        forRequest(req).error({ err }, 'Connect failed');
 
         // Distinguish connection errors from other errors
         if (connectionFailed(err)) {
@@ -150,7 +151,7 @@ router.post('/databases', async (req, res) => {
                 error: { code: 'connection_failed', message: 'Could not connect to MongoDB. Please check your connection string.' },
             });
         }
-        console.error('❌ [LIST_DATABASES_ERROR]', err);
+        forRequest(req).error({ err }, 'List databases failed');
         return res.status(500).json({ success: false, error: { code: 'list_databases_failed', message: 'Failed to list databases' } });
     }
 });
@@ -184,7 +185,7 @@ router.get('/:connectionId', requireAuth, async (req, res) => {
             },
         });
     } catch (err) {
-        console.error('❌ [GET_CONNECTION_ERROR]', err);
+        forRequest(req).error({ err }, 'Get connection failed');
         return res.status(500).json({ success: false, error: { code: 'connection_fetch_failed', message: 'Failed to fetch connection details' } });
     }
 });

@@ -1,5 +1,6 @@
 const express = require('express');
 const dashboardStore = require('../stores/dashboardStore');
+const { forRequest } = require('../utils/logger');
 
 const router = express.Router();
 
@@ -27,7 +28,7 @@ router.get('/:token', async (req, res) => {
 
         return res.json({ success: true, data: pin });
     } catch (error) {
-        console.error('❌ Shared dashboard fetch error:', error);
+        forRequest(req).error({ err: error }, 'Shared dashboard fetch error');
         return res.status(500).json({
             success: false,
             error: { code: 'dashboard_error', message: 'Failed to load shared dashboard widget' },

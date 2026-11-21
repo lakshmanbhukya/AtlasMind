@@ -14,14 +14,16 @@ Status: `todo` · `in progress` · `done` · `won't do`. Effort: S (under an hou
 | F6 | Dockerfile: Node 24, `npm ci --omit=dev`, non-root `node` user, `HEALTHCHECK` | `dc1ae0f` | |
 | F7 | Indexes on `dashboards`: `{connectionId, pinnedAt}` and a unique sparse index on `shareToken` | `e389ca3` | Shipped with F1. |
 | F2 | Length limit on the question text | (already existed) | `queryExecutionEngine.js` rejects questions over 2000 characters. |
+| F5 | Protected collection names: exact `system`/`admin`/`local`/`config` and the `system.` namespace; databases exact `admin`/`local`/`config`. Names may contain `-` and `.` (no `..`, no trailing `.`, max 120 chars) | `f314a04` | `configurations`, `order-items`, `sales.2024` are now allowed. Database names keep the strict identifier regex (`$lookup.from.db`, `$merge.into.db`). |
+| F12 | `llmLimiter`: 30 POSTs per 5 min per `connectionId` on `/api/query` and `/api/voice` (after `requireAuth`), code `too_many_requests`; `generalLimiter` raised to 300 per 15 min per IP | `5b140f2` | History GET/PATCH/DELETE under `/api/query` are not counted. |
+| F14 | Connection strings encrypted with AES-256-GCM as `v2:<iv>:<tag>:<ct>`; the legacy CBC `iv:ct` format still decrypts | `0a021d9` | No migration: `/connect` re-encrypts on every upsert. |
 
 ## To do: quick wins (S)
 
 | ID | Fix | Status | Where | Notes |
 |----|-----|--------|-------|-------|
-| F5 | Narrow the protected collection-name check: match exact names and the `system.` namespace, and allow `-` and `.` in names | todo | `server/src/services/safetyGuard.js` (`isProtectedName`, `IDENTIFIER_RE`) | `configurations`, `systems`, `order-items` and `sales.2024` are currently blocked. The tests mark prefix matching as intentional, so this is a product decision. |
-| F8 | Make error responses consistent: add `code` to the `connections.js` errors, and stop returning `error.message` on 500 in `dashboard.js` `sendDashboardError` | todo | `server/src/routes/connections.js`, `server/src/routes/dashboard.js` | The leak in the public `sharedDashboard.js` was fixed in F1. |
-| F13 | Security headers: `helmet` on the server, CSP and `X-Frame-Options` in `client/netlify.toml` | todo | `server/src/index.js`, `client/netlify.toml` | Test the CSP against the Recharts and GSAP inline styles. |
+| F8 | Make error responses consistent: add `code` to the `connections.js` errors, and stop returning `error.message` on 500 in `dashboard.js` `sendDashboardError` | in progress | `server/src/routes/connections.js`, `server/src/routes/dashboard.js` | `connections.js` part done in `73b64c7` (codes documented in `docs/API.md`); `dashboard.js` part is plan 3. The leak in the public `sharedDashboard.js` was fixed in F1. |
+| F13 | Security headers: `helmet` on the server, CSP and `X-Frame-Options` in `client/netlify.toml` | in progress | `server/src/index.js`, `client/netlify.toml` | Server part (helmet defaults) done in `ccada60`; `netlify.toml` part is plan 3. Test the CSP against the Recharts and GSAP inline styles. |
 
 ## To do: medium effort (M)
 
@@ -30,8 +32,6 @@ Status: `todo` · `in progress` · `done` · `won't do`. Effort: S (under an hou
 | F9 | Split the client bundle (currently 1.18 MB, 371 KB gzipped): `React.lazy` for the landing, app and dashboard pages, and Recharts in its own chunk | todo | `client/src/main.jsx`, `client/src/App.jsx`, `client/vite.config.js` | |
 | F10 | Keep only one animation library (GSAP or framer-motion) | todo | about 8 files in `client/src/components/landing/`, `InsightDashboard.jsx`, `DashboardPage.jsx` | |
 | F11 | Run the client in CI: lint, unit tests, build, and the Playwright `chat.spec.ts` (needs no server) | todo | `.github/workflows/ci.yml` | |
-| F12 | Rate-limit `/api/query` and `/api/voice` per `connectionId` instead of per IP | todo | `server/src/middleware/rateLimiter.js` | The current limit is 100 requests per 15 min per IP across all of `/api`, which users behind a shared NAT will hit. |
-| F14 | Encrypt stored connection strings with AES-256-GCM instead of CBC | todo | `server/src/utils/encryption.js` | Use a `v2:` prefix and keep decrypting the old format. |
 | F15 | Include `dbName` in the `connectionId` hash so two sessions using the same URI with different databases don't overwrite each other | todo | `server/src/routes/connections.js` | Changes existing IDs, so a migration is needed. |
 
 ## To do: larger investments (L)
@@ -48,3 +48,4 @@ Status: `todo` · `in progress` · `done` · `won't do`. Effort: S (under an hou
 | ID | Fix | Status | Notes |
 |----|-----|--------|-------|
 | F20 | Add a revoke endpoint for share links (`DELETE /api/dashboard/:id/share`) and a button for it in the UI | todo | Comes from F1. Today, deleting the pin is the only way to revoke a link. |
+| F21 | `/connect` and `/databases`: a URI the driver cannot parse (e.g. `mongodb://host:notaport`) throws `MongoRuntimeError`, which `connectionFailed` doesn't recognise, so it returns 500 `connection_save_failed` instead of 400 | todo | Found during F8. Map driver parse errors to `validation_error` (400). |

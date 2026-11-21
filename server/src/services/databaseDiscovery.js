@@ -4,9 +4,28 @@ const { isUserCollection } = require('../db/systemCollections');
 
 const INTERNAL_DATABASES = new Set(['admin', 'local', 'config']);
 
+/**
+ * Thrown when the driver cannot parse a connection string. `new MongoClient`
+ * parses the URI synchronously (throwing `MongoParseError`, or
+ * `MongoRuntimeError` for e.g. a non-numeric port), before any network I/O.
+ * Routes map this to 400 `validation_error`.
+ */
+class InvalidConnectionStringError extends Error {
+    constructor(cause) {
+        super('Invalid MongoDB connection string format');
+        this.name = 'InvalidConnectionStringError';
+        this.cause = cause;
+    }
+}
+
 /** Opens a short-lived, small-pool client for a connection string the user has not stored yet. */
 async function openTemporaryClient(connectionString) {
-    const client = new MongoClient(connectionString, { serverSelectionTimeoutMS: 8000, maxPoolSize: 2 });
+    let client;
+    try {
+        client = new MongoClient(connectionString, { serverSelectionTimeoutMS: 8000, maxPoolSize: 2 });
+    } catch (err) {
+        throw new InvalidConnectionStringError(err);
+    }
     try {
         await client.connect();
     } catch (err) {
@@ -61,4 +80,4 @@ async function discoverDatabases(connectionString) {
     }
 }
 
-module.exports = { listUserDatabases, discoverDatabases, openTemporaryClient };
+module.exports = { listUserDatabases, discoverDatabases, openTemporaryClient, InvalidConnectionStringError };

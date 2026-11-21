@@ -35,7 +35,7 @@ Validates a MongoDB connection string + database name, stores encrypted credenti
 ```
 
 **Errors** (every error carries `error.code`):
-- `validation_error` (400): the connection string is not a `mongodb://` / `mongodb+srv://` URI, or `dbName` is missing.
+- `validation_error` (400): the connection string is not a `mongodb://` / `mongodb+srv://` URI, the driver cannot parse it (for example a non-numeric port), or `dbName` is missing.
 - `empty_database` (400): the database has no collections; the body also carries `availableDatabases`.
 - `connection_failed` (400): MongoDB could not be reached or rejected the connection string.
 - `connection_save_failed` (500): any other failure while validating or storing the connection.
@@ -59,7 +59,7 @@ Lists the non-empty databases a connection string can see, so the landing page c
 }
 ```
 
-**Errors**: `validation_error` (400) for a malformed connection string, `connection_failed` (400) for an unreachable cluster, `list_databases_failed` (500) otherwise.
+**Errors**: `validation_error` (400) for a malformed or unparseable connection string, `connection_failed` (400) for an unreachable cluster, `list_databases_failed` (500) otherwise.
 
 ### GET `/api/connections/:connectionId` *(Protected)*
 Returns the stored details (`connectionId`, `dbName`, `label`, `lastConnectedAt`, `createdAt`) of the session's own connection.

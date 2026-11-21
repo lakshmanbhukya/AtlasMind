@@ -20,7 +20,7 @@ Client (`cd client`):
 - `npm run dev`: Vite on 5173; proxies `/api` to `localhost:3001`
 - `npm test`: Vitest unit tests (`src/**/*.test.js`, node environment); single file: `npx vitest run src/lib/conversation.test.js`
 - `npm run build`, `npm run lint` (ESLint flat config), `npm run test:e2e` (Playwright, `client/tests/e2e/`; `chat.spec.ts` stubs `/api` with fixtures from `src/lib/__fixtures__/`, so it needs no server)
-- CI runs the client job (lint, unit tests, build, Playwright e2e on Node 24) when `client/**` changes; it never blocks the server image release. The client deploys to Netlify; CI builds only the server image
+- CI is server-only by choice: it never runs on `client/**` changes and has no client job. Run the client checks above locally before merging. The client deploys to Netlify; CI builds only the server image
 - `VITE_SERVER_URL` sets the API base URL; it defaults to same-origin `/api/`
 
 `start.bat` starts both dev servers in separate windows (Windows).

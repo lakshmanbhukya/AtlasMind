@@ -1,9 +1,8 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, Suspense } from 'react';
+import { lazyWithReload } from './lib/lazyWithReload';
 import { useAuth } from './hooks/useAuth';
 import { useSchema } from './hooks/useSchema';
 import { useWorkspaces } from './hooks/useWorkspaces';
-import AppShell from './components/app/AppShell';
-import LandingPage from './components/landing/LandingPage';
 import { LogoMark } from './components/ui/vg/primitives';
 import {
   fetchDashboard,
@@ -13,6 +12,24 @@ import {
   setQueryHistoryPinned,
   deleteQueryHistoryItem,
 } from './services/api';
+
+// Separate chunks: visitors never download the app, and signed-in users never
+// download the GSAP landing page.
+const AppShell = lazyWithReload(() => import('./components/app/AppShell'));
+const LandingPage = lazyWithReload(() => import('./components/landing/LandingPage'));
+
+function LoadingScreen({ message }) {
+  return (
+    <div className="flex items-center justify-center h-[100dvh] bg-vg-bg font-ui">
+      <div role="status" className="flex flex-col items-center gap-4">
+        <span className="animate-pulse motion-reduce:animate-none">
+          <LogoMark />
+        </span>
+        <p className="text-[13.5px] text-vg-text-3">{message}</p>
+      </div>
+    </div>
+  );
+}
 
 /**
  * App — Root component.
@@ -146,57 +163,54 @@ export default function App() {
   }, [isLoading]);
 
   if (initialLoading) {
-    return (
-      <div className="flex items-center justify-center h-[100dvh] bg-vg-bg font-ui">
-        <div role="status" className="flex flex-col items-center gap-4">
-          <span className="animate-pulse motion-reduce:animate-none">
-            <LogoMark />
-          </span>
-          <p className="text-[13.5px] text-vg-text-3">Checking your session…</p>
-        </div>
-      </div>
-    );
+    return <LoadingScreen message="Checking your session…" />;
   }
 
   if (!isAuthenticated) {
-    return <LandingPage onConnected={refetch} />;
+    return (
+      <Suspense fallback={<LoadingScreen message="Loading…" />}>
+        <LandingPage onConnected={refetch} />
+      </Suspense>
+    );
   }
 
   return (
-    <AppShell
-      connectionMeta={connectionMeta}
-      onLogout={logout}
-      schemaState={schemaState}
-      activeView={activeView}
-      onViewChange={setActiveView}
-      chatKey={chatKey}
-      onNewQuery={handleNewQuery}
-      history={history}
-      historyLoading={historyLoading}
-      highlightedMessageId={highlightedMessageId}
-      onSelectHistory={handleSelectHistory}
-      onRenameHistory={handleRenameHistory}
-      onTogglePin={handleTogglePin}
-      onDeleteHistory={handleDeleteHistory}
-      onQuerySuccess={loadHistory}
-      pins={pins}
-      pinsLoading={pinsLoading}
-      onPinAdded={loadPins}
-      onRemovePin={handleRemovePin}
-      scope={{
-        workspaces,
-        activeWorkspaceId,
-        onSelectWorkspace: handleSelectWorkspace,
-        scopeMode,
-        onChangeScopeMode: setScopeMode,
-        selectedCollections,
-        onSetCollections: setSelectedCollections,
-      }}
-      workspaceActions={{
-        onCreateWorkspace: createWorkspace,
-        onUpdateWorkspace: updateWorkspace,
-        onDeleteWorkspace: deleteWorkspace,
-      }}
-    />
+    <Suspense fallback={<LoadingScreen message="Loading your workspace…" />}>
+      <AppShell
+        connectionMeta={connectionMeta}
+        onLogout={logout}
+        schemaState={schemaState}
+        activeView={activeView}
+        onViewChange={setActiveView}
+        chatKey={chatKey}
+        onNewQuery={handleNewQuery}
+        history={history}
+        historyLoading={historyLoading}
+        highlightedMessageId={highlightedMessageId}
+        onSelectHistory={handleSelectHistory}
+        onRenameHistory={handleRenameHistory}
+        onTogglePin={handleTogglePin}
+        onDeleteHistory={handleDeleteHistory}
+        onQuerySuccess={loadHistory}
+        pins={pins}
+        pinsLoading={pinsLoading}
+        onPinAdded={loadPins}
+        onRemovePin={handleRemovePin}
+        scope={{
+          workspaces,
+          activeWorkspaceId,
+          onSelectWorkspace: handleSelectWorkspace,
+          scopeMode,
+          onChangeScopeMode: setScopeMode,
+          selectedCollections,
+          onSetCollections: setSelectedCollections,
+        }}
+        workspaceActions={{
+          onCreateWorkspace: createWorkspace,
+          onUpdateWorkspace: updateWorkspace,
+          onDeleteWorkspace: deleteWorkspace,
+        }}
+      />
+    </Suspense>
   );
 }

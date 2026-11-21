@@ -54,6 +54,16 @@ async function stubApi(page: Page, queryReplies: Reply[], approveReply?: Reply) 
   return { queryBodies, approveBodies };
 }
 
+/**
+ * The app shell is a lazy chunk that loads after the `load` event, and a cold
+ * Vite dev server can take a while to transform it, so wait for the composer
+ * with the navigation timeout rather than the 10s action timeout.
+ */
+async function openApp(page: Page) {
+  await page.goto('/');
+  await expect(page.getByRole('textbox', { name: 'Question' })).toBeVisible({ timeout: 30_000 });
+}
+
 async function ask(page: Page, text: string) {
   await page.getByRole('textbox', { name: 'Question' }).fill(text);
   await page.getByRole('button', { name: 'Send question' }).click();
@@ -65,7 +75,7 @@ const userBubbles = (page: Page) => conversation(page).locator('[id^="msg-"]').f
 test.describe('Chat thread', () => {
   test('answer turn', async ({ page }) => {
     const { queryBodies } = await stubApi(page, [{ body: fixture('answer') }]);
-    await page.goto('/');
+    await openApp(page);
     await ask(page, 'Total revenue by region');
 
     await expect(conversation(page).getByText('Read-only verified')).toBeVisible();
@@ -75,7 +85,7 @@ test.describe('Chat thread', () => {
 
   test('clarification answered with Continue re-asks without a second user turn', async ({ page }) => {
     const { queryBodies } = await stubApi(page, [{ body: fixture('clarification') }, { body: fixture('answer') }]);
-    await page.goto('/');
+    await openApp(page);
     await ask(page, 'Show the top products');
 
     await expect(conversation(page).getByText('Clarification required')).toBeVisible();
@@ -90,7 +100,7 @@ test.describe('Chat thread', () => {
 
   test('clarification bypassed', async ({ page }) => {
     const { queryBodies } = await stubApi(page, [{ body: fixture('clarification') }, { body: fixture('answer') }]);
-    await page.goto('/');
+    await openApp(page);
     await ask(page, 'Show the top products');
 
     await page.getByRole('button', { name: 'Run with assumptions' }).click();
@@ -104,7 +114,7 @@ test.describe('Chat thread', () => {
       { body: fixture('scope-insufficient') },
       { body: fixture('answer') },
     ]);
-    await page.goto('/');
+    await openApp(page);
     await ask(page, 'Revenue per customer segment');
 
     await expect(conversation(page).getByText('Collections outside scope')).toBeVisible();
@@ -120,7 +130,7 @@ test.describe('Chat thread', () => {
 
   test('approval: approve runs the write in place', async ({ page }) => {
     const { approveBodies } = await stubApi(page, [{ body: fixture('approval-required') }]);
-    await page.goto('/');
+    await openApp(page);
     await ask(page, 'Copy paid orders into orders_archive');
 
     await expect(conversation(page).getByText('Write approval required')).toBeVisible();
@@ -133,7 +143,7 @@ test.describe('Chat thread', () => {
 
   test('approval: discard keeps the card and drops the token', async ({ page }) => {
     const { approveBodies } = await stubApi(page, [{ body: fixture('approval-required') }]);
-    await page.goto('/');
+    await openApp(page);
     await ask(page, 'Copy paid orders into orders_archive');
 
     await page.getByRole('button', { name: 'Discard' }).click();
@@ -147,7 +157,7 @@ test.describe('Chat thread', () => {
       status: 401,
       body: { success: false, error: { code: 'invalid_approval_token', message: 'Approval token expired' } },
     });
-    await page.goto('/');
+    await openApp(page);
     await ask(page, 'Copy paid orders into orders_archive');
 
     await page.getByRole('button', { name: 'Approve and run' }).click();
@@ -157,7 +167,7 @@ test.describe('Chat thread', () => {
 
   test('blocked turn from a 422 safety_violation', async ({ page }) => {
     await stubApi(page, [{ status: 422, body: fixture('blocked-422') }]);
-    await page.goto('/');
+    await openApp(page);
     await ask(page, 'Join users with system users');
 
     await expect(conversation(page).getByText('Query blocked')).toBeVisible();
@@ -167,7 +177,7 @@ test.describe('Chat thread', () => {
 
   test('error turn retries the same question', async ({ page }) => {
     const { queryBodies } = await stubApi(page, [{ status: 500, body: fixture('error-500') }, { body: fixture('answer') }]);
-    await page.goto('/');
+    await openApp(page);
     await ask(page, 'Total revenue by region');
 
     await expect(conversation(page).getByText('Request failed')).toBeVisible();
@@ -182,7 +192,7 @@ test.describe('Chat thread', () => {
   test('history replay renders the stored answer and highlights it', async ({ page }) => {
     await stubApi(page, []);
     const item = fixture('history').data[0];
-    await page.goto('/');
+    await openApp(page);
 
     await page.getByRole('button', { name: item.query }).first().click();
     const answer = page.locator(`#msg-assistant-${item.id}`);

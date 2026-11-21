@@ -170,9 +170,19 @@ export async function removeDashboardPin(pinId) {
     await api.delete(`dashboard/${pinId}`);
 }
 
-/** @param {string} pinId */
-export async function fetchSharedDashboardPin(pinId) {
-    const { data } = await api.get(`dashboard/shared/${pinId}`);
+/**
+ * Create (or reuse) a pin's secret share token.
+ * @param {string} pinId
+ * @returns {Promise<{ shareToken: string }>}
+ */
+export async function shareDashboardPin(pinId) {
+    const { data } = await api.post(`dashboard/${pinId}/share`);
+    return data.data;
+}
+
+/** @param {string} shareToken */
+export async function fetchSharedDashboardPin(shareToken) {
+    const { data } = await api.get(`dashboard/shared/${shareToken}`);
     return data;
 }
 

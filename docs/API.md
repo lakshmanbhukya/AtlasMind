@@ -474,8 +474,18 @@ Re-runs the pinned MQL aggregation pipeline against the user's live database poo
 ### DELETE `/api/dashboard/:id`
 Deletes a dashboard pin.
 
-### GET `/api/dashboard/shared/:id` *(Public Endpoint - No Auth Required)*
-Fetches a read-only, sanitized dashboard widget for public sharing. Excludes internal credentials and connection URIs.
+### POST `/api/dashboard/:id/share`
+Makes a pin publicly shareable. Creates a secret, random 32-character share token for the pin, or returns the existing one if the pin was already shared. Returns **400** for a malformed pin ID and **404** if the pin does not belong to the current connection. Deleting the pin revokes its link.
+
+**Success Response (HTTP 200)**:
+```json
+{ "success": true, "data": { "shareToken": "q3N0yJb1d0v7C1o2XkYpQm9ZtRf4hL8w" } }
+```
+
+The client builds the public link as `${origin}/shared/<shareToken>`.
+
+### GET `/api/dashboard/shared/:token` *(Public Endpoint - No Auth Required)*
+Fetches a read-only, sanitized dashboard widget for public sharing, by its share token. Only pins explicitly shared via `POST /api/dashboard/:id/share` are reachable; a pin's ObjectId does not work here. Excludes internal credentials, connection URIs and the share token. A malformed or unknown token returns **404**.
 
 **Success Response (HTTP 200)**:
 ```json

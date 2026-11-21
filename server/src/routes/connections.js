@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { encrypt, hashString } = require('../utils/encryption');
+const { encrypt, connectionIdFor } = require('../utils/encryption');
 const userConnections = require('../models/UserConnection');
 const { upsertConnection } = userConnections;
 const { issueSession } = require('../auth/session');
@@ -71,7 +71,7 @@ router.post('/connect', async (req, res) => {
         }
 
         // ── Database is valid — proceed with storing ──
-        const connectionId = hashString(connectionString);
+        const connectionId = connectionIdFor(connectionString, dbName);
         const encryptedUri = encrypt(connectionString);
 
         await upsertConnection({
@@ -81,7 +81,7 @@ router.post('/connect', async (req, res) => {
             label: label || 'My Database',
         });
 
-        // The stored dbName may have changed: drop any pooled handle to the old one
+        // Drop any pooled handle so the next request reopens with the stored record
         await evictUserDb(connectionId);
 
         issueSession(res, connectionId);

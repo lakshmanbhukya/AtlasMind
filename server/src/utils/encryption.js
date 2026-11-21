@@ -77,8 +77,24 @@ function hashString(text) {
   return crypto.createHash('sha256').update(text).digest('hex');
 }
 
+/**
+ * The `connectionId` for a stored connection: a hash of the connection string
+ * AND the database name, so the same cluster connected with two different
+ * databases gives two independent sessions (F15). The NUL separator cannot
+ * appear in a URI or a MongoDB database name, so no two pairs collide.
+ *
+ * @param {string} connectionString
+ * @param {string} dbName
+ * @returns {string} 64 hex chars
+ */
+function connectionIdFor(connectionString, dbName) {
+  if (!connectionString || !dbName) throw new Error('connectionIdFor needs a connection string and a dbName');
+  return hashString(`${connectionString}\u0000${dbName}`);
+}
+
 module.exports = {
   encrypt,
   decrypt,
-  hashString
+  hashString,
+  connectionIdFor
 };

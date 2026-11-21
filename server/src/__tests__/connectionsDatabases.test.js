@@ -24,7 +24,7 @@ jest.mock('../models/UserConnection', () => ({ upsertConnection: jest.fn(), getC
 jest.mock('../auth/session', () => ({ issueSession: jest.fn() }));
 jest.mock('../middleware/auth', () => ({ requireAuth: (_req, _res, next) => next() }));
 jest.mock('../services/userDbPool', () => ({ evictUserDb: jest.fn() }));
-jest.mock('../utils/encryption', () => ({ encrypt: jest.fn(), hashString: jest.fn() }));
+jest.mock('../utils/encryption', () => ({ encrypt: jest.fn(), connectionIdFor: jest.fn((uri, db) => `id:${uri}|${db}`) }));
 
 const connectionsRouter = require('../routes/connections');
 const { MongoClient } = require('mongodb');
@@ -167,6 +167,22 @@ describe('POST /api/connections/connect failures', () => {
         expect(res.body.error).toEqual({ code: 'validation_error', message: 'Invalid MongoDB connection string format' });
         expect(mockConnect).not.toHaveBeenCalled();
         expect(upsertConnection).not.toHaveBeenCalled();
+    });
+
+    test('the same URI with two databases is stored as two connections (F15)', async () => {
+        mockListCollections.mockResolvedValue([{ name: 'orders' }]);
+        upsertConnection.mockResolvedValue({});
+
+        for (const dbName of ['shop', 'analytics']) {
+            const res = await request(app)
+                .post('/api/connections/connect')
+                .send({ connectionString: 'mongodb://localhost:27017', dbName });
+            expect(res.status).toBe(200);
+        }
+
+        const ids = upsertConnection.mock.calls.map(([arg]) => arg.connectionId);
+        expect(ids).toEqual(['id:mongodb://localhost:27017|shop', 'id:mongodb://localhost:27017|analytics']);
+        expect(upsertConnection.mock.calls.map(([arg]) => arg.dbName)).toEqual(['shop', 'analytics']);
     });
 
     test('maps a failed save to 500 connection_save_failed', async () => {

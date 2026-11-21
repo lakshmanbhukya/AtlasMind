@@ -13,6 +13,7 @@ Server (`cd server`):
 - `npm test`: Jest (`jest --verbose`). CI runs this on Node 24 when `server/**` changes; on a push to `main` it then builds and pushes the `atlasmind-server` image (gated only on the server job)
 - Single test: `npx jest src/__tests__/routesSmoke.test.js` or `npx jest -t "test name"`
 - `npm run test:coverage`, `npm run seed` (seeds the `sample_sales` collection)
+- `npm run migrate:connection-ids -- --dry-run` (then without `--dry-run`): one-off F15 migration that re-keys stored connections to `connectionIdFor(uri, dbName)`; see `docs/DEPLOYMENT.md`
 
 Client (`cd client`):
 - `npm run dev`: Vite on 5173; proxies `/api` to `localhost:3001`

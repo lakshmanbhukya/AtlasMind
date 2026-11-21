@@ -32,7 +32,7 @@ async function initializeCollection() {
  * Creates or updates a user connection record.
  * 
  * @param {Object} data
- * @param {string} data.connectionId - A deterministic hash of the connection string.
+ * @param {string} data.connectionId - A deterministic hash of the connection string and dbName (`connectionIdFor`).
  * @param {string} data.encryptedUri - The AES-Encrypted connection URI.
  * @param {string} data.dbName - The target database name.
  * @param {string} [data.label] - An optional label (e.g. "Prod", "Test")

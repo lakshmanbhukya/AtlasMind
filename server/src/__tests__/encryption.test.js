@@ -42,6 +42,24 @@ describe('B1: encryption', () => {
         expect(hash1).toHaveLength(64);
     });
 
+    test('connectionIdFor is stable and differs by dbName (F15)', () => {
+        process.env.ENCRYPTION_KEY = validKey;
+        let encryption;
+        jest.isolateModules(() => {
+            encryption = require('../utils/encryption');
+        });
+
+        const uri = 'mongodb://user:pass@localhost:27017';
+        const shop = encryption.connectionIdFor(uri, 'shop');
+        expect(shop).toBe(encryption.connectionIdFor(uri, 'shop'));
+        expect(shop).toHaveLength(64);
+        expect(shop).not.toBe(encryption.connectionIdFor(uri, 'analytics'));
+        // Not the pre-F15 ID, and the separator keeps (uri, db) pairs apart.
+        expect(shop).not.toBe(encryption.hashString(uri));
+        expect(encryption.connectionIdFor('mongodb://a/b', 'c')).not.toBe(encryption.connectionIdFor('mongodb://a/', 'bc'));
+        expect(() => encryption.connectionIdFor(uri, '')).toThrow();
+    });
+
     test('throws at module startup if ENCRYPTION_KEY is missing', () => {
         delete process.env.ENCRYPTION_KEY;
         expect(() => {

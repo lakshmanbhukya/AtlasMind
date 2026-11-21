@@ -23,6 +23,23 @@ Set environment variables:
 - JWT_SECRET=your_long_random_secret
 - ENCRYPTION_KEY=64_hex_chars
 
+## One-off migrations
+
+### F15: connectionId includes the database name
+
+Since F15, a `connectionId` is the hash of the connection string **and** `dbName`, so one cluster connected with two databases gives two separate sessions. Connections stored before F15 still have the old ID. Run the migration once after deploying F15, from `server/` with the production `MONGODB_URI` and `ENCRYPTION_KEY` set (in a Render shell, for example):
+
+```bash
+npm run migrate:connection-ids -- --dry-run   # report what would move; writes nothing
+npm run migrate:connection-ids                # apply
+```
+
+- It re-keys `user_connections` and the tenant rows in `query_history`, `dashboards`, `workspaces` and `few_shot_examples`. Share links keep working, because they use `shareToken`.
+- It is safe to re-run. A connection already on its new ID is skipped, and an interrupted run finishes on the next one.
+- It logs counts and shortened IDs only, never connection strings. A connection it cannot decrypt (for example, after an `ENCRYPTION_KEY` change) is reported, left as it is, and the command exits with status 1.
+- Every user reconnects once: their cookie holds the old ID, so `/api/auth/me` answers 401 and the app shows the connect screen. Write approvals that are pending at that moment (10-minute life) also need to be redone.
+- If you skip the migration, users who reconnect get new, empty history, dashboards and workspaces. Their old rows remain under the old ID.
+
 ## Frontend on Netlify
 
 Create a Netlify site with:

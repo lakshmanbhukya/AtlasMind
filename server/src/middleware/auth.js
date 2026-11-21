@@ -10,6 +10,9 @@ const { readSession, clearSession, SessionError } = require('../auth/session');
 function requireAuth(req, res, next) {
     try {
         req.connectionId = readSession(req);
+        // Tag this request's log lines with the tenant. `req.log` is absent
+        // when a router is mounted without pino-http (unit tests).
+        if (req.log) req.log = req.log.child({ connectionId: req.connectionId });
         return next();
     } catch (err) {
         if (!(err instanceof SessionError)) return next(err);

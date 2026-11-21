@@ -4,6 +4,9 @@ const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const cookieParser = require("cookie-parser");
+const crypto = require("crypto");
+const pinoHttp = require("pino-http");
+const { logger } = require("./utils/logger");
 const { connectToDatabase, closeConnection } = require("./db/connection");
 const { initializeCollection } = require("./models/UserConnection");
 const {
@@ -57,6 +60,41 @@ if (process.env.NODE_ENV === "production") {
   app.set("trust proxy", 1);
 }
 
+// Structured request logging (F17). Mounted first so every response carries
+// X-Request-Id, including ones helmet, CORS or the rate limiters end early.
+// An incoming x-request-id is reused only when it is a short safe token.
+const REQUEST_ID_PATTERN = /^[\w-]{1,64}$/;
+app.use(
+  pinoHttp({
+    logger,
+    genReqId(req, res) {
+      const incoming = req.headers["x-request-id"];
+      const id =
+        typeof incoming === "string" && REQUEST_ID_PATTERN.test(incoming)
+          ? incoming
+          : crypto.randomUUID();
+      res.setHeader("X-Request-Id", id);
+      return id;
+    },
+    // The Docker HEALTHCHECK polls this; don't log every hit.
+    autoLogging: { ignore: (req) => req.url === "/api/health" },
+    // Evaluated again when the response finishes, so the "request completed"
+    // line carries the tenant once requireAuth has set it.
+    customProps: (req) =>
+      req.connectionId ? { connectionId: req.connectionId } : {},
+    // Keep access lines short: no request or response headers.
+    serializers: {
+      req: (req) => ({ id: req.id, method: req.method, url: req.url }),
+      res: (res) => ({ statusCode: res.statusCode }),
+    },
+    customLogLevel(_req, res, err) {
+      if (err || res.statusCode >= 500) return "error";
+      if (res.statusCode >= 400) return "warn";
+      return "info";
+    },
+  }),
+);
+
 // Security headers. The API only returns JSON, so helmet's defaults fit; the
 // default Cross-Origin-Resource-Policy only affects no-cors loads, and the
 // cross-site client calls the API with CORS requests, so it is unaffected.
@@ -74,21 +112,13 @@ app.use(
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Request-Id"],
+    exposedHeaders: ["X-Request-Id"],
   }),
 );
 
 app.use(express.json({ limit: "5mb" }));
 app.use(cookieParser()); // Parses 'am_token' cookie into req.cookies
-
-// Request logger (dev only)
-if (process.env.NODE_ENV !== "production") {
-  app.use((req, _res, next) => {
-    const ts = new Date().toISOString();
-    console.log(`[${ts}] ${req.method} ${req.path}`);
-    next();
-  });
-}
 
 // Apply general rate limiter to all API requests
 app.use("/api/", generalLimiter);
@@ -133,8 +163,8 @@ app.use((_req, res) => {
   });
 });
 
-app.use((err, _req, res, _next) => {
-  console.error("Unhandled error:", err);
+app.use((err, req, res, _next) => {
+  (req.log || logger).error({ err }, "Unhandled error");
   res.status(err.statusCode || 500).json({
     success: false,
     error: {
@@ -160,9 +190,10 @@ async function startServer() {
     startCleanupCron();
 
     const server = app.listen(PORT, () => {
-      console.log(`\n AtlasMind server running on http://localhost:${PORT}`);
-      console.log(`   Environment: ${process.env.NODE_ENV || "development"}`);
-      console.log(`   Health:      http://localhost:${PORT}/api/health\n`);
+      logger.info(
+        { port: Number(PORT), env: process.env.NODE_ENV || "development" },
+        `AtlasMind server listening on http://localhost:${PORT}`,
+      );
     });
 
     // Graceful shutdown (the only signal handler): stop accepting requests,
@@ -171,7 +202,7 @@ async function startServer() {
     const shutdown = async () => {
       if (shuttingDown) return;
       shuttingDown = true;
-      console.log("\n Shutting down gracefully...");
+      logger.info("Shutting down gracefully");
       server.close();
       await cleanupPool();
       await closeConnection();
@@ -180,7 +211,7 @@ async function startServer() {
     process.on("SIGINT", shutdown);
     process.on("SIGTERM", shutdown);
   } catch (error) {
-    console.error(" Failed to start server:", error.message);
+    logger.fatal({ err: error }, "Failed to start server");
     process.exit(1);
   }
 }

@@ -1,4 +1,4 @@
-const rateLimit = require('express-rate-limit');
+const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 
 /**
  * Common Rate Limiter Settings
@@ -12,7 +12,7 @@ const rateLimit = require('express-rate-limit');
 
 const generalLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    limit: 100,               // Limit each IP to 100 requests per `window`
+    limit: 300,               // Coarse per-IP flood guard; LLM cost is bounded per connection by llmLimiter
     standardHeaders: true,    // Return rate limit info in the `RateLimit-*` headers
     legacyHeaders: false,    // Disable the `X-RateLimit-*` headers
     message: {
@@ -41,7 +41,34 @@ const authLimiter = rateLimit({
     },
 });
 
+/**
+ * Per-connection limiter for the routes that call the LLM (/api/query, /api/voice).
+ * Mount it after requireAuth, which sets req.connectionId. Only POSTs count: the
+ * history reads and edits under /api/query are cheap and must not use up the budget.
+ */
+const LLM_WINDOW_MS = 5 * 60 * 1000;
+const LLM_LIMIT = 30;
+
+const llmLimiter = rateLimit({
+    windowMs: LLM_WINDOW_MS,
+    limit: LLM_LIMIT,
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: (req) => req.method !== 'POST',
+    // requireAuth always sets connectionId; the IP fallback (IPv6-subnet safe) only guards misuse.
+    keyGenerator: (req) => (req.connectionId ? `conn:${req.connectionId}` : `ip:${ipKeyGenerator(req.ip)}`),
+    message: {
+        success: false,
+        error: {
+            code: 'too_many_requests',
+            message: 'Too many queries for this connection, please try again in a few minutes',
+        },
+    },
+});
+
 module.exports = {
     generalLimiter,
     authLimiter,
+    llmLimiter,
+    LLM_LIMIT,
 };

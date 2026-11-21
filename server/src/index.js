@@ -2,6 +2,7 @@ require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
+const helmet = require("helmet");
 const cookieParser = require("cookie-parser");
 const { connectToDatabase, closeConnection } = require("./db/connection");
 const { initializeCollection } = require("./models/UserConnection");
@@ -14,7 +15,7 @@ const {
 } = require("./services/cleanupService");
 const { requireAuth } = require("./middleware/auth");
 const dashboardStore = require("./stores/dashboardStore");
-const { generalLimiter, authLimiter } = require("./middleware/rateLimiter");
+const { generalLimiter, authLimiter, llmLimiter } = require("./middleware/rateLimiter");
 const { cleanupPool, getPoolSize } = require("./services/userDbPool");
 
 // Import routes
@@ -55,6 +56,11 @@ function isAllowedOrigin(origin) {
 if (process.env.NODE_ENV === "production") {
   app.set("trust proxy", 1);
 }
+
+// Security headers. The API only returns JSON, so helmet's defaults fit; the
+// default Cross-Origin-Resource-Policy only affects no-cors loads, and the
+// cross-site client calls the API with CORS requests, so it is unaffected.
+app.use(helmet());
 
 app.use(
   cors({
@@ -110,8 +116,8 @@ app.get("/api/health", (_req, res) => {
 // ---------------------------------------------------------------------------
 // Protected Routes (require valid JWT cookie)
 // ---------------------------------------------------------------------------
-app.use("/api/query", requireAuth, queryRoutes);
-app.use("/api/voice", requireAuth, voiceRoutes);
+app.use("/api/query", requireAuth, llmLimiter, queryRoutes);
+app.use("/api/voice", requireAuth, llmLimiter, voiceRoutes);
 app.use("/api/schema", requireAuth, schemaRoutes);
 app.use("/api/dashboard", requireAuth, dashboardRoutes);
 app.use("/api/workspaces", requireAuth, workspaceRoutes);

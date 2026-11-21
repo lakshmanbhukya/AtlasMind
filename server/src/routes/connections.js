@@ -35,14 +35,14 @@ router.post('/connect', async (req, res) => {
         if (!isMongoUri(connectionString)) {
             return res.status(400).json({
                 success: false,
-                error: { message: 'Invalid MongoDB connection string format' },
+                error: { code: 'validation_error', message: 'Invalid MongoDB connection string format' },
             });
         }
 
         if (!dbName) {
             return res.status(400).json({
                 success: false,
-                error: { message: 'dbName is required' },
+                error: { code: 'validation_error', message: 'dbName is required' },
             });
         }
 
@@ -97,13 +97,13 @@ router.post('/connect', async (req, res) => {
         if (connectionFailed(err)) {
             return res.status(400).json({
                 success: false,
-                error: { message: 'Could not connect to MongoDB. Please check your connection string.' },
+                error: { code: 'connection_failed', message: 'Could not connect to MongoDB. Please check your connection string.' },
             });
         }
 
         return res.status(500).json({
             success: false,
-            error: { message: 'Failed to securely save connection' },
+            error: { code: 'connection_save_failed', message: 'Failed to securely save connection' },
         });
     } finally {
         if (client) await client.close();
@@ -125,7 +125,7 @@ router.post('/databases', async (req, res) => {
     if (!isMongoUri(connectionString)) {
         return res.status(400).json({
             success: false,
-            error: { message: 'Invalid MongoDB connection string format' },
+            error: { code: 'validation_error', message: 'Invalid MongoDB connection string format' },
         });
     }
 
@@ -139,11 +139,11 @@ router.post('/databases', async (req, res) => {
         if (connectionFailed(err)) {
             return res.status(400).json({
                 success: false,
-                error: { message: 'Could not connect to MongoDB. Please check your connection string.' },
+                error: { code: 'connection_failed', message: 'Could not connect to MongoDB. Please check your connection string.' },
             });
         }
         console.error('❌ [LIST_DATABASES_ERROR]', err);
-        return res.status(500).json({ success: false, error: { message: 'Failed to list databases' } });
+        return res.status(500).json({ success: false, error: { code: 'list_databases_failed', message: 'Failed to list databases' } });
     }
 });
 
@@ -162,7 +162,7 @@ router.get('/:connectionId', requireAuth, async (req, res) => {
         const conn = await userConnections.getConnectionById(req.params.connectionId);
 
         if (!conn) {
-            return res.status(404).json({ success: false, error: { message: 'Connection not found' } });
+            return res.status(404).json({ success: false, error: { code: 'not_found', message: 'Connection not found' } });
         }
 
         return res.json({
@@ -177,7 +177,7 @@ router.get('/:connectionId', requireAuth, async (req, res) => {
         });
     } catch (err) {
         console.error('❌ [GET_CONNECTION_ERROR]', err);
-        return res.status(500).json({ success: false, error: { message: 'Failed to fetch connection details' } });
+        return res.status(500).json({ success: false, error: { code: 'connection_fetch_failed', message: 'Failed to fetch connection details' } });
     }
 });
 

@@ -260,7 +260,7 @@ describe('selectors', () => {
     });
 });
 
-describe('stream progress (F16)', () => {
+describe('stream progress', () => {
     it('progressed sets the stage of the pending question, and every settle drops it', () => {
         const asking = run([ask('Total revenue by region', 1), { type: 'progressed', stage: 'generating' }]);
         expect(asking.pending).toBe('text');

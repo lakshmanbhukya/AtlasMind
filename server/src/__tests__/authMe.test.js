@@ -29,7 +29,7 @@ describe('GET /api/auth/me', () => {
         expect(res.body).toMatchObject({ success: true, connectionId: 'abc', dbName: 'shop' });
     });
 
-    // F15: after the connectionId migration, old cookies carry an ID that no longer
+    // After the connectionId migration, old cookies carry an ID that no longer
     // exists. The client calls /me on every load, so this sends users back to connect.
     test('answers 401 connection_not_found and clears the cookie for an unknown connectionId', async () => {
         getConnectionById.mockResolvedValue(null);

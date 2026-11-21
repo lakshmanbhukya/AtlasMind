@@ -57,7 +57,7 @@ function seed() {
 
 const silent = () => {};
 
-describe('migration 001: connectionId = hash(uri + dbName) (F15)', () => {
+describe('migration 001: connectionId = hash(uri + dbName)', () => {
     test('re-keys user_connections and every tenant collection', async () => {
         const db = fakeDb(seed());
         const summary = await migrate(db, { log: silent });

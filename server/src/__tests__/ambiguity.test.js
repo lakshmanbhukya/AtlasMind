@@ -180,7 +180,7 @@ describe('Ambiguity-Aware Query Generation — Complete Test Suite (Tests 1–10
         expect(checkDeterministicAmbiguity('delete old orders', multiMetricSchema)).toBeNull();
     });
 
-    test('save intent: only "save results into a collection" questions match (F25)', () => {
+    test('save intent: only "save results into a collection" questions match', () => {
         const save = 'save total revenue by region into a new collection called revenue_summary';
         const mergeAsk = 'total revenue by region, then $merge into x';
         expect(hasSaveIntent(save)).toBe(true);

@@ -106,7 +106,7 @@ describe('POST /api/connections/databases', () => {
         expect(res.body.error.code).toBe('validation_error');
     });
 
-    test('maps a URI the driver cannot parse to 400 validation_error without connecting (F21)', async () => {
+    test('maps a URI the driver cannot parse to 400 validation_error without connecting', async () => {
         failNextParse();
         const res = await request(app).post('/api/connections/databases').send({ connectionString: 'mongodb://host:notaport' });
         expect(res.status).toBe(400);
@@ -157,7 +157,7 @@ describe('POST /api/connections/connect failures', () => {
         expect(res.body.error.code).toBe('connection_failed');
     });
 
-    test('maps a URI the driver cannot parse to 400 validation_error without saving (F21)', async () => {
+    test('maps a URI the driver cannot parse to 400 validation_error without saving', async () => {
         failNextParse();
         const res = await request(app)
             .post('/api/connections/connect')
@@ -169,7 +169,7 @@ describe('POST /api/connections/connect failures', () => {
         expect(upsertConnection).not.toHaveBeenCalled();
     });
 
-    test('the same URI with two databases is stored as two connections (F15)', async () => {
+    test('the same URI with two databases is stored as two connections', async () => {
         mockListCollections.mockResolvedValue([{ name: 'orders' }]);
         upsertConnection.mockResolvedValue({});
 

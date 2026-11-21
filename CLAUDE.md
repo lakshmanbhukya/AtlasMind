@@ -14,7 +14,7 @@ Server (`cd server`):
 - `npm run typecheck`: `tsc -p .` over `src` (no emit). Every non-test file except `db/seed.js` starts with `// @ts-check`; new files must too. Fix type errors with JSDoc or casts only, never a runtime change. CI runs it before `npm test`
 - Single test: `npx jest src/__tests__/routesSmoke.test.js` or `npx jest -t "test name"`
 - `npm run test:coverage`, `npm run seed` (seeds the `sample_sales` collection)
-- `npm run migrate:connection-ids -- --dry-run` (then without `--dry-run`): one-off F15 migration that re-keys stored connections to `connectionIdFor(uri, dbName)`; see `docs/DEPLOYMENT.md`
+- `npm run migrate:connection-ids -- --dry-run` (then without `--dry-run`): one-off migration that re-keys stored connections to `connectionIdFor(uri, dbName)`; see `docs/DEPLOYMENT.md`
 
 Client (`cd client`):
 - `npm run dev`: Vite on 5173; proxies `/api` to `localhost:3001`

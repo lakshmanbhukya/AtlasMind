@@ -81,7 +81,7 @@ function hashString(text) {
 /**
  * The `connectionId` for a stored connection: a hash of the connection string
  * AND the database name, so the same cluster connected with two different
- * databases gives two independent sessions (F15). The NUL separator cannot
+ * databases gives two independent sessions. The NUL separator cannot
  * appear in a URI or a MongoDB database name, so no two pairs collide.
  *
  * @param {string} connectionString

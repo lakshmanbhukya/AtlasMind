@@ -1,5 +1,5 @@
 {
-    // Type-checks the server's JavaScript (F19). Files opt in with `// @ts-check`
+    // Type-checks the server's JavaScript. Files opt in with `// @ts-check`
     // (checkJs stays false), and nothing is emitted. Run with `npm run typecheck`.
     "compilerOptions": {
         "allowJs": true,

@@ -55,7 +55,7 @@ router.post('/', async (req, res) => {
 const SSE_PING_MS = 15000;
 
 /**
- * POST /api/query/stream (F16)
+ * POST /api/query/stream
  *
  * Same body and engine call as POST /, streamed as Server-Sent Events:
  *   event: progress  data: {"stage":"scope"|"schema"|"ambiguity"|"generating"|"safety"|"executing"}

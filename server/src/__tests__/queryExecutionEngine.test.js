@@ -155,7 +155,7 @@ describe('QueryExecutionEngine Interface Tests', () => {
             expect(mockSaveQueryHistory).toHaveBeenCalledTimes(1);
         });
 
-        test('onProgress receives every stage in order (F16)', async () => {
+        test('onProgress receives every stage in order', async () => {
             const stages = [];
             const outcome = await QueryExecutionEngine.executeNaturalLanguageQuery({
                 connectionId: testConnectionId,
@@ -245,7 +245,7 @@ describe('QueryExecutionEngine Interface Tests', () => {
             });
         });
 
-        test('a save question lets the prompt allow a final $merge and stages it for approval (F25)', async () => {
+        test('a save question lets the prompt allow a final $merge and stages it for approval', async () => {
             mockGenerateMQL.mockResolvedValueOnce({
                 pipeline: [
                     { $group: { _id: '$status', total: { $sum: '$amount' } } },
@@ -268,7 +268,7 @@ describe('QueryExecutionEngine Interface Tests', () => {
             expect(mockExecutePipeline).not.toHaveBeenCalled();
         });
 
-        test('a read question does not allow a write stage in the prompt (F25)', async () => {
+        test('a read question does not allow a write stage in the prompt', async () => {
             mockGenerateMQL.mockResolvedValueOnce({
                 pipeline: [{ $group: { _id: '$status', total: { $sum: '$amount' } } }],
                 collection: 'orders',

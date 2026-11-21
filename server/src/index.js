@@ -62,7 +62,7 @@ if (process.env.NODE_ENV === "production") {
   app.set("trust proxy", 1);
 }
 
-// Structured request logging (F17). Mounted first so every response carries
+// Structured request logging. Mounted first so every response carries
 // X-Request-Id, including ones helmet, CORS or the rate limiters end early.
 // An incoming x-request-id is reused only when it is a short safe token.
 const REQUEST_ID_PATTERN = /^[\w-]{1,64}$/;

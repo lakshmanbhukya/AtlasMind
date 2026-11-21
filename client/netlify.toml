@@ -12,14 +12,14 @@
   status = 200
   force = false
 
-# ─── Security headers (F13b, F22) ────────────────────────────────────────────────
+# ─── Security headers ────────────────────────────────────────────────
 # Netlify combines every rule whose path matches a request, so the CSP is set
 # on the app routes only ("/", "/index.html", "/shared/*") rather than "/*":
 # a "/*" CSP would also land on /shared/* and its frame-ancestors would apply
 # there too. Shared widgets must stay embeddable, so their CSP has no
 # frame-ancestors.
 #
-# The CSP is enforced (F22). connect-src allows only same-origin and the
+# The CSP is enforced. connect-src allows only same-origin and the
 # production API on Render (VITE_SERVER_URL); if the API moves, update all
 # three CSP blocks below or every API call is blocked.
 # 'unsafe-inline' in style-src covers React/Recharts/GSAP inline style

@@ -1,3 +1,4 @@
+// @ts-check
 const { ObjectId } = require('mongodb');
 const { getDb } = require('../db/connection');
 const log = require('../utils/logger').logger.child({ module: 'Workspace' });

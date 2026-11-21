@@ -264,6 +264,7 @@ describe('QueryExecutionEngine Interface Tests', () => {
             expect(mockGenerateMQL.mock.calls[0][4]).toMatchObject({ allowWriteStage: true });
             expect(outcome.type).toBe('approval_required');
             expect(outcome.data.approval).toMatchObject({ writeStage: '$merge', targetCollection: 'revenue_summary' });
+            expect(outcome.data.aiMessage).toContain('write to your collection "revenue_summary"');
             expect(mockExecutePipeline).not.toHaveBeenCalled();
         });
 
@@ -700,6 +701,7 @@ describe('QueryExecutionEngine Interface Tests', () => {
             expect(outcome.type).toBe('success');
             expect(outcome.data.success).toBe(true);
             expect(outcome.data.safetyStatus).toBe('write-executed');
+            expect(outcome.data.aiMessage).toContain('"archived_orders"');
             expect(mockApprovalTokensCollection.insertOne).toHaveBeenCalledTimes(1);
             expect(mockExecutePipeline).toHaveBeenCalledWith(
                 mockUserDb,

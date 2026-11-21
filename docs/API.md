@@ -193,7 +193,7 @@ Returned when a query specifies a database write, deletion, or modification. The
 {
   "success": true,
   "naturalLanguage": "Delete inactive customers",
-  "aiMessage": "⚠️ Database Write Intercepted: This action will modify your collection \"customers\". Review and approve to execute.",
+  "aiMessage": "⚠️ Database Write Intercepted: This action will write to your collection \"customers_archive\". To execute this change, review and approve it.",
   "safetyStatus": "approval-required",
   "safetyBlocked": false,
   "approvalToken": "eyJhbGciOiJIUzI1NiIsIn...",

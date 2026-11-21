@@ -413,7 +413,7 @@ async function runNaturalLanguageQuery(params) {
             const payloadData = buildOutcomePayload({
                 success: true,
                 naturalLanguage: query,
-                aiMessage: `⚠️ Database Write Intercepted: This action will modify your collection "${llmResult.collection}". To execute this change, review and approve it.`,
+                aiMessage: `⚠️ Database Write Intercepted: This action will write to your collection "${verdict.write?.targetCollection || llmResult.collection}". To execute this change, review and approve it.`,
                 pipeline: llmResult.pipeline,
                 mql: llmResult.pipeline,
                 collection: llmResult.collection,

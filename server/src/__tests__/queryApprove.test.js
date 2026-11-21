@@ -159,7 +159,7 @@ describe('B3: POST /api/query/approve security guards', () => {
 
     test.each([
         ['an out-of-scope $lookup', ['orders', 'archived_orders'], [{ $lookup: { from: 'secrets', localField: 'a', foreignField: 'b', as: 'c' } }, { $merge: { into: 'archived_orders' } }]],
-        ['a protected $lookup', null, [{ $lookup: { from: 'system_users', localField: 'a', foreignField: 'b', as: 'c' } }, { $merge: { into: 'archived_orders' } }]],
+        ['a protected $lookup', null, [{ $lookup: { from: 'system.users', localField: 'a', foreignField: 'b', as: 'c' } }, { $merge: { into: 'archived_orders' } }]],
         ['a cross-database write target', null, [{ $match: {} }, { $merge: { into: { db: 'otherdb', coll: 'archived_orders' } } }]],
         ['a write target outside the scope', ['orders'], [{ $match: {} }, { $merge: { into: 'archived_orders' } }]],
         ['a write stage that is not last', null, [{ $out: 'archived_orders' }, { $match: {} }]],

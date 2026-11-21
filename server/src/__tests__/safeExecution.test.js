@@ -71,7 +71,7 @@ describe('executePipeline always applies the safety guard', () => {
 
     test.each([
         ['an out-of-scope lookup', [{ $lookup: { from: 'secrets', localField: 'a', foreignField: 'b', as: 'c' } }, { $merge: { into: 'orders' } }]],
-        ['a protected lookup', [{ $lookup: { from: 'system_users', localField: 'a', foreignField: 'b', as: 'c' } }, { $merge: { into: 'orders' } }]],
+        ['a protected lookup', [{ $lookup: { from: 'system.users', localField: 'a', foreignField: 'b', as: 'c' } }, { $merge: { into: 'orders' } }]],
         ['a cross-database target', [{ $match: {} }, { $merge: { into: { db: 'otherdb', coll: 'orders' } } }]],
         ['an out-of-scope target', [{ $match: {} }, { $merge: { into: 'elsewhere' } }]],
     ])('approvedWrite does not unlock %s', async (_label, pipeline) => {

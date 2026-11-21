@@ -1,4 +1,4 @@
-const { validatePipeline } = require('../services/safetyGuard');
+const { validatePipeline, validateCollectionName, classifyExecution } = require('../services/safetyGuard');
 const { profileSchema, getMinifiedSchema, invalidateSchemaCache } = require('../services/schemaProfiler');
 
 describe('Phase 1: Scope Validation and Safety Enforcement', () => {
@@ -222,6 +222,46 @@ describe('Phase 1: Scope Validation and Safety Enforcement', () => {
             expect(minified).toContain('Collection: orders');
             expect(minified).not.toContain('Collection: customers');
             expect(minified).not.toContain('Collection: products');
+        });
+    });
+
+    describe('protected and allowed collection names', () => {
+        test.each([
+            'configurations', 'systems', 'administrators', 'localities', 'system_users',
+            'order-items', 'sales.2024', '_tmp', 'a'.repeat(120),
+        ])('%s is allowed', (name) => {
+            expect(validateCollectionName(name)).toEqual({ safe: true });
+        });
+
+        test.each([
+            'system.users', 'system.views', 'system', 'admin', 'local', 'config',
+        ])('%s is protected', (name) => {
+            const result = validateCollectionName(name);
+            expect(result.safe).toBe(false);
+            expect(result.reason).toMatch(/not allowed/);
+        });
+
+        test.each([
+            'a..b', 'sales.', '1orders', '-orders', '.orders', 'has space', 'price$', 'nul\u0000x', 'a'.repeat(121), '',
+        ])('%j is rejected as invalid', (name) => {
+            expect(validateCollectionName(name).safe).toBe(false);
+        });
+
+        test('a $lookup into order-items is allowed, into system.users is blocked', () => {
+            const lookup = (from) => [{ $lookup: { from, localField: 'a', foreignField: 'b', as: 'c' } }];
+            expect(validatePipeline(lookup('order-items')).safe).toBe(true);
+            const blocked = validatePipeline(lookup('system.users'));
+            expect(blocked.safe).toBe(false);
+            expect(blocked.block.code).toBe('protected_collection');
+        });
+
+        test('database names stay exact-match and strict', () => {
+            const lookupDb = (db) => [{ $lookup: { from: { db, coll: 'orders' }, localField: 'a', foreignField: 'b', as: 'c' } }];
+            expect(validatePipeline(lookupDb('admin')).block.code).toBe('protected_collection');
+            expect(validatePipeline(lookupDb('sales.2024')).safe).toBe(false);
+            // $merge into another database is never allowed, protected or not.
+            const verdict = classifyExecution({ collection: 'orders', pipeline: [{ $merge: { into: { db: 'config', coll: 'orders' } } }], tenantDatabase: 'shop' });
+            expect(verdict.kind).toBe('blocked');
         });
     });
 });

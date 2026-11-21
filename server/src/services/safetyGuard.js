@@ -120,13 +120,31 @@ function findBlockedOperator(obj) {
  * @param {string} collectionName
  * @returns {{ safe: boolean, reason?: string }}
  */
-const PROTECTED_PREFIXES = ['system', 'admin', 'local', 'config'];
+const PROTECTED_DATABASES = new Set(['admin', 'local', 'config']);
+const PROTECTED_COLLECTIONS = new Set(['system', 'admin', 'local', 'config']);
+/** Database names: MongoDB forbids "." in them, so they keep the strict identifier rule. */
 const IDENTIFIER_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+/** Collection names may also contain "-" and "." (e.g. "order-items", "sales.2024"). */
+const COLLECTION_NAME_RE = /^[A-Za-z_][A-Za-z0-9_.-]*$/;
+const MAX_COLLECTION_NAME_LENGTH = 120;
 
-/** Intentionally prefix-based: names such as "system_users" or "config_backup" are protected too. */
-function isProtectedName(name) {
+/** Exact match on MongoDB's reserved databases. */
+function isProtectedDatabaseName(name) {
+    return PROTECTED_DATABASES.has(String(name));
+}
+
+/** MongoDB's reserved "system." namespace, plus the exact names system/admin/local/config. */
+function isProtectedCollectionName(name) {
     const n = String(name);
-    return PROTECTED_PREFIXES.some((p) => n.startsWith(p));
+    return n.startsWith('system.') || PROTECTED_COLLECTIONS.has(n);
+}
+
+function isValidCollectionName(name) {
+    return typeof name === 'string'
+        && name.length <= MAX_COLLECTION_NAME_LENGTH
+        && COLLECTION_NAME_RE.test(name)
+        && !name.includes('..')
+        && !name.endsWith('.');
 }
 
 function validateCollectionName(collectionName) {
@@ -135,12 +153,11 @@ function validateCollectionName(collectionName) {
     }
 
     // Block system collections
-    if (isProtectedName(collectionName)) {
+    if (isProtectedCollectionName(collectionName)) {
         return { safe: false, reason: `Access to "${collectionName}" is not allowed` };
     }
 
-    // Only allow alphanumeric + underscores
-    if (!IDENTIFIER_RE.test(collectionName)) {
+    if (!isValidCollectionName(collectionName)) {
         return { safe: false, reason: `Invalid collection name: "${collectionName}"` };
     }
 
@@ -201,7 +218,7 @@ function extractAndValidateCollectionReferences(stages, options = {}) {
                         if (typeof from.db !== 'string' || !IDENTIFIER_RE.test(from.db)) {
                             return { safe: false, reason: `Invalid database name "${from.db}" in $lookup.from`, code: 'scope_violation', violatingCollections: [from.coll || 'unknown'], database };
                         }
-                        if (isProtectedName(from.db)) {
+                        if (isProtectedDatabaseName(from.db)) {
                             return { safe: false, reason: `Access to database "${from.db}" in $lookup.from is not allowed`, code: 'scope_violation', violatingCollections: [from.coll || 'unknown'], database };
                         }
                         if ((targetDatabase || requireTargetDatabase) && from.db !== targetDatabase) {
@@ -563,15 +580,15 @@ function describeBlock(result, pipeline, options = {}) {
         }
         if (database !== undefined) {
             return {
-                code: isProtectedName(database) ? 'protected_collection' : 'out_of_scope_collection',
-                rule: isProtectedName(database) ? PROTECTED_RULE : DATABASE_RULE,
+                code: isProtectedDatabaseName(database) ? 'protected_collection' : 'out_of_scope_collection',
+                rule: isProtectedDatabaseName(database) ? PROTECTED_RULE : DATABASE_RULE,
                 referenceType: 'Write target database',
                 reference: database,
                 ...loc,
             };
         }
         const nameCheck = validateCollectionName(name);
-        const isProtected = typeof name === 'string' && isProtectedName(name);
+        const isProtected = typeof name === 'string' && isProtectedCollectionName(name);
         let code = 'out_of_scope_collection';
         let rule = WRITE_SCOPE_RULE;
         if (isProtected) {
@@ -605,7 +622,7 @@ function describeBlock(result, pipeline, options = {}) {
 
     // Database-level violation in a $lookup.from: never resolvable by widening the collection scope.
     if (result.database !== undefined) {
-        const isProtected = isProtectedName(result.database);
+        const isProtected = isProtectedDatabaseName(result.database);
         const loc = at(result.database);
         return {
             code: isProtected ? 'protected_collection' : 'out_of_scope_collection',
@@ -620,7 +637,7 @@ function describeBlock(result, pipeline, options = {}) {
     if (violating.length > 0) {
         const reference = violating[0];
         const inPipeline = locateReference(stages, reference) >= 0;
-        const isProtected = isProtectedName(reference)
+        const isProtected = isProtectedCollectionName(reference)
             || !validateCollectionName(reference).safe;
         const loc = inPipeline ? at(reference) : { stage: null, stageIndex: null };
         const refStage = COLLECTION_REFERENCE_STAGES.includes(loc.stage) ? loc.stage : null;
@@ -673,7 +690,7 @@ function validatePipeline(pipeline, options = {}) {
 /** Structured block info for a rejected target collection name. */
 function describeCollectionBlock(collectionName) {
     const name = typeof collectionName === 'string' ? collectionName : null;
-    const isProtected = Boolean(name) && isProtectedName(name);
+    const isProtected = Boolean(name) && isProtectedCollectionName(name);
     return {
         code: isProtected ? 'protected_collection' : 'invalid_collection',
         rule: isProtected ? PROTECTED_RULE : 'Collection names must be simple identifiers.',
@@ -911,7 +928,7 @@ function classifyExecution({ collection, pipeline, scope = null, tenantDatabase 
         }
         if (target.database !== undefined) {
             const db = target.database;
-            const validDb = typeof db === 'string' && IDENTIFIER_RE.test(db) && !isProtectedName(db);
+            const validDb = typeof db === 'string' && IDENTIFIER_RE.test(db) && !isProtectedDatabaseName(db);
             if (!validDb || !tenantDatabase || db !== tenantDatabase) {
                 return blockWrite(
                     `Write target database "${db}" is not the connected database`,

@@ -114,4 +114,4 @@ Pop-Location
 
 ### Starting prompt for the next session
 
-> Implement the Groq BYOK and managed-allowance plan in docs/groq-byok-plan.md. Start from plan/groq-byok-allowances and create an implementation branch from its tip. Follow AGENTS.md and the implementation sequence. Use the file map, contracts and acceptance cases in this document. Keep server credentials scoped to a sign-in and managed quotas scoped to a connection and the installation. Use observation mode for the pilot. Complete code, fixtures, docs and local checks. Report any deployment checks that still need the operator's environment.
+> Implement the Groq BYOK and managed-allowance plan in groq-byok-plan.md. Start from plan/groq-byok-allowances and create an implementation branch from its tip. Follow AGENTS.md and the implementation sequence. Use the file map, contracts and acceptance cases in this document. Keep server credentials scoped to a sign-in and managed quotas scoped to a connection and the installation. Use observation mode for the pilot. Complete code, fixtures, docs and local checks. Report any deployment checks that still need the operator's environment.

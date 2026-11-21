@@ -1,3 +1,4 @@
+// @ts-check
 const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 
 /**

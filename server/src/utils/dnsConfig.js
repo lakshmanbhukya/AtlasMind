@@ -1,3 +1,4 @@
+// @ts-check
 const dns = require('node:dns');
 const log = require('./logger').logger.child({ module: 'dns' });
 

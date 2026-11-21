@@ -14,7 +14,7 @@ import { apiErrorMessage } from './apiError';
 
 /** @typedef {'text' | 'voice'} Source */
 /**
- * `pendingStage` is the server stage of the pending text question (F16 stream progress).
+ * `pendingStage` is the server stage of the pending text question (stream progress).
  * It is only present while progress arrives: every transition that settles or starts a
  * request builds a new state without it.
  * @typedef {{ turns: object[], pending: null | Source, pendingStage?: string }} ConversationState

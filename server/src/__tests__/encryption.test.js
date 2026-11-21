@@ -42,7 +42,7 @@ describe('B1: encryption', () => {
         expect(hash1).toHaveLength(64);
     });
 
-    test('connectionIdFor is stable and differs by dbName (F15)', () => {
+    test('connectionIdFor is stable and differs by dbName', () => {
         process.env.ENCRYPTION_KEY = validKey;
         let encryption;
         jest.isolateModules(() => {
@@ -54,7 +54,7 @@ describe('B1: encryption', () => {
         expect(shop).toBe(encryption.connectionIdFor(uri, 'shop'));
         expect(shop).toHaveLength(64);
         expect(shop).not.toBe(encryption.connectionIdFor(uri, 'analytics'));
-        // Not the pre-F15 ID, and the separator keeps (uri, db) pairs apart.
+        // Not the old URI-only ID, and the separator keeps (uri, db) pairs apart.
         expect(shop).not.toBe(encryption.hashString(uri));
         expect(encryption.connectionIdFor('mongodb://a/b', 'c')).not.toBe(encryption.connectionIdFor('mongodb://a/', 'bc'));
         expect(() => encryption.connectionIdFor(uri, '')).toThrow();

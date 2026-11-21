@@ -1,7 +1,7 @@
 import { createSseParser } from './sse';
 
 /**
- * Read a POST /api/query/stream response (F16).
+ * Read a POST /api/query/stream response.
  *
  * Resolves with the response body on a 2xx `result`, and otherwise rejects with
  * an axios-shaped `{ response: { status, data } }`, so callers (the Conversation

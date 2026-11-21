@@ -52,7 +52,7 @@ describe('decide', () => {
         expect(d.isClarificationPass).toBe(false);
     });
 
-    test('saveIntent is true only for a save-results question (F25)', () => {
+    test('saveIntent is true only for a save-results question', () => {
         const save = decide({ query: 'save total profit by status into a new collection called profit_summary', schema });
         expect(save).toMatchObject({ action: 'proceed', saveIntent: true, isClarificationPass: true });
         expect(decide({ query: 'show the top orders by profit', schema }).saveIntent).toBe(false);

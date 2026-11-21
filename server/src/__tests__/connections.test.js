@@ -131,7 +131,7 @@ describe('POST /api/connections/connect error envelope', () => {
         expect(res.body.error).toEqual({ code: 'validation_error', message: 'Invalid MongoDB connection string format' });
     });
 
-    // F21: the scheme is valid but the driver cannot parse the URI (real driver, no mock).
+    // The scheme is valid but the driver cannot parse the URI (real driver, no mock).
     test('400 validation_error for a URI the driver cannot parse (/connect)', async () => {
         const res = await request(app).post('/api/connections/connect').send({ connectionString: 'mongodb://host:notaport', dbName: 'shop' });
         expect(res.status).toBe(400);

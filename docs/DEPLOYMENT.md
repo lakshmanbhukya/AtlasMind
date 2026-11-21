@@ -28,9 +28,9 @@ The server logs one JSON object per line to stdout (pino), which Render's log vi
 
 ## One-off migrations
 
-### F15: connectionId includes the database name
+### connectionId includes the database name
 
-Since F15, a `connectionId` is the hash of the connection string **and** `dbName`, so one cluster connected with two databases gives two separate sessions. Connections stored before F15 still have the old ID. Run the migration once after deploying F15, from `server/` with the production `MONGODB_URI` and `ENCRYPTION_KEY` set (in a Render shell, for example):
+A `connectionId` is the hash of the connection string **and** `dbName`, so one cluster connected with two databases gives two separate sessions. Connections stored before this change still have the old ID. Run the migration once after deploying this change, from `server/` with the production `MONGODB_URI` and `ENCRYPTION_KEY` set (in a Render shell, for example):
 
 ```bash
 npm run migrate:connection-ids -- --dry-run   # report what would move; writes nothing

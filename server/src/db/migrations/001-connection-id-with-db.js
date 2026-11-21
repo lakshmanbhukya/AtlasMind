@@ -2,7 +2,7 @@
 'use strict';
 
 /**
- * Migration 001 (F15): re-key every connection from
+ * Migration 001: re-key every connection from
  * `hashString(connectionString)` to `connectionIdFor(connectionString, dbName)`.
  *
  *   npm run migrate:connection-ids -- --dry-run   # report only, writes nothing

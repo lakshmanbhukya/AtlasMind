@@ -71,7 +71,7 @@ async function runNaturalLanguageQuery(params) {
     const evalOpts = resolveExperiment(experimentInput);
     const collectDiagnostics = Boolean(evalOpts.diagnostics);
 
-    // Stage progress for streaming callers (F16): scope, schema, ambiguity,
+    // Stage progress for streaming callers: scope, schema, ambiguity,
     // generating, safety, executing. Like `experiment`, it is passed in-process
     // by the route, never read from a request body. A throwing callback is
     // ignored, so it can never break a query.

@@ -2,7 +2,7 @@
 const pino = require('pino');
 
 /**
- * Structured logging (F17). One root logger for the server; modules take a
+ * Structured logging. One root logger for the server; modules take a
  * child (`logger.child({ module: 'name' })`) and route handlers use the
  * per-request `req.log` that pino-http attaches (it carries the request ID,
  * plus the connectionId once `requireAuth` has run).

@@ -1,5 +1,6 @@
 const {
     hasWriteIntent,
+    hasSaveIntent,
     checkDeterministicAmbiguity,
     validateModelClarification,
     validateClarifications,
@@ -177,6 +178,19 @@ describe('Ambiguity-Aware Query Generation — Complete Test Suite (Tests 1–10
         expect(hasWriteIntent('stock exchange tips')).toBe(false);
         expect(hasWriteIntent('dropout rate analysis')).toBe(false);
         expect(checkDeterministicAmbiguity('delete old orders', multiMetricSchema)).toBeNull();
+    });
+
+    test('save intent: only "save results into a collection" questions match (F25)', () => {
+        const save = 'save total revenue by region into a new collection called revenue_summary';
+        const mergeAsk = 'total revenue by region, then $merge into x';
+        expect(hasSaveIntent(save)).toBe(true);
+        expect(hasSaveIntent(mergeAsk)).toBe(true);
+        expect(hasSaveIntent('store the monthly totals as a collection named monthly')).toBe(true);
+        for (const q of ['total revenue by region', 'delete orders', 'update prices', 'best customers', 'write a query to count docs in the orders collection', '', null]) {
+            expect(hasSaveIntent(q)).toBe(false);
+        }
+        expect(hasWriteIntent(save)).toBe(true);
+        expect(hasWriteIntent(mergeAsk)).toBe(true);
     });
 
     // Test 8 — few-shot isolation (covered in detail in fewShotIsolation.test.js)

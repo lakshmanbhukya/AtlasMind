@@ -28,4 +28,20 @@ describe('A2: Configs Prompt Mode Validation', () => {
         expect(prompt).toContain('## FINAL QUERY MODE (REQUIRED)');
         expect(prompt).not.toContain('### CLARIFICATION MODE');
     });
+    test('default prompt stays read-only and has no SAVE RESULTS MODE (F25)', () => {
+        const prompt = buildSystemPrompt('schema context', [], {});
+        expect(prompt).toContain('2. NEVER use write operations: $out, $merge');
+        expect(prompt).toContain('NEVER generate pipelines that modify, delete, or write data');
+        expect(prompt).not.toContain('SAVE RESULTS MODE');
+    });
+
+    test('allowWriteStage adds SAVE RESULTS MODE and still refuses delete/update (F25)', () => {
+        const prompt = buildSystemPrompt('schema context', [], { allowWriteStage: true });
+        expect(prompt).toContain('## SAVE RESULTS MODE');
+        expect(prompt).toContain('EXACTLY ONE final stage');
+        expect(prompt).toContain('whenMatched');
+        expect(prompt).toContain('If the user asks to delete, update, or modify data, respond with:');
+        expect(prompt).toContain('I can only generate read-only queries.');
+        expect(prompt).not.toContain('2. NEVER use write operations: $out, $merge');
+    });
 });

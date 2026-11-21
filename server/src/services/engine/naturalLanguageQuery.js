@@ -234,6 +234,7 @@ async function runNaturalLanguageQuery(params) {
     const targetModel = evalOpts.model || model;
     const llmGenOptions = {
         isClarificationPass: gate.isClarificationPass,
+        allowWriteStage: gate.saveIntent === true,
         disableClarificationMode: Boolean(evalOpts.disableClarificationMode),
         forceFinalQueryMode: Boolean(evalOpts.forceFinalQueryMode),
         rawSchema,

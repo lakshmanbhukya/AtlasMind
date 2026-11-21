@@ -6,6 +6,27 @@
  * and safety rules, ensuring the LLM produces well-structured output.
  */
 
+const REFUSAL_JSON = '{ "pipeline": [], "collection": "", "chartType": "table", "explanation": "I can only generate read-only queries. Data modification is not supported." }';
+
+/** Rule 2 and safety text for normal (read-only) questions. */
+const READ_ONLY_WRITE_RULE = '2. NEVER use write operations: $out, $merge, $delete, $drop, $update, $set (as stage), $unset (as stage)';
+const READ_ONLY_SAFETY = '- NEVER generate pipelines that modify, delete, or write data';
+
+/** Rule 2 and safety text when the user asked to save results into a collection. */
+const SAVE_WRITE_RULE = '2. NEVER use write operations ($out, $merge, $delete, $drop, $update, $set (as stage), $unset (as stage)), EXCEPT the single final save stage described in SAVE RESULTS MODE below';
+const SAVE_SAFETY = '- NEVER generate pipelines that modify or delete existing data; the only allowed write is the single final save stage from SAVE RESULTS MODE';
+
+const SAVE_SECTION = `
+## SAVE RESULTS MODE
+The user asked to save the results into a collection. The save is staged for human approval before it runs.
+- Build the read pipeline as usual, then append EXACTLY ONE final stage: { "$merge": { "into": "<target>" } }
+  (use { "$out": "<target>" } instead only when the user asks to replace/overwrite the target collection)
+- <target> is the collection name the user gave. Never target system.*, admin, local or config, and never add a "db" key.
+- Do NOT use a "whenMatched" pipeline in $merge, and use no other write stage anywhere in the pipeline.
+- "collection" is still the SOURCE collection the pipeline reads from, not the target.
+- Requests to delete, update, or drop data still get the refusal JSON above.
+`;
+
 /**
  * Build the full system prompt for Groq LLM.
  *
@@ -17,6 +38,11 @@
 function buildSystemPrompt(schemaContext, fewShotExamples = [], options = {}) {
     const currentDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
     const currentMonth = new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' });
+
+    const allowWriteStage = options.allowWriteStage === true;
+    const writeRule = allowWriteStage ? SAVE_WRITE_RULE : READ_ONLY_WRITE_RULE;
+    const safetyRules = allowWriteStage ? SAVE_SAFETY : READ_ONLY_SAFETY;
+    const saveSection = allowWriteStage ? SAVE_SECTION : '';
 
     const modeSection = (options.isClarificationPass === true || options.disableClarificationMode === true || options.forceFinalQueryMode === true)
         ? `\n## FINAL QUERY MODE (REQUIRED)\nDO NOT return needsClarification:true. You MUST return a concrete aggregation pipeline.\n`
@@ -128,17 +154,17 @@ CORRECT pattern for summing inside an array:
 
 ## General Pipeline Construction Rules
 1. Use only READ operations: $match, $group, $sort, $limit, $skip, $project, $unwind, $addFields, $count, $lookup, $facet, $bucket, $bucketAuto, $sortByCount, $replaceRoot, $replaceWith
-2. NEVER use write operations: $out, $merge, $delete, $drop, $update, $set (as stage), $unset (as stage)
+${writeRule}
 3. Always apply sensible $limit (max 100 for charts, 500 for tables) unless the user asks for all
 4. Use proper MongoDB date handling: { "$gte": { "$date": "2026-01-01T00:00:00.000Z" } }
 5. Apply $sort after $group for ordered results
 
 ## Safety Rules
-- NEVER generate pipelines that modify, delete, or write data
+${safetyRules}
 - If the user asks to delete, update, or modify data, respond with:
-  { "pipeline": [], "collection": "", "chartType": "table", "explanation": "I can only generate read-only queries. Data modification is not supported." }
+  ${REFUSAL_JSON}
 - If a query cannot be answered with the available schema, explain why in the explanation field
-
+${saveSection}
 ## Important
 - Return ONLY the JSON object, no markdown, no explanation outside the JSON
 - All field names in the pipeline MUST match the actual schema field names exactly

@@ -32,7 +32,9 @@ const InsightDashboard = ({ data, type = 'bar', title, pinId, shared = false, on
     const [toastMsg, setToastMsg] = React.useState(null);
     const [isShared, setIsShared] = React.useState(shared);
 
-    if (!data || data.length === 0) return null;
+    const hasData = Array.isArray(data) && data.length > 0;
+    // A pin with no rows still renders (with a note) so it can be removed.
+    if (!hasData && !onRemove) return null;
 
     // Smart Key Detection
     const getChartKeys = (data) => {
@@ -187,9 +189,11 @@ const InsightDashboard = ({ data, type = 'bar', title, pinId, shared = false, on
                         <TrendingUp size={17} className="text-vg-text-2" aria-hidden="true" />
                         {title || "Data Visualization"}
                     </h3>
-                    <p className="text-[12px] mt-1 text-vg-text-3">
-                        <span className="font-code text-vg-text-2">{valueKey}</span> by <span className="font-code text-vg-text-2">{nameKey}</span>
-                    </p>
+                    {hasData && (
+                        <p className="text-[12px] mt-1 text-vg-text-3">
+                            <span className="font-code text-vg-text-2">{valueKey}</span> by <span className="font-code text-vg-text-2">{nameKey}</span>
+                        </p>
+                    )}
                 </div>
                 {!hideActions && (
                     <div className="flex gap-2">
@@ -232,9 +236,15 @@ const InsightDashboard = ({ data, type = 'bar', title, pinId, shared = false, on
             </div>
 
             <div className="flex-1 w-full min-h-0">
-                <ResponsiveContainer width="100%" height="100%">
-                    {renderChart()}
-                </ResponsiveContainer>
+                {hasData ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                        {renderChart()}
+                    </ResponsiveContainer>
+                ) : (
+                    <p className="h-full flex items-center justify-center text-[13px] text-vg-text-3">
+                        No results to chart
+                    </p>
+                )}
             </div>
         </div>
     );

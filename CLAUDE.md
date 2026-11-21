@@ -61,9 +61,6 @@ The authenticated chat app lives in `client/src/components/app/` (`AppShell` > `
 - Do not add `process.env` research toggles to production modules or forward evaluation options from requests. Extend `ExperimentConfig` instead.
 - Architecture vocabulary (module, interface, seam, depth, adapter) and domain terms are in `GLOSSARY.md`; decisions are in `docs/adr/`.
 
-## Fixes backlog
-`fixes.md` (repo root) tracks improvements and their status. Check it before starting improvement work. When you finish an item, set it to `done`, add the commit hash, and move it to **Done**. Add follow-ups you discover as new `F<n>` rows.
-
 ## Repo-specific agent rules
 - "Do not break anything": check dependencies before changing existing code, and keep changes atomic.
 - For bug reports, find the root cause before you propose a fix.

@@ -1,4 +1,5 @@
-import { StrictMode } from 'react'
+import { StrictMode, Suspense } from 'react'
+import { lazyWithReload } from './lib/lazyWithReload.js'
 import { createRoot } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from './App.jsx'
@@ -16,7 +17,7 @@ const queryClient = new QueryClient({
 
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import SharedDashboardPage from './pages/SharedDashboardPage.jsx'
+const SharedDashboardPage = lazyWithReload(() => import('./pages/SharedDashboardPage.jsx'))
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
@@ -25,7 +26,14 @@ createRoot(document.getElementById('root')).render(
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<App />} />
-            <Route path="/shared/:id" element={<SharedDashboardPage />} />
+            <Route
+              path="/shared/:id"
+              element={
+                <Suspense fallback={<div className="min-h-[100dvh] bg-vg-bg" />}>
+                  <SharedDashboardPage />
+                </Suspense>
+              }
+            />
           </Routes>
         </BrowserRouter>
       </QueryClientProvider>

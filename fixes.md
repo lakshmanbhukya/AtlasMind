@@ -17,21 +17,22 @@ Status: `todo` · `in progress` · `done` · `won't do`. Effort: S (under an hou
 | F5 | Protected collection names: exact `system`/`admin`/`local`/`config` and the `system.` namespace; databases exact `admin`/`local`/`config`. Names may contain `-` and `.` (no `..`, no trailing `.`, max 120 chars) | `f314a04` | `configurations`, `order-items`, `sales.2024` are now allowed. Database names keep the strict identifier regex (`$lookup.from.db`, `$merge.into.db`). |
 | F12 | `llmLimiter`: 30 POSTs per 5 min per `connectionId` on `/api/query` and `/api/voice` (after `requireAuth`), code `too_many_requests`; `generalLimiter` raised to 300 per 15 min per IP | `5b140f2` | History GET/PATCH/DELETE under `/api/query` are not counted. |
 | F14 | Connection strings encrypted with AES-256-GCM as `v2:<iv>:<tag>:<ct>`; the legacy CBC `iv:ct` format still decrypts | `0a021d9` | No migration: `/connect` re-encrypts on every upsert. |
+| F8 | Consistent error responses: `code` on every `connections.js` error; `dashboard.js` `sendDashboardError` returns the generic `Dashboard operation failed` on 500 (the 422 safety message is kept) | `73b64c7`, `6f4c908` | Server `connections.js` part from plan 2, `dashboard.js` part from plan 3. The public `sharedDashboard.js` leak was fixed in F1. |
+| F13 | Security headers: `helmet` defaults on the server; `client/netlify.toml` sends `nosniff`, `Referrer-Policy`, `Permissions-Policy: microphone=(self)` and a Report-Only CSP | `ccada60`, `bf38172` | CSP has `frame-ancestors 'none'` on `/` and `/index.html`, none on `/shared/*` (embeddable widgets). Set per route, not on `/*`, because Netlify combines matching rules. Enforcing it is F22. |
+| F9 | Client bundle split with `React.lazy` (landing, app shell, dashboards, shared view); Recharts lands in its own chunk | `123541b` | 1,179 kB / 371 kB gzip in one chunk → landing path 181 kB gzip (entry 119 + LandingPage 62), no 500 kB warning. `lazyWithReload` reloads once on a stale chunk; `optimizeDeps.include` avoids cold-start 504s in dev. |
+| F10 | framer-motion removed; GSAP stays for the landing page. Dashboard enter/exit fades are CSS (`.vg-enter`, `.vg-enter-scale`) and respect `prefers-reduced-motion` | `f0eec5b` | Bundle went from 371 kB to 331 kB gzip before the split. |
+| F11 | CI `client` job: lint, unit tests, build, Playwright e2e on Node 24. `dorny/paths-filter` runs each job only for its own folder | `1d033f6` | The image `release` job depends only on the server job. First run happens on the next push. |
+| F20 | Revoke share links: `DELETE /api/dashboard/:id/share` (`dashboardStore.unshare`), and a "Stop sharing" button next to Share | `fa2b43c`, `442f239`, `2846dc3` | `GET /api/dashboard` now returns `shared: boolean` instead of the token. The remove button moved into `InsightDashboard`'s action row; empty pins now render so they stay removable. |
 
 ## To do: quick wins (S)
 
 | ID | Fix | Status | Where | Notes |
 |----|-----|--------|-------|-------|
-| F8 | Make error responses consistent: add `code` to the `connections.js` errors, and stop returning `error.message` on 500 in `dashboard.js` `sendDashboardError` | in progress | `server/src/routes/connections.js`, `server/src/routes/dashboard.js` | `connections.js` part done in `73b64c7` (codes documented in `docs/API.md`); `dashboard.js` part is plan 3. The leak in the public `sharedDashboard.js` was fixed in F1. |
-| F13 | Security headers: `helmet` on the server, CSP and `X-Frame-Options` in `client/netlify.toml` | in progress | `server/src/index.js`, `client/netlify.toml` | Server part (helmet defaults) done in `ccada60`; `netlify.toml` part is plan 3. Test the CSP against the Recharts and GSAP inline styles. |
 
 ## To do: medium effort (M)
 
 | ID | Fix | Status | Where | Notes |
 |----|-----|--------|-------|-------|
-| F9 | Split the client bundle (currently 1.18 MB, 371 KB gzipped): `React.lazy` for the landing, app and dashboard pages, and Recharts in its own chunk | todo | `client/src/main.jsx`, `client/src/App.jsx`, `client/vite.config.js` | |
-| F10 | Keep only one animation library (GSAP or framer-motion) | todo | about 8 files in `client/src/components/landing/`, `InsightDashboard.jsx`, `DashboardPage.jsx` | |
-| F11 | Run the client in CI: lint, unit tests, build, and the Playwright `chat.spec.ts` (needs no server) | todo | `.github/workflows/ci.yml` | |
 | F15 | Include `dbName` in the `connectionId` hash so two sessions using the same URI with different databases don't overwrite each other | todo | `server/src/routes/connections.js` | Changes existing IDs, so a migration is needed. |
 
 ## To do: larger investments (L)
@@ -47,5 +48,5 @@ Status: `todo` · `in progress` · `done` · `won't do`. Effort: S (under an hou
 
 | ID | Fix | Status | Notes |
 |----|-----|--------|-------|
-| F20 | Add a revoke endpoint for share links (`DELETE /api/dashboard/:id/share`) and a button for it in the UI | todo | Comes from F1. Today, deleting the pin is the only way to revoke a link. |
 | F21 | `/connect` and `/databases`: a URI the driver cannot parse (e.g. `mongodb://host:notaport`) throws `MongoRuntimeError`, which `connectionFailed` doesn't recognise, so it returns 500 `connection_save_failed` instead of 400 | todo | Found during F8. Map driver parse errors to `validation_error` (400). |
+| F22 | Narrow CSP `connect-src` to the production API origin and switch from Report-Only to enforcing | todo | Comes from F13. `client/netlify.toml` currently allows `connect-src 'self' https:` and only reports violations, so `frame-ancestors 'none'` isn't enforced yet either. |

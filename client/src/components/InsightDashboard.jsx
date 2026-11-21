@@ -3,10 +3,9 @@ import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
     LineChart, Line, PieChart, Pie, Cell, Legend, AreaChart, Area
 } from 'recharts';
-import { motion } from 'framer-motion';
-import { TrendingUp, Download, Share2 } from 'lucide-react';
+import { TrendingUp, Download, Share2, Link2Off, X } from 'lucide-react';
 import { downloadCsv } from '../lib/csv';
-import { shareDashboardPin } from '../services/api';
+import { shareDashboardPin, unshareDashboardPin } from '../services/api';
 
 // Verdigris: accent, clay, amber, text-2, accent-deep, red
 const COLORS = ['#4FC79B', '#C98F5C', '#D4A961', '#A9B5AC', '#2A8467', '#DF6A57'];
@@ -27,10 +26,15 @@ const CustomTooltip = ({ active, payload, label }) => {
     return null;
 };
 
-const InsightDashboard = ({ data, type = 'bar', title, pinId, hideActions = false }) => {
-    const [toastMsg, setToastMsg] = React.useState(null);
+const ACTION_BUTTON = 'w-8 h-8 flex items-center justify-center rounded-md text-vg-text-3 hover:bg-vg-surface-2 hover:text-vg-text transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vg-accent';
 
-    if (!data || data.length === 0) return null;
+const InsightDashboard = ({ data, type = 'bar', title, pinId, shared = false, onRemove, hideActions = false }) => {
+    const [toastMsg, setToastMsg] = React.useState(null);
+    const [isShared, setIsShared] = React.useState(shared);
+
+    const hasData = Array.isArray(data) && data.length > 0;
+    // A pin with no rows still renders (with a note) so it can be removed.
+    if (!hasData && !onRemove) return null;
 
     // Smart Key Detection
     const getChartKeys = (data) => {
@@ -61,6 +65,7 @@ const InsightDashboard = ({ data, type = 'bar', title, pinId, hideActions = fals
             showToast('Failed to create share link');
             return;
         }
+        setIsShared(true);
         const url = `${window.location.origin}/shared/${shareToken}`;
         try {
             await navigator.clipboard.writeText(url);
@@ -68,6 +73,18 @@ const InsightDashboard = ({ data, type = 'bar', title, pinId, hideActions = fals
         } catch (err) {
             if (import.meta.env.DEV) console.error('Failed to copy link', err);
             showToast('Failed to copy link');
+        }
+    };
+
+    const handleUnshare = async () => {
+        if (!pinId) return;
+        try {
+            await unshareDashboardPin(pinId);
+            setIsShared(false);
+            showToast('Public link revoked');
+        } catch (err) {
+            if (import.meta.env.DEV) console.error('Failed to revoke share link', err);
+            showToast('Failed to revoke link');
         }
     };
 
@@ -156,10 +173,8 @@ const InsightDashboard = ({ data, type = 'bar', title, pinId, hideActions = fals
     };
 
     return (
-        <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            className="bg-vg-surface border border-vg-line rounded-xl p-5 w-full h-[400px] flex flex-col relative overflow-hidden group font-ui transition-colors hover:border-vg-muted"
+        <div
+            className="vg-enter-scale bg-vg-surface border border-vg-line rounded-xl p-5 w-full h-[400px] flex flex-col relative overflow-hidden group font-ui transition-colors hover:border-vg-muted"
         >
             
             {toastMsg && (
@@ -174,22 +189,44 @@ const InsightDashboard = ({ data, type = 'bar', title, pinId, hideActions = fals
                         <TrendingUp size={17} className="text-vg-text-2" aria-hidden="true" />
                         {title || "Data Visualization"}
                     </h3>
-                    <p className="text-[12px] mt-1 text-vg-text-3">
-                        <span className="font-code text-vg-text-2">{valueKey}</span> by <span className="font-code text-vg-text-2">{nameKey}</span>
-                    </p>
+                    {hasData && (
+                        <p className="text-[12px] mt-1 text-vg-text-3">
+                            <span className="font-code text-vg-text-2">{valueKey}</span> by <span className="font-code text-vg-text-2">{nameKey}</span>
+                        </p>
+                    )}
                 </div>
                 {!hideActions && (
                     <div className="flex gap-2">
+                        {onRemove && (
+                            <button
+                                type="button"
+                                onClick={onRemove}
+                                aria-label={`Remove ${title || 'chart'} from dashboards`}
+                                title="Remove from dashboards"
+                                className="w-8 h-8 rounded-md flex items-center justify-center text-vg-text-3 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:bg-vg-red-wash hover:text-vg-red transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vg-accent"
+                            >
+                                <X size={15} aria-hidden="true" />
+                            </button>
+                        )}
                         <button 
                             onClick={handleShare}
-                            aria-label="Share as public link" className="w-8 h-8 flex items-center justify-center rounded-md text-vg-text-3 hover:bg-vg-surface-2 hover:text-vg-text transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vg-accent"
-                            title="Share as Public Link"
+                            aria-label={isShared ? 'Copy public link' : 'Share as public link'} className={ACTION_BUTTON}
+                            title={isShared ? 'Copy Public Link' : 'Share as Public Link'}
                         >
-                            <Share2 size={16} />
+                            <Share2 size={16} className={isShared ? 'text-vg-accent' : undefined} />
                         </button>
+                        {isShared && (
+                            <button
+                                onClick={handleUnshare}
+                                aria-label="Stop sharing" className={ACTION_BUTTON}
+                                title="Stop Sharing"
+                            >
+                                <Link2Off size={16} />
+                            </button>
+                        )}
                         <button 
                             onClick={handleDownload}
-                            aria-label="Download data as CSV" className="w-8 h-8 flex items-center justify-center rounded-md text-vg-text-3 hover:bg-vg-surface-2 hover:text-vg-text transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vg-accent"
+                            aria-label="Download data as CSV" className={ACTION_BUTTON}
                             title="Download Data as CSV"
                         >
                             <Download size={16} />
@@ -199,11 +236,17 @@ const InsightDashboard = ({ data, type = 'bar', title, pinId, hideActions = fals
             </div>
 
             <div className="flex-1 w-full min-h-0">
-                <ResponsiveContainer width="100%" height="100%">
-                    {renderChart()}
-                </ResponsiveContainer>
+                {hasData ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                        {renderChart()}
+                    </ResponsiveContainer>
+                ) : (
+                    <p className="h-full flex items-center justify-center text-[13px] text-vg-text-3">
+                        No results to chart
+                    </p>
+                )}
             </div>
-        </motion.div>
+        </div>
     );
 };
 

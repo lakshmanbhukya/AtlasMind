@@ -3,6 +3,12 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
+  // Dev only: deps reached only through lazy chunks (landing page, app shell)
+  // are otherwise discovered late, and the re-optimization serves stale
+  // "Outdated Optimize Dep" 504s to the lazy import on a cold start.
+  optimizeDeps: {
+    include: ["gsap", "gsap/ScrollTrigger", "@gsap/react", "recharts"],
+  },
   server: {
     port: 5173,
     proxy: {

@@ -1,9 +1,34 @@
-import { LayoutDashboard, X } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState } from 'react';
+import { LayoutDashboard } from 'lucide-react';
 import InsightDashboard from '../components/InsightDashboard';
+
+const EXIT_MS = 180;
+
+// Inlined rather than imported from landing/motion.js, which pulls in GSAP.
+const prefersReducedMotion = () =>
+  typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /** Dashboards view: every chart pinned from an answer. */
 export default function DashboardPage({ pins = [], onRemovePin, isLoading }) {
+  // Ids fading out; the pin is removed once the fade finishes.
+  const [removing, setRemoving] = useState(() => new Set());
+
+  const removeWithFade = (id) => {
+    setRemoving((prev) => new Set(prev).add(id));
+    setTimeout(async () => {
+      try {
+        await onRemovePin(id);
+      } finally {
+        // On failure the pin is still listed, so it fades back in.
+        setRemoving((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      }
+    }, prefersReducedMotion() ? 0 : EXIT_MS);
+  };
+
   return (
     <section aria-labelledby="dashboards-title" className="flex-1 min-h-0 overflow-y-auto font-ui">
       <div className="w-full max-w-[1200px] mx-auto px-4 sm:px-6 pt-5 pb-10">
@@ -33,37 +58,26 @@ export default function DashboardPage({ pins = [], onRemovePin, isLoading }) {
           </div>
         ) : (
           <div className="mt-6 grid grid-cols-1 xl:grid-cols-2 gap-5">
-            <AnimatePresence>
-              {pins.map((pin) => {
-                const id = pin._id || pin.id;
-                return (
-                  <motion.div
-                    key={id}
-                    layout
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.97 }}
-                    transition={{ duration: 0.18 }}
-                    className="relative group"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => onRemovePin(id)}
-                      aria-label={`Remove ${pin.chartTitle || pin.queryText || 'chart'} from dashboards`}
-                      className="absolute top-4 right-[88px] z-10 w-8 h-8 rounded-md flex items-center justify-center text-vg-text-3 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:bg-vg-red-wash hover:text-vg-red transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vg-accent"
-                    >
-                      <X size={15} aria-hidden="true" />
-                    </button>
-                    <InsightDashboard
-                      data={pin.results}
-                      type={pin.chartType || 'bar'}
-                      title={pin.chartTitle || pin.queryText || pin.query || 'Untitled'}
-                      pinId={id}
-                    />
-                  </motion.div>
-                );
-              })}
-            </AnimatePresence>
+            {pins.map((pin) => {
+              const id = pin._id || pin.id;
+              return (
+                <div
+                  key={id}
+                  className={`vg-enter relative group transition-[opacity,transform] duration-[180ms] motion-reduce:transition-none ${
+                    removing.has(id) ? 'opacity-0 scale-[0.97] pointer-events-none' : ''
+                  }`}
+                >
+                  <InsightDashboard
+                    data={pin.results}
+                    type={pin.chartType || 'bar'}
+                    title={pin.chartTitle || pin.queryText || pin.query || 'Untitled'}
+                    pinId={id}
+                    shared={Boolean(pin.shared)}
+                    onRemove={() => removeWithFade(id)}
+                  />
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

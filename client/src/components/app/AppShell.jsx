@@ -1,14 +1,17 @@
-import { useCallback, useState } from 'react';
+import { Suspense, useCallback, useState } from 'react';
+import { lazyWithReload } from '../../lib/lazyWithReload';
 import { cn } from '../../lib/utils';
 import ErrorBoundary from '../ErrorBoundary';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
 import { useDismiss } from '../../hooks/useDismiss';
-import DashboardPage from '../../pages/DashboardPage';
 import Sidebar from './Sidebar';
 import ThreadHeader from './ThreadHeader';
 import ChatThread from './ChatThread';
 import SchemaView from './SchemaView';
 import WorkspacesDialog from './WorkspacesDialog';
+
+// Dashboards (and the Recharts code they share with chat answers) load on demand.
+const DashboardPage = lazyWithReload(() => import('../../pages/DashboardPage'));
 
 /**
  * Authenticated app frame: collapsible sidebar (an overlay drawer below `md`)
@@ -102,7 +105,9 @@ export default function AppShell({
         />
         {activeView === 'dashboard' ? (
           <ErrorBoundary label="Dashboard">
-            <DashboardPage pins={pins} onRemovePin={onRemovePin} isLoading={pinsLoading} />
+            <Suspense fallback={<div className="flex-1" aria-busy="true" />}>
+              <DashboardPage pins={pins} onRemovePin={onRemovePin} isLoading={pinsLoading} />
+            </Suspense>
           </ErrorBoundary>
         ) : activeView === 'schema' ? (
           <ErrorBoundary label="Schema explorer">

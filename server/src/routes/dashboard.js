@@ -31,7 +31,7 @@ function sendDashboardError(res, error, label) {
     console.error(`❌ Dashboard ${label} error:`, error);
     return res.status(500).json({
         success: false,
-        error: { code: 'dashboard_error', message: error.message },
+        error: { code: 'dashboard_error', message: 'Dashboard operation failed' },
     });
 }
 
@@ -135,6 +135,24 @@ router.post('/:id/share', async (req, res) => {
         return res.json({ success: true, data: { shareToken: shared.shareToken } });
     } catch (error) {
         return sendDashboardError(res, error, 'share');
+    }
+});
+
+/**
+ * DELETE /api/dashboard/:id/share
+ *
+ * Revoke the pin's public link. The pin itself stays on the dashboard.
+ */
+router.delete('/:id/share', async (req, res) => {
+    try {
+        if (!ObjectId.isValid(req.params.id)) return invalidId(res);
+
+        const unshared = await dashboardStore.unshare(req.connectionId, req.params.id);
+        if (!unshared) return notFound(res);
+
+        return res.json({ success: true, message: 'Share link revoked' });
+    } catch (error) {
+        return sendDashboardError(res, error, 'unshare');
     }
 });
 

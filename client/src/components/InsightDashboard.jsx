@@ -3,7 +3,6 @@ import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
     LineChart, Line, PieChart, Pie, Cell, Legend, AreaChart, Area
 } from 'recharts';
-import { motion } from 'framer-motion';
 import { TrendingUp, Download, Share2, Link2Off, X } from 'lucide-react';
 import { downloadCsv } from '../lib/csv';
 import { shareDashboardPin, unshareDashboardPin } from '../services/api';
@@ -172,10 +171,8 @@ const InsightDashboard = ({ data, type = 'bar', title, pinId, shared = false, on
     };
 
     return (
-        <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            className="bg-vg-surface border border-vg-line rounded-xl p-5 w-full h-[400px] flex flex-col relative overflow-hidden group font-ui transition-colors hover:border-vg-muted"
+        <div
+            className="vg-enter-scale bg-vg-surface border border-vg-line rounded-xl p-5 w-full h-[400px] flex flex-col relative overflow-hidden group font-ui transition-colors hover:border-vg-muted"
         >
             
             {toastMsg && (
@@ -239,7 +236,7 @@ const InsightDashboard = ({ data, type = 'bar', title, pinId, shared = false, on
                     {renderChart()}
                 </ResponsiveContainer>
             </div>
-        </motion.div>
+        </div>
     );
 };
 

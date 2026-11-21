@@ -138,3 +138,23 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .vg-wave { animation: none; }
 }
+
+/* Verdigris chat app — enter fade/slide for dashboard cards.
+   No forwards fill, so exit transitions (opacity/transform) still apply. */
+.vg-enter {
+  animation: vg-enter 0.2s ease-out backwards;
+}
+.vg-enter-scale {
+  animation: vg-enter-scale 0.25s ease-out backwards;
+}
+@keyframes vg-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes vg-enter-scale {
+  from { opacity: 0; transform: translateY(10px) scale(0.95); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vg-enter, .vg-enter-scale { animation: none; }
+}

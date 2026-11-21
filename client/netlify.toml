@@ -12,15 +12,16 @@
   status = 200
   force = false
 
-# ─── Security headers (F13b) ────────────────────────────────────────────────
+# ─── Security headers (F13b, F22) ────────────────────────────────────────────────
 # Netlify combines every rule whose path matches a request, so the CSP is set
 # on the app routes only ("/", "/index.html", "/shared/*") rather than "/*":
 # a "/*" CSP would also land on /shared/* and its frame-ancestors would apply
 # there too. Shared widgets must stay embeddable, so their CSP has no
 # frame-ancestors.
 #
-# The CSP is Report-Only until the production API origin is known; see the
-# fixes.md follow-up to narrow connect-src and switch to enforcing.
+# The CSP is enforced (F22). connect-src allows only same-origin and the
+# production API on Render (VITE_SERVER_URL); if the API moves, update all
+# three CSP blocks below or every API call is blocked.
 # 'unsafe-inline' in style-src covers React/Recharts/GSAP inline style
 # attributes; scripts are same-origin modules only.
 
@@ -35,14 +36,14 @@
 [[headers]]
   for = "/"
   [headers.values]
-    Content-Security-Policy-Report-Only = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https:; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://atlasmind-on2d.onrender.com; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 
 [[headers]]
   for = "/index.html"
   [headers.values]
-    Content-Security-Policy-Report-Only = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https:; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://atlasmind-on2d.onrender.com; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 
 [[headers]]
   for = "/shared/*"
   [headers.values]
-    Content-Security-Policy-Report-Only = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https:; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'"
+    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://atlasmind-on2d.onrender.com; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'"

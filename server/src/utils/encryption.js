@@ -1,3 +1,4 @@
+// @ts-check
 const crypto = require('crypto');
 
 // The key MUST be a 64-character hexadecimal string (32 bytes) in process.env.ENCRYPTION_KEY.

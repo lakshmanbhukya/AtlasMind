@@ -1,3 +1,4 @@
+// @ts-check
 const { getDb } = require('../db/connection');
 const log = require('../utils/logger').logger.child({ module: 'UserConnection' });
 

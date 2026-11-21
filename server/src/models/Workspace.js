@@ -1,3 +1,4 @@
+// @ts-check
 const { ObjectId } = require('mongodb');
 const { getDb } = require('../db/connection');
 const log = require('../utils/logger').logger.child({ module: 'Workspace' });
@@ -30,7 +31,7 @@ async function initializeCollection() {
 /**
  * List all workspaces for a given connectionId.
  * @param {string} connectionId
- * @returns {Promise<Array<object>>}
+ * @returns {Promise<Array<Record<string, any>>>}
  */
 async function listWorkspaces(connectionId) {
     const collection = getCollection();
@@ -44,7 +45,7 @@ async function listWorkspaces(connectionId) {
  * Find a workspace by ID and connectionId.
  * @param {string} id
  * @param {string} connectionId
- * @returns {Promise<object|null>}
+ * @returns {Promise<Record<string, any>|null>}
  */
 async function getWorkspaceById(id, connectionId) {
     if (!ObjectId.isValid(id)) return null;
@@ -58,7 +59,7 @@ async function getWorkspaceById(id, connectionId) {
  * @param {string} param0.connectionId
  * @param {string} param0.name
  * @param {string[]} param0.collections
- * @returns {Promise<object>}
+ * @returns {Promise<Record<string, any>>}
  */
 async function createWorkspace({ connectionId, name, collections }) {
     const collection = getCollection();
@@ -81,7 +82,7 @@ async function createWorkspace({ connectionId, name, collections }) {
  * @param {object} param2
  * @param {string} [param2.name]
  * @param {string[]} [param2.collections]
- * @returns {Promise<object|null>}
+ * @returns {Promise<Record<string, any>|null>}
  */
 async function updateWorkspace(id, connectionId, { name, collections }) {
     if (!ObjectId.isValid(id)) return null;

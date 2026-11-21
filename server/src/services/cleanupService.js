@@ -1,3 +1,4 @@
+// @ts-check
 const queryHistoryStore = require('../stores/queryHistoryStore');
 const log = require('../utils/logger').logger.child({ module: 'cleanup' });
 
@@ -23,7 +24,7 @@ async function initializeCleanupIndexes() {
  *
  * @param {object} [options]
  * @param {number} [options.retentionDays=30] - Number of days to retain playground chat history
- * @returns {Promise<{ success: boolean, deletedCount: number, cutoffDate: Date, retentionDays: number }>}
+ * @returns {Promise<{ success: boolean, deletedCount: number, cutoffDate: Date, retentionDays: number, error?: string }>}
  */
 async function cleanOldPlaygroundChats(options = {}) {
     const retentionDays = Number(options.retentionDays || process.env.PLAYGROUND_CHAT_RETENTION_DAYS || DEFAULT_RETENTION_DAYS);

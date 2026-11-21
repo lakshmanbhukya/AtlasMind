@@ -1,3 +1,4 @@
+// @ts-check
 const { normalizeBson } = require('../utils/normalizeBson');
 const { classifyExecution } = require('./safetyGuard');
 

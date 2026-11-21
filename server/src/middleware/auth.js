@@ -1,3 +1,4 @@
+// @ts-check
 const { readSession, clearSession, SessionError } = require('../auth/session');
 
 /**

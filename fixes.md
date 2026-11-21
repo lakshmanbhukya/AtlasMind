@@ -27,6 +27,7 @@ Status: `todo` · `in progress` · `done` · `won't do`. Effort: S (under an hou
 | F22 | CSP enforced (`Content-Security-Policy`, no longer Report-Only) with `connect-src 'self' https://atlasmind-on2d.onrender.com` | `dc29fd1` | Checked in headless Chromium against the production build: no violations on `/` or `/shared/*`. If the API moves off Render, update all three CSP blocks in `client/netlify.toml`. |
 | F15 | `connectionId` = `connectionIdFor(uri, dbName)`, so one cluster connected with two databases gives two separate sessions | `da81f33` | **Run the migration once after deploying:** `npm run migrate:connection-ids -- --dry-run`, then without the flag (see `docs/DEPLOYMENT.md`). Users reconnect once. If the migration is skipped, old history, dashboards and workspaces stay under the old ID. |
 | F17 | pino JSON logging (`utils/logger.js`, `LOG_LEVEL`, default `info`) and `pino-http` with an `X-Request-Id` on every response; `requireAuth` adds `connectionId` to the request's log lines | `eb369a5`, `7bf1ad8` | All `console.*` in `routes/`, `services/`, `stores/`, `models/`, `db/connection.js`, `utils/` and `index.js` replaced; `db/seed.js` and migrations stay on `console`. Redacts URIs, cookies and auth headers; the raw LLM output and voice filenames are no longer logged. `/api/health` is not logged. |
+| F19 | `// @ts-check` on every non-test server file except `db/seed.js`; `npm run typecheck` (`tsc -p .`, no emit) runs in CI before `npm test` | `dc3d7a8`, `170255b`, `290db5e`, `a6e347d`, `d8ed206` | TypeScript 7.0.2, `strict: false`, `checkJs: false`. Typedefs `QueryOutcome`, `ExecutionVerdict`, `PipelineCheck`, `ScopeOptions`, `AmbiguityDiagnostics`; `types/express.d.ts` declares `req.connectionId`. Only JSDoc and casts changed, no runtime code. |
 
 ## To do: quick wins (S)
 
@@ -44,7 +45,6 @@ Status: `todo` · `in progress` · `done` · `won't do`. Effort: S (under an hou
 |----|-----|--------|-------|
 | F16 | Stream LLM progress and explanations over SSE | todo | |
 | F18 | Split `ambiguityGate.js` (1033 lines), `safetyGuard.js` and `queryExecutionEngine.js` by stage | todo | |
-| F19 | `// @ts-check` plus JSDoc on the server | todo | |
 
 ## Follow-ups from finished work
 

@@ -1,3 +1,4 @@
+// @ts-check
 const { isUserCollection } = require('../db/systemCollections');
 
 // Skip collections whose name contains 'embed' (evaluation default; cannot be overridden by options)
@@ -55,7 +56,7 @@ function inferType(value) {
  *
  * @param {string} parentKey - e.g. "a"
  * @param {*} subDoc - nested object value
- * @param {Map<string,object>} fieldMap
+ * @param {Map<string,Record<string, any>>} fieldMap
  * @param {number} subLevel - nesting level relative to parent (1 for "a.b", 2 for "a.b.c")
  */
 function flattenSubDoc(parentKey, subDoc, fieldMap, subLevel) {
@@ -91,7 +92,7 @@ function flattenSubDoc(parentKey, subDoc, fieldMap, subLevel) {
  *
  * @param {string} parentKey - e.g. "items"
  * @param {Array} arrayValue  - the actual array from the sampled document
- * @param {Map<string,object>} fieldMap - the shared fieldMap to insert into
+ * @param {Map<string,Record<string, any>>} fieldMap - the shared fieldMap to insert into
  */
 function extractArraySubFields(parentKey, arrayValue, fieldMap) {
     if (!Array.isArray(arrayValue) || arrayValue.length === 0) return;
@@ -121,7 +122,7 @@ function extractArraySubFields(parentKey, arrayValue, fieldMap) {
  * @param {string} collectionName
  * @param {object} [options]
  * @param {number} [options.sampleSize=5]
- * @returns {Promise<object>}
+ * @returns {Promise<Record<string, any>>}
  */
 async function profileCollection(db, collectionName, { sampleSize = 5 } = {}) {
     const collection = db.collection(collectionName);
@@ -188,9 +189,10 @@ async function profileCollection(db, collectionName, { sampleSize = 5 } = {}) {
  * @param {string} [options.connectionId] Tenant identity; required for caching
  * @param {boolean} [options.forceRefresh=false] Bypass the cache
  * @param {number} [options.sampleSize=5] Number of sample documents per collection
- * @param {object} [options.snapshot] `{ [databaseName]: schema }` returned instead of live profiling
+ * @param {string[]} [options.collections] Limit the result to these collections
+ * @param {Record<string, any>} [options.snapshot] `{ [databaseName]: schema }` returned instead of live profiling
  *        (supplied by an ExperimentConfig; see services/experiment.js)
- * @returns {Promise<object>}
+ * @returns {Promise<Record<string, any>>}
  */
 async function profileSchema(db, options = {}) {
     if (!db || typeof db.listCollections !== 'function') {
@@ -258,7 +260,7 @@ async function profileSchema(db, options = {}) {
  * Infer probable foreign-key style relationships between collections in scope.
  * Looks for fields ending in Id, _id, etc., matching another collection's name.
  *
- * @param {Array<object>} collections - Array of profiled collection objects
+ * @param {Array<Record<string, any>>} collections - Array of profiled collection objects
  * @returns {string[]} List of relationship hints (e.g. "orders.customerId -> customers._id")
  */
 function inferRelationships(collections) {
@@ -312,7 +314,7 @@ function inferRelationships(collections) {
 
 /**
  * Format an already-profiled schema object into the minified text format used for LLM context.
- * @param {object} schema - Result of profileSchema()
+ * @param {Record<string, any>} schema - Result of profileSchema()
  * @returns {string}
  */
 function formatMinifiedSchema(schema) {
@@ -359,7 +361,7 @@ function formatMinifiedSchema(schema) {
  * Format an already-profiled schema object into a stripped text format
  * containing collection names and field names only (no types, samples, or hints).
  * Used for schema-context ablations (ExperimentConfig.disableSchemaContext).
- * @param {object} schema - Result of profileSchema()
+ * @param {Record<string, any>} schema - Result of profileSchema()
  * @returns {string}
  */
 function formatFieldNamesOnly(schema) {
@@ -380,7 +382,7 @@ function formatFieldNamesOnly(schema) {
  * Caches results per database for 5 minutes.
  *
  * @param {import('mongodb').Db} db
- * @param {object} [options]
+ * @param {Record<string, any>} [options]
  * @returns {Promise<string>}
  */
 async function getMinifiedSchema(db, options = {}) {

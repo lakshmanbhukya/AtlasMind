@@ -1,3 +1,4 @@
+// @ts-check
 'use strict';
 
 /**
@@ -34,6 +35,8 @@ const short = (id) => `${String(id).slice(0, 12)}…`;
  * @param {object} [options]
  * @param {boolean} [options.dryRun=false] - count what would move, write nothing
  * @param {(line: string) => void} [options.log]
+ * @param {(encrypted: string) => string} [options.decrypt] - injectable for tests
+ * @param {(uri: string, dbName: string) => string} [options.connectionIdFor] - injectable for tests
  * @returns {Promise<{ total: number, migrated: number, skipped: number, failed: number, moved: Record<string, number> }>}
  */
 async function migrate(db, {

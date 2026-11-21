@@ -1,11 +1,13 @@
+// @ts-check
 require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
-const helmet = require("helmet");
+// The typings model these as ES default exports; the CommonJS entry is the function itself.
+const helmet = /** @type {typeof import("helmet").default} */ (/** @type {unknown} */ (require("helmet")));
 const cookieParser = require("cookie-parser");
 const crypto = require("crypto");
-const pinoHttp = require("pino-http");
+const pinoHttp = /** @type {typeof import("pino-http").default} */ (/** @type {unknown} */ (require("pino-http")));
 const { logger } = require("./utils/logger");
 const { connectToDatabase, closeConnection } = require("./db/connection");
 const { initializeCollection } = require("./models/UserConnection");

@@ -1,3 +1,4 @@
+// @ts-check
 require('../utils/dnsConfig');
 const { MongoClient } = require('mongodb');
 const log = require('../utils/logger').logger.child({ module: 'db' });

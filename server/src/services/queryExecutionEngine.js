@@ -1,3 +1,4 @@
+// @ts-check
 'use strict';
 
 const { signApprovalToken, verifyApprovalToken, APPROVAL_TOKEN_TYPE } = require('../auth/session');
@@ -34,7 +35,7 @@ function tenantDatabaseOf(db) {
 
 /** ISO expiry of a signed Write Approval Token (from its JWT `exp`). */
 function approvalExpiresAt(token) {
-    const decoded = jwt.decode(token);
+    const decoded = /** @type {{ exp?: number } | null} */ (jwt.decode(token));
     return decoded && decoded.exp ? new Date(decoded.exp * 1000).toISOString() : null;
 }
 
@@ -83,6 +84,12 @@ async function ensureApprovalIndexes(db) {
     }
 }
 
+/**
+ * What the engine returns for a handled query (routes/engineHttp.js maps it to
+ * HTTP). Failures are thrown as QueryEngineError instead (engineErrors.js).
+ * @typedef {{ type: 'success'|'clarification_required'|'approval_required'|'safety_blocked', data: Record<string, any>, approvalToken?: string }} QueryOutcome
+ */
+
 class QueryExecutionEngine {
     /**
      * Central natural language query processing method.
@@ -90,7 +97,7 @@ class QueryExecutionEngine {
      *
      * @param {object|string} contextOrParams - Context object or connectionId string or combined params
      * @param {object} [inputParams] - Input params if context was provided as 1st arg
-     * @returns {Promise<{ type: 'success'|'clarification_required'|'approval_required'|'safety_blocked', data: object, approvalToken?: string }>}
+     * @returns {Promise<QueryOutcome>}
      */
     static async executeNaturalLanguageQuery(contextOrParams, inputParams) {
         try {
@@ -107,7 +114,7 @@ class QueryExecutionEngine {
      *
      * @param {object|string} contextOrParams - Context object or connectionId or combined params
      * @param {object} [inputParams] - Input params if context was provided as 1st arg
-     * @returns {Promise<{ type: 'success', data: object }>}
+     * @returns {Promise<QueryOutcome & { type: 'success' }>}
      */
     static async executeApprovedWrite(contextOrParams, inputParams) {
         try {
@@ -118,6 +125,10 @@ class QueryExecutionEngine {
     }
 }
 
+/**
+ * @param {Record<string, any>} params - normalized by normalizeParams
+ * @returns {Promise<QueryOutcome>}
+ */
 async function runNaturalLanguageQuery(params) {
     const {
         connectionId,
@@ -202,6 +213,7 @@ async function runNaturalLanguageQuery(params) {
         return payload;
     };
 
+    /** @type {(questions: any[]) => QueryOutcome} */
     const clarificationOutcome = (questions) => ({
         type: 'clarification_required',
         data: buildOutcomePayload({
@@ -426,7 +438,9 @@ async function runNaturalLanguageQuery(params) {
             tenantDatabase: tenantDatabaseOf(userDb),
         });
         validateMs = toMs(tValStart);
-        safetyInfo = { code: verdict.code || null, reason: verdict.reason || null };
+        // Only blocked and scope_insufficient verdicts carry code/reason.
+        const verdictInfo = /** @type {{ code?: string, reason?: string }} */ (verdict);
+        safetyInfo = { code: verdictInfo.code || null, reason: verdictInfo.reason || null };
 
         if (verdict.kind === 'scope_insufficient') {
             return {
@@ -618,6 +632,10 @@ async function runNaturalLanguageQuery(params) {
     };
 }
 
+/**
+ * @param {Record<string, any>} params - normalized by normalizeParams
+ * @returns {Promise<QueryOutcome & { type: 'success' }>}
+ */
 async function runApprovedWrite(params) {
     const { approvalToken, connectionId } = params;
     const startTime = Date.now();

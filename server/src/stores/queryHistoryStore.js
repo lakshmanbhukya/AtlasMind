@@ -1,3 +1,4 @@
+// @ts-check
 'use strict';
 
 const connection = require('../db/connection');
@@ -42,7 +43,8 @@ function relativeTimeLabel(timestamp, now = Date.now()) {
  * With `isEdit: true` the most recent entry for the same question is updated
  * in place (a clarification edit), instead of adding a second row.
  *
- * @param {object} entry - must include connectionId and naturalLanguage
+ * @param {{ connectionId: string, naturalLanguage: string, isEdit?: boolean, results?: unknown[], [field: string]: any }} entry
+ *   must include connectionId and naturalLanguage
  * @returns {Promise<void>}
  */
 async function record(entry) {

@@ -1,3 +1,4 @@
+// @ts-check
 const { MongoClient } = require('mongodb');
 
 const { isUserCollection } = require('../db/systemCollections');

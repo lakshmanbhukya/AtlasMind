@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Ambiguity Gate for AtlasMind.
  * Detects ambiguous NL queries and generates structured clarification questions
@@ -231,7 +232,7 @@ const metricsStore = {
  * Record an ambiguity lifecycle metric event without logging sensitive query text.
  *
  * @param {'ambiguity_asked'|'ambiguity_skipped'|'ambiguity_resolved'|'ambiguity_bypassed'|'clarification_edit'|'generation_after_clarification'|'query_evaluated'} event
- * @param {object} [meta]
+ * @param {Record<string, any>} [meta]
  */
 function recordAmbiguityMetric(event, meta = {}) {
     if (event === 'query_evaluated') {
@@ -250,7 +251,7 @@ function recordAmbiguityMetric(event, meta = {}) {
 
 /**
  * Retrieve current ambiguity metrics and derived rates.
- * @returns {object}
+ * @returns {Record<string, any>}
  */
 function getAmbiguityMetrics() {
     const total = Math.max(metricsStore.totalQueriesEvaluated, metricsStore.ambiguity_asked + metricsStore.ambiguity_skipped, 1);
@@ -321,7 +322,7 @@ function toLabel(fieldName) {
  * Extract numeric fields from a schema profiler result object.
  * Only top-level fields and first-level array sub-fields are considered.
  *
- * @param {object} schemaObject - Result of profileSchema()
+ * @param {Record<string, any>} schemaObject - Result of profileSchema()
  * @returns {Array<{ collection: string, field: string, label: string }>}
  */
 function extractNumericFields(schemaObject) {
@@ -491,20 +492,26 @@ function queryAlreadyNamesSpecificField(lowerQuery, numericFields, enableBindFix
 // ---------------------------------------------------------------------------
 
 /**
+ * Why the deterministic check did (or did not) ask.
+ * @typedef {{ matchedTerms: string[], numericCandidateCount: number, explicitBindingFound: boolean, reason: 'no_vague_term'|'lt2_numeric'|'explicit_binding'|'write_intent'|'asked' }} AmbiguityDiagnostics
+ */
+
+/**
  * Analyze query ambiguity and return both result and diagnostics.
  *
  * @param {string} queryText
- * @param {object} schemaObject
+ * @param {Record<string, any>} schemaObject
  * @param {object} [gateOptions]
  * @param {'hybrid'|'deterministic'|'llm'|'off'} [gateOptions.mode='hybrid'] 'off'/'llm' skip the deterministic gate
  * @param {Iterable<string>} [gateOptions.vagueTerms] Override DEFAULT_VAGUE_TERMS
  * @param {boolean} [gateOptions.enableBindFix=true]
- * @returns {{ result: object|null, diagnostics: { matchedTerms: string[], numericCandidateCount: number, explicitBindingFound: boolean, reason: 'no_vague_term'|'lt2_numeric'|'explicit_binding'|'write_intent'|'asked' } }}
+ * @returns {{ result: Record<string, any>|null, diagnostics: AmbiguityDiagnostics }}
  */
 function analyzeAmbiguity(queryText, schemaObject, gateOptions = {}) {
     const bindFixActive = gateOptions.enableBindFix !== false;
     const mode = gateOptions.mode || 'hybrid';
     const vagueTerms = toVagueTermSet(gateOptions.vagueTerms);
+    /** @type {AmbiguityDiagnostics} */
     const diagnostics = {
         matchedTerms: [],
         numericCandidateCount: 0,
@@ -567,6 +574,7 @@ function analyzeAmbiguity(queryText, schemaObject, gateOptions = {}) {
     diagnostics.reason = 'asked';
 
     const topFields = numericFields.slice(0, 4);
+    /** @type {Array<{ value: string, label: string, collection?: string, recommended?: boolean }>} */
     const options = topFields.map((f, i) => ({
         value: f.field,
         label: f.label,
@@ -598,8 +606,8 @@ function analyzeAmbiguity(queryText, schemaObject, gateOptions = {}) {
  * This runs entirely in-process (no LLM call) and is very fast.
  *
  * @param {string} queryText - The raw NL query string
- * @param {object} schemaObject - The raw profileSchema() result (NOT the minified string)
- * @returns {object|null} - Clarification payload or null
+ * @param {Record<string, any>} schemaObject - The raw profileSchema() result (NOT the minified string)
+ * @returns {Record<string, any>|null} - Clarification payload or null
  */
 function checkDeterministicAmbiguity(queryText, schemaObject) {
     const analysis = analyzeAmbiguity(queryText, schemaObject);
@@ -616,7 +624,7 @@ function checkDeterministicAmbiguity(queryText, schemaObject) {
  *  - Option values (other than __other__) must exist in schemaObject when schema fields exist
  *
  * @param {Array} questions
- * @param {object|null} schemaObject
+ * @param {Record<string, any>|null} schemaObject
  * @returns {{ valid: boolean, questions: Array, reason?: string }}
  */
 function validateModelClarification(questions, schemaObject = null) {
@@ -694,8 +702,8 @@ const MAX_MULTI_VALUES = 10;
  * to resolve to real schema field names, and rejects values not in offered options when provided.
  *
  * @param {Array<{ id: string, value: string, customText?: string }>} clarifications
- * @param {object} schemaObject - The raw profileSchema() result
- * @param {Array<object>|object} [offeredQuestions=null] - Optional list of offered questions/options
+ * @param {Record<string, any>} schemaObject - The raw profileSchema() result
+ * @param {Array<Record<string, any>>|Record<string, any>} [offeredQuestions=null] - Optional list of offered questions/options
  * @returns {{ valid: boolean, sanitized: Array, errors: string[] }}
  */
 function validateClarifications(clarifications, schemaObject, offeredQuestions = null) {
@@ -871,11 +879,11 @@ function buildEnrichedQuery(originalQuery, sanitizedClarifications) {
  * @param {boolean} [input.bypass=false] - user chose "run anyway"
  * @param {boolean} [input.isEdit=false] - clarification edited after results
  * @param {boolean} [input.disabled=false] - skip the deterministic check (experiments)
- * @param {object} [input.gateOptions] - { mode, vagueTerms, enableBindFix } for analyzeAmbiguity
+ * @param {Record<string, any>} [input.gateOptions] - { mode, vagueTerms, enableBindFix } for analyzeAmbiguity
  * @param {{ connectionId?: string, source?: string }} [input.context] - metric labels
  * @returns {GateDecision}
  *
- * @typedef {object} GateDecision
+ * @typedef {Record<string, any>} GateDecision
  * @property {'ask'|'proceed'|'reject'} action
  * @property {Array} [questions] - when action is 'ask'
  * @property {string[]} [errors] - when action is 'reject' (invalid clarifications)
@@ -966,7 +974,7 @@ function decide({
  *
  * @param {GateDecision} decision - from decide()
  * @param {{ needsClarification?: boolean, questions?: Array }} llmResult
- * @param {object} schema
+ * @param {Record<string, any>} schema
  * @param {{ connectionId?: string, source?: string }} [context]
  * @returns {{ action: 'ask', questions: Array } | { action: 'proceed' }}
  */

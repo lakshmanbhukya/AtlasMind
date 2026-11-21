@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * System prompt builder for the NL→MQL translation pipeline.
  *
@@ -9,8 +10,8 @@
  * Build the full system prompt for Groq LLM.
  *
  * @param {string} schemaContext - Minified database schema
- * @param {object[]} fewShotExamples - Similar NL→MQL examples
- * @param {object} [options={}] - Options controlling generation mode
+ * @param {Record<string, any>[]} fewShotExamples - Similar NL→MQL examples
+ * @param {Record<string, any>} [options={}] - Options controlling generation mode
  * @returns {string}
  */
 function buildSystemPrompt(schemaContext, fewShotExamples = [], options = {}) {

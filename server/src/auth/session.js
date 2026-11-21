@@ -1,3 +1,4 @@
+// @ts-check
 'use strict';
 
 const crypto = require('crypto');
@@ -70,7 +71,7 @@ function readSession(req) {
         throw new SessionError('unauthenticated', 'No session found. Please connect your database.');
     }
     try {
-        const payload = jwt.verify(token, secret());
+        const payload = /** @type {{ connectionId?: unknown }} */ (jwt.verify(token, secret()));
         if (!payload || typeof payload.connectionId !== 'string') throw new Error('malformed session');
         return payload.connectionId;
     } catch {
@@ -93,11 +94,13 @@ function signApprovalToken(write) {
 
 /**
  * Verify a Write Approval Token's signature and expiry.
- * @returns {object} decoded payload (check `type === APPROVAL_TOKEN_TYPE`)
+ * @param {string} token
+ * @returns {Record<string, any>} decoded payload (check `type === APPROVAL_TOKEN_TYPE`)
  * @throws if the signature is invalid or the token expired
  */
 function verifyApprovalToken(token) {
-    return jwt.verify(token, secret());
+    // Approval tokens are always signed from an object, so the payload is one.
+    return /** @type {Record<string, any>} */ (jwt.verify(token, secret()));
 }
 
 module.exports = {

@@ -60,6 +60,11 @@ jobs:
       run: |
         cd server
         npm ci
+    - name: Typecheck
+      run: |
+        cd server
+        npm run typecheck
+
     - name: Run tests
       run: |
         cd server

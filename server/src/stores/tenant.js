@@ -1,3 +1,4 @@
+// @ts-check
 'use strict';
 
 const { ObjectId } = require('mongodb');

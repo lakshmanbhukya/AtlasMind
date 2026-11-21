@@ -11,8 +11,8 @@ Status: `todo` · `in progress` · `blocked` · `done` · `won't do`
 
 | Phase | ID | Fix | Effort | Branch | Status | Commits | Notes |
 |-------|----|-----|--------|--------|--------|---------|-------|
-| 1 | F21 | Driver URI parse errors → 400 `validation_error` | S | `fix/uri-validation` | todo | | |
-| 1 | F22 | Narrow CSP `connect-src` and enforce it | S | `fix/uri-validation` | blocked | | Needs the production API origin from the user |
+| 1 | F21 | Driver URI parse errors → 400 `validation_error` | S | `fix/uri-validation` | done | `6af5fde` | Validated with the driver itself (`InvalidConnectionStringError` in `openTemporaryClient`): `mongodb-connection-string-url` accepts `host:notaport`, so the default below didn't work |
+| 1 | F22 | Narrow CSP `connect-src` and enforce it | S | `fix/uri-validation` | done | `dc29fd1` | API origin `https://atlasmind-on2d.onrender.com`; no violations in headless Chromium on `/` and `/shared/*` |
 | 2 | F15 | `dbName` in the `connectionId` hash, plus a migration | M | `fix/connection-id-db` | todo | | Run the migration only with the user's go-ahead |
 | 3 | F17 | pino structured logging with a request ID | L | `feat/structured-logging` | todo | | |
 | 4 | F19 | `// @ts-check` and JSDoc on the server, plus a `typecheck` CI step | L | `chore/server-ts-check` | todo | | |
@@ -20,7 +20,7 @@ Status: `todo` · `in progress` · `blocked` · `done` · `won't do`
 | 6 | F16 | Stream query progress over SSE | L | `feat/query-sse` | todo | | |
 
 **Progress log** (add one line per session: date, phase, result):
-- _empty_
+- 2026-11-21, phase 1: F21 and F22 done on `fix/uri-validation`. Server 432/432 tests, client lint, 29 unit, build and 11 e2e pass.
 
 ## How to run this plan (for the agent)
 Work through the phases in order without stopping for confirmation. Ask the user only where a phase says to, or when a step fails in a way this file doesn't cover.

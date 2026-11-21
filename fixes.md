@@ -23,6 +23,8 @@ Status: `todo` · `in progress` · `done` · `won't do`. Effort: S (under an hou
 | F10 | framer-motion removed; GSAP stays for the landing page. Dashboard enter/exit fades are CSS (`.vg-enter`, `.vg-enter-scale`) and respect `prefers-reduced-motion` | `f0eec5b` | Bundle went from 371 kB to 331 kB gzip before the split. |
 | F11 | CI `client` job: lint, unit tests, build, Playwright e2e on Node 24. `dorny/paths-filter` runs each job only for its own folder | `1d033f6` | The image `release` job depends only on the server job. First run happens on the next push. |
 | F20 | Revoke share links: `DELETE /api/dashboard/:id/share` (`dashboardStore.unshare`), and a "Stop sharing" button next to Share | `fa2b43c`, `442f239`, `2846dc3` | `GET /api/dashboard` now returns `shared: boolean` instead of the token. The remove button moved into `InsightDashboard`'s action row; empty pins now render so they stay removable. |
+| F21 | `/connect` and `/databases` return 400 `validation_error` for a URI the driver cannot parse (e.g. `mongodb://host:notaport`) instead of 500 | `6af5fde` | `openTemporaryClient` wraps the synchronous `new MongoClient` throw in `InvalidConnectionStringError`. `mongodb-connection-string-url` was not used: it accepts a non-numeric port. |
+| F22 | CSP enforced (`Content-Security-Policy`, no longer Report-Only) with `connect-src 'self' https://atlasmind-on2d.onrender.com` | `dc29fd1` | Checked in headless Chromium against the production build: no violations on `/` or `/shared/*`. If the API moves off Render, update all three CSP blocks in `client/netlify.toml`. |
 
 ## To do: quick wins (S)
 
@@ -48,5 +50,3 @@ Status: `todo` · `in progress` · `done` · `won't do`. Effort: S (under an hou
 
 | ID | Fix | Status | Notes |
 |----|-----|--------|-------|
-| F21 | `/connect` and `/databases`: a URI the driver cannot parse (e.g. `mongodb://host:notaport`) throws `MongoRuntimeError`, which `connectionFailed` doesn't recognise, so it returns 500 `connection_save_failed` instead of 400 | todo | Found during F8. Map driver parse errors to `validation_error` (400). |
-| F22 | Narrow CSP `connect-src` to the production API origin and switch from Report-Only to enforcing | todo | Comes from F13. `client/netlify.toml` currently allows `connect-src 'self' https:` and only reports violations, so `frame-ancestors 'none'` isn't enforced yet either. |

@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
+import { sseEvent, sseStream } from '../../src/lib/__fixtures__/sse.js';
 
 /**
  * Chat thread, one turn of each kind, against a stubbed API (no server needed).
@@ -12,8 +13,9 @@ const fixture = (name: string) =>
 type Reply = { status?: number; body: unknown };
 
 /**
- * Stub every /api call. `queryReplies` answers POST /api/query in order; the request bodies
- * are recorded in the returned array so tests can assert what the client sent.
+ * Stub every /api call. `queryReplies` answers text questions in order, on POST /api/query/stream
+ * (as an SSE stream: progress events, then one `result` carrying the reply's status and body)
+ * or on POST /api/query. The request bodies are recorded so tests can assert what the client sent.
  */
 async function stubApi(page: Page, queryReplies: Reply[], approveReply?: Reply) {
   const queryBodies: Record<string, unknown>[] = [];
@@ -37,11 +39,12 @@ async function stubApi(page: Page, queryReplies: Reply[], approveReply?: Reply) 
         return json(200, { success: true, data: [] });
       case 'GET query/history':
         return json(200, fixture('history'));
-      case 'POST query': {
+      case 'POST query':
+      case 'POST query/stream': {
         queryBodies.push(req.postDataJSON());
-        const next = replies.shift();
-        if (!next) return json(500, { success: false, error: { code: 'test_no_reply', message: 'No stubbed reply left' } });
-        return json(next.status ?? 200, next.body);
+        const next = replies.shift() ?? { status: 500, body: { success: false, error: { code: 'test_no_reply', message: 'No stubbed reply left' } } };
+        if (key === 'POST query') return json(next.status ?? 200, next.body);
+        return route.fulfill({ status: 200, contentType: 'text/event-stream', body: sseStream({ status: next.status ?? 200, body: next.body }) });
       }
       case 'POST query/approve':
         approveBodies.push(req.postDataJSON());
@@ -73,6 +76,44 @@ const conversation = (page: Page) => page.getByRole('region', { name: 'Conversat
 const userBubbles = (page: Page) => conversation(page).locator('[id^="msg-"]').filter({ has: page.locator('time') });
 
 test.describe('Chat thread', () => {
+  test('stream progress: the stage label shows, then the answer renders', async ({ page }) => {
+    await stubApi(page, []);
+    // A routed body arrives all at once, so stream from a stubbed fetch that pauses after a
+    // progress event until the test releases it (`window.releaseStream()`).
+    const progress = JSON.stringify(sseEvent('progress', { stage: 'safety' }));
+    const result = JSON.stringify(sseEvent('result', { status: 200, body: fixture('answer') }));
+    await page.addInitScript({
+      content: `(() => {
+        const realFetch = window.fetch.bind(window);
+        let release;
+        const gate = new Promise((resolve) => { release = resolve; });
+        window.releaseStream = () => release();
+        window.fetch = async (input, init) => {
+          const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+          if (!url.includes('/api/query/stream')) return realFetch(input, init);
+          const enc = new TextEncoder();
+          const body = new ReadableStream({
+            async start(controller) {
+              controller.enqueue(enc.encode(${progress}));
+              await gate;
+              controller.enqueue(enc.encode(${result}));
+              controller.close();
+            },
+          });
+          return new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
+        };
+      })();`,
+    });
+
+    await openApp(page);
+    await ask(page, 'Total revenue by region');
+
+    await expect(page.getByRole('status').getByText('Running safety checks…')).toBeVisible();
+    await page.evaluate(() => (window as unknown as { releaseStream: () => void }).releaseStream());
+    await expect(conversation(page).getByText('Read-only verified')).toBeVisible();
+    await expect(page.getByText('Running safety checks…')).toHaveCount(0);
+  });
+
   test('answer turn', async ({ page }) => {
     const { queryBodies } = await stubApi(page, [{ body: fixture('answer') }]);
     await openApp(page);

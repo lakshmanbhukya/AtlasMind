@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useReducer, useRef } from 'react';
-import { sendQuery, sendVoice, approveWriteQuery, fetchQueryHistory } from '../services/api';
+import { streamQuery, sendVoice, approveWriteQuery, fetchQueryHistory } from '../services/api';
 import { DEFAULT_MODEL_ID } from '../lib/models';
 import { conversationReducer, initialConversation, userTurn } from '../lib/conversation';
 
@@ -7,11 +7,13 @@ import { conversationReducer, initialConversation, userTurn } from '../lib/conve
  * Chat state: the Conversation module's reducer plus the requests that feed it.
  * Turn mapping and state transitions live in lib/conversation.js.
  *
+ * Text questions stream stage progress (`pendingStage`); voice uses the plain request.
+ *
  * `selectedQueryId` replays a history item; `onQuerySuccess` fires after a successful
  * text query, voice query and approved write (the history list refreshes on it).
  */
 export function useChat(selectedQueryId, onQuerySuccess) {
-    const [{ turns, pending }, dispatch] = useReducer(conversationReducer, initialConversation);
+    const [{ turns, pending, pendingStage }, dispatch] = useReducer(conversationReducer, initialConversation);
     const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL_ID);
 
     const counter = useRef(0);
@@ -52,14 +54,17 @@ export function useChat(selectedQueryId, onQuerySuccess) {
             });
 
             try {
-                const body = await sendQuery({
-                    text: question,
-                    model: options.model || selectedModel,
-                    ...(options.collections !== undefined ? { collections: options.collections } : {}),
-                    ...(options.bypassAmbiguity !== undefined ? { bypassAmbiguity: options.bypassAmbiguity } : {}),
-                    ...(options.clarifications !== undefined ? { clarifications: options.clarifications } : {}),
-                    ...(options.workspaceId !== undefined ? { workspaceId: options.workspaceId } : {}),
-                });
+                const body = await streamQuery(
+                    {
+                        text: question,
+                        model: options.model || selectedModel,
+                        ...(options.collections !== undefined ? { collections: options.collections } : {}),
+                        ...(options.bypassAmbiguity !== undefined ? { bypassAmbiguity: options.bypassAmbiguity } : {}),
+                        ...(options.clarifications !== undefined ? { clarifications: options.clarifications } : {}),
+                        ...(options.workspaceId !== undefined ? { workspaceId: options.workspaceId } : {}),
+                    },
+                    (stage) => dispatch({ type: 'progressed', stage })
+                );
                 dispatch({ type: 'answered', source: 'text', body, ids: { assistant: newId() }, now: Date.now() });
                 onQuerySuccess?.();
             } catch (error) {
@@ -116,6 +121,7 @@ export function useChat(selectedQueryId, onQuerySuccess) {
     return {
         messages: turns,
         pending,
+        pendingStage,
         selectedModel,
         setSelectedModel,
         sendMessage,

@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { apiErrorMessage } from '../lib/apiError';
+import { readQueryStream } from '../lib/queryStream';
 
 export { apiErrorMessage };
 
@@ -52,6 +53,46 @@ export async function listDatabases(connectionString) {
 export async function sendQuery(payload) {
     const { data } = await api.post('query', payload);
     return data;
+}
+
+const STREAM_TIMEOUT_MS = 120000;
+
+/**
+ * Same request as sendQuery, over POST /api/query/stream (SSE): `onProgress(stage)`
+ * gets 'scope' | 'schema' | 'ambiguity' | 'generating' | 'safety' | 'executing'.
+ * Resolves with the same body sendQuery would, and rejects with the same axios-shaped
+ * `{ response: { status, data } }` on a non-2xx result (see lib/queryStream.js).
+ * If the request cannot be sent at all, it falls back to sendQuery.
+ * @param {object} payload - as sendQuery
+ * @param {(stage: string) => void} [onProgress]
+ * @returns {Promise<object>}
+ */
+export async function streamQuery(payload, onProgress) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), STREAM_TIMEOUT_MS);
+    try {
+        let res;
+        try {
+            res = await fetch(`${api.defaults.baseURL}query/stream`, {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+                body: JSON.stringify(payload),
+                signal: controller.signal,
+            });
+        } catch (err) {
+            // Nothing was streamed yet (network error, blocked request): use the plain endpoint.
+            if (controller.signal.aborted) throw new Error('The query timed out. Please try again.');
+            if (import.meta.env.DEV) console.warn('[API] query stream unavailable, falling back:', err?.message);
+            return await sendQuery(payload);
+        }
+        return await readQueryStream(res, onProgress);
+    } catch (err) {
+        if (controller.signal.aborted && !err?.response) throw new Error('The query timed out. Please try again.');
+        throw err;
+    } finally {
+        clearTimeout(timer);
+    }
 }
 
 /**

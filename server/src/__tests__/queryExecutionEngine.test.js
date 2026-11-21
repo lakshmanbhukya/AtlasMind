@@ -238,7 +238,7 @@ describe('QueryExecutionEngine Interface Tests', () => {
         test('a $lookup into a protected collection is blocked with structured details, not scope-insufficient', async () => {
             const pipeline = [
                 { $match: { status: 'paid' } },
-                { $lookup: { from: 'system_users', localField: 'userId', foreignField: '_id', as: 'user' } },
+                { $lookup: { from: 'system.users', localField: 'userId', foreignField: '_id', as: 'user' } },
             ];
             mockGenerateMQL.mockResolvedValueOnce({
                 pipeline,
@@ -260,7 +260,7 @@ describe('QueryExecutionEngine Interface Tests', () => {
             expect(outcome.data.safetyBlock).toMatchObject({
                 code: 'protected_collection',
                 referenceType: '$lookup collection',
-                reference: 'system_users',
+                reference: 'system.users',
                 stage: '$lookup',
                 stageIndex: 1,
             });
@@ -296,7 +296,7 @@ describe('QueryExecutionEngine Interface Tests', () => {
         test('a write that reads a protected collection is blocked', async () => {
             mockGenerateMQL.mockResolvedValueOnce({
                 pipeline: [
-                    { $lookup: { from: 'system_users', localField: 'userId', foreignField: '_id', as: 'u' } },
+                    { $lookup: { from: 'system.users', localField: 'userId', foreignField: '_id', as: 'u' } },
                     { $merge: { into: 'orders' } },
                 ],
                 collection: 'orders',
@@ -310,7 +310,7 @@ describe('QueryExecutionEngine Interface Tests', () => {
             });
 
             expect(outcome.type).toBe('safety_blocked');
-            expect(outcome.data.safetyBlock).toMatchObject({ code: 'protected_collection', reference: 'system_users' });
+            expect(outcome.data.safetyBlock).toMatchObject({ code: 'protected_collection', reference: 'system.users' });
             expect(outcome.approvalToken).toBeUndefined();
             expect(mockExecutePipeline).not.toHaveBeenCalled();
         });

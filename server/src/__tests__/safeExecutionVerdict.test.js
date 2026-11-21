@@ -19,17 +19,17 @@ describe('classifyExecution', () => {
         // [label, pipeline, options, expected kind, expected block code]
         ['safe read', [{ $match: { status: 'paid' } }], {}, 'runnable', null],
         ['read + out-of-scope $lookup', [lookup('secrets')], {}, 'scope_insufficient', 'out_of_scope_collection'],
-        ['read + protected $lookup', [lookup('system_users')], {}, 'blocked', 'protected_collection'],
+        ['read + protected $lookup', [lookup('system.users')], {}, 'blocked', 'protected_collection'],
         ['final $merge in scope', [{ $match: {} }, { $merge: { into: 'orders_archive' } }], {}, 'needs_approval', null],
         ['$merge + out-of-scope $lookup', [lookup('secrets'), { $merge: { into: 'orders_archive' } }], {}, 'scope_insufficient', 'out_of_scope_collection'],
-        ['$merge + $lookup from system_users', [lookup('system_users'), { $merge: { into: 'orders' } }], {}, 'blocked', 'protected_collection'],
+        ['$merge + $lookup from system.users', [lookup('system.users'), { $merge: { into: 'orders' } }], {}, 'blocked', 'protected_collection'],
         ['$merge into {db:admin}', [{ $merge: { into: { db: 'admin', coll: 'x' } } }], {}, 'blocked', 'protected_collection'],
         ['$merge into another db', [{ $merge: { into: { db: 'otherdb', coll: 'orders' } } }], {}, 'blocked', 'out_of_scope_collection'],
         ['$merge into the tenant db', [{ $merge: { into: { db: TENANT_DB, coll: 'orders_archive' } } }], {}, 'needs_approval', null],
         ['$merge target out of scope', [{ $merge: { into: 'elsewhere' } }], {}, 'blocked', 'out_of_scope_collection'],
         ['$merge target with no scope', [{ $merge: { into: 'elsewhere' } }], { scope: null }, 'needs_approval', null],
         ['$merge target with empty scope', [{ $merge: { into: 'elsewhere' } }], { scope: [] }, 'needs_approval', null],
-        ['$merge into a protected collection', [{ $merge: { into: 'system_users' } }], { scope: null }, 'blocked', 'protected_collection'],
+        ['$merge into a protected collection', [{ $merge: { into: 'system.users' } }], { scope: null }, 'blocked', 'protected_collection'],
         ['$out string form', [{ $match: {} }, { $out: 'orders_archive' }], {}, 'needs_approval', null],
         ['$out not last', [{ $out: 'orders_archive' }, { $match: {} }], {}, 'blocked', 'blocked_write_stage'],
         ['$out inside $facet', [{ $facet: { a: [{ $out: 'orders_archive' }] } }], {}, 'blocked', 'blocked_write_stage'],
@@ -48,7 +48,7 @@ describe('classifyExecution', () => {
         ['malformed $merge', [{ $merge: { into: 42 } }], {}, 'blocked', 'malformed_pipeline'],
         ['empty pipeline', [], {}, 'blocked', 'malformed_pipeline'],
         ['target collection out of scope', [{ $match: {} }], { collection: 'secrets' }, 'scope_insufficient', 'out_of_scope_collection'],
-        ['protected target collection', [{ $match: {} }], { collection: 'system_users' }, 'blocked', 'protected_collection'],
+        ['protected target collection', [{ $match: {} }], { collection: 'system.users' }, 'blocked', 'protected_collection'],
     ])('%s', (_label, pipeline, options, kind, blockCode) => {
         const verdict = classify(pipeline, options);
         expect(verdict.kind).toBe(kind);
@@ -95,7 +95,7 @@ describe('classifyExecution', () => {
     });
 
     test('the example from the review is no longer approvable', () => {
-        const verdict = classify([{ $lookup: { from: 'system_users' } }, { $merge: { into: 'orders' } }], { scope: ['orders'] });
+        const verdict = classify([{ $lookup: { from: 'system.users' } }, { $merge: { into: 'orders' } }], { scope: ['orders'] });
         expect(verdict.kind).toBe('blocked');
     });
 });

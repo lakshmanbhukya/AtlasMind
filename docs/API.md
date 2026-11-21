@@ -188,7 +188,7 @@ Returned when a query references collections outside the active workspace:
 ```
 
 #### E. Mutating Write Interception Response (HTTP 200)
-Returned when a query specifies a database write, deletion, or modification:
+Returned when a query specifies a database write, deletion, or modification. The model only generates a write stage when the question asks to save results into a collection (e.g. "save total revenue by region into a new collection called revenue_summary"): it then appends one final `$merge` (or `$out`). Questions that ask to delete, update or drop data get a read-only refusal with an empty `pipeline` instead:
 ```json
 {
   "success": true,

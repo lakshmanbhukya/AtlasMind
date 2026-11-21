@@ -8,6 +8,9 @@ Status: `todo` · `in progress` · `done` · `won't do`. Effort: S (under an hou
 
 | ID | Fix | Commit | Notes |
 |----|-----|--------|-------|
+| F24 | Chat scroller contains the `sr-only` chart table: `relative` on the Conversation `<section>` (`ChatThread.jsx`), so the AppShell root no longer scrolls and the sidebar stays put after a chart answer | `6fe3b3f` | Found in the plan 5 Chrome run: the absolutely positioned table escaped the unpositioned scroller and stretched `.vg-app` to 1495px; `scrollIntoView` then scrolled the root. |
+| F25 | Write approval reachable from the UI for save intent: `hasSaveIntent` (Ambiguity Gate, `decide().saveIntent`) sets `allowWriteStage`, and only then the prompt adds SAVE RESULTS MODE (one final `$merge`/`$out`) | `47faaf1` | Delete/update/drop still get the refusal. Safety guard, `approvedWrite` and the approval route are unchanged. The plan's save regex was tightened so "write a query to … the orders collection" is not save intent. |
+| F26 | No "Read-only verified" badge on an answer without a pipeline (refusal, "couldn't generate") in `AnswerTurn.jsx` | `9227a7f` | Client-only; the response still carries `safetyStatus: 'read-only'`. |
 | F1 | Share links use a secret `shareToken` instead of the pin's ObjectId | `e389ca3` | New `POST /api/dashboard/:id/share`. Old `/shared/<ObjectId>` links no longer work, which is intended. Deleting a pin revokes its link. |
 | F3 | Groq calls fail fast: SDK retries off, 30 s timeout (60 s for Whisper), 2 retries capped at 8 s | `de79051` | A 429 still maps to `RateLimitError` / HTTP 429. |
 | F4 | The 1000-row result cap is always enforced, even when the pipeline has its own `$limit` | `721f69f` | Writes and nested `$facet`/`$lookup` pipelines are unaffected. |

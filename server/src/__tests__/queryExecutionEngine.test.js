@@ -155,6 +155,43 @@ describe('QueryExecutionEngine Interface Tests', () => {
             expect(mockSaveQueryHistory).toHaveBeenCalledTimes(1);
         });
 
+        test('onProgress receives every stage in order (F16)', async () => {
+            const stages = [];
+            const outcome = await QueryExecutionEngine.executeNaturalLanguageQuery({
+                connectionId: testConnectionId,
+                text: 'show high value orders',
+                onProgress: (stage) => stages.push(stage),
+            });
+
+            expect(outcome.type).toBe('success');
+            expect(stages).toEqual(['scope', 'schema', 'ambiguity', 'generating', 'safety', 'executing']);
+        });
+
+        test('onProgress stops at the stage that returns early (clarification)', async () => {
+            const stages = [];
+            const outcome = await QueryExecutionEngine.executeNaturalLanguageQuery({
+                connectionId: testConnectionId,
+                text: 'top orders',
+                onProgress: (stage) => stages.push(stage),
+            });
+
+            expect(outcome.type).toBe('clarification_required');
+            expect(stages).toEqual(['scope', 'schema', 'ambiguity']);
+        });
+
+        test('a throwing onProgress never fails the query', async () => {
+            const onProgress = jest.fn(() => { throw new Error('client went away'); });
+            const outcome = await QueryExecutionEngine.executeNaturalLanguageQuery({
+                connectionId: testConnectionId,
+                text: 'show high value orders',
+                onProgress,
+            });
+
+            expect(outcome.type).toBe('success');
+            expect(onProgress).toHaveBeenCalledTimes(6);
+            expect(mockExecutePipeline).toHaveBeenCalledTimes(1);
+        });
+
         test('returns { type: "clarification_required", data } for vague queries triggering ambiguity gate', async () => {
             // "top orders" has multiple numeric fields (amount, units) and vague term "top"
             const outcome = await QueryExecutionEngine.executeNaturalLanguageQuery({

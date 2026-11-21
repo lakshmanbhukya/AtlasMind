@@ -49,6 +49,7 @@ async function runNaturalLanguageQuery(params) {
         startTime = Date.now(),
         source = 'query',
         experiment: experimentInput,
+        onProgress,
     } = params;
 
     // Input validation
@@ -69,6 +70,19 @@ async function runNaturalLanguageQuery(params) {
     // Research seam: only in-process callers can supply an ExperimentConfig.
     const evalOpts = resolveExperiment(experimentInput);
     const collectDiagnostics = Boolean(evalOpts.diagnostics);
+
+    // Stage progress for streaming callers (F16): scope, schema, ambiguity,
+    // generating, safety, executing. Like `experiment`, it is passed in-process
+    // by the route, never read from a request body. A throwing callback is
+    // ignored, so it can never break a query.
+    const progress = (stage) => {
+        if (typeof onProgress !== 'function') return;
+        try {
+            onProgress(stage);
+        } catch {
+            // ignored by design
+        }
+    };
 
     const hrNow = () => process.hrtime.bigint();
     const toMs = (startNs) => Number(process.hrtime.bigint() - startNs) / 1e6;
@@ -131,6 +145,7 @@ async function runNaturalLanguageQuery(params) {
     });
 
     // 1. Get User DB from pool (an experiment may supply its own)
+    progress('scope');
     const userDb = evalOpts.db || await getUserDb(connectionId);
 
     // 2. Resolve the Effective Scope (explicit collections, else workspace, else all); fails closed
@@ -152,6 +167,7 @@ async function runNaturalLanguageQuery(params) {
     }
 
     // 3. Profile schema + retrieve few-shot examples (scoped by connectionId and collections)
+    progress('schema');
     const fewShotLimit = evalOpts.fewShotLimit !== undefined ? evalOpts.fewShotLimit : 3;
 
     const tSchemaStart = hrNow();
@@ -185,6 +201,7 @@ async function runNaturalLanguageQuery(params) {
     const similarQueriesCount = fewShotExamples.length;
 
     // 4. Ambiguity Gate: clarification validation, prompt enrichment, deterministic check
+    progress('ambiguity');
     const gateContext = { connectionId, source };
     const gate = ambiguityGate.decide({
         query,
@@ -213,6 +230,7 @@ async function runNaturalLanguageQuery(params) {
     }
 
     // 5. Generate MQL via Groq LLM
+    progress('generating');
     const targetModel = evalOpts.model || model;
     const llmGenOptions = {
         isClarificationPass: gate.isClarificationPass,
@@ -329,6 +347,7 @@ async function runNaturalLanguageQuery(params) {
     }
 
     // 8. Safe Execution verdict: one classification of (collection, pipeline, Effective Scope)
+    progress('safety');
     let pipelineToRun;
 
     if (evalOpts.disableSafetyGuard) {
@@ -452,6 +471,7 @@ async function runNaturalLanguageQuery(params) {
     }
 
     // 9. Execute aggregation against USER DB
+    progress('executing');
     const tDbStart = hrNow();
     const { results, executionTimeMs } = await executePipeline(
         userDb,

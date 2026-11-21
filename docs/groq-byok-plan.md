@@ -1,5 +1,7 @@
 # Groq personal keys and the AtlasMind allowance
 
+**Resume in a new session.** Work from local branch `plan/groq-byok-allowances`. The checkout is a React/Vite client and a CommonJS Express server with separate package files. This document specifies proposed behavior. Implementation starts with step 1 under “Implementation sequence.” The file map and contracts below are the engineering handoff.
+
 Proposed first release. Existing connections start in managed mode. Users can explicitly switch to a Groq key for their current sign-in. AtlasMind enforces a configurable daily managed allowance per database connection and an installation-wide budget. Persistent personal accounts, credit purchases and cross-device key recovery are outside this release.
 
 ## Ownership and storage
@@ -55,3 +57,61 @@ Proposed first release. Existing connections start in managed mode. Users can ex
 3. Add managed accounting and structured errors. Exercise parallel calls at both caps, UTC rollover, restart, duplicate settlement, malformed model output, ambiguous timeouts and audio followed by a rejected text call.
 4. Ship the settings UI and documentation. Cover explicit switching and exhausted allowances with stubbed Playwright flows. Run server typecheck and Jest, then client lint, Vitest, build and Playwright under Node 24.
 5. Enable for a pilot after reviewing measured token and audio use. Observe aggregate usage and error counts by payer without credentials or question text. If personal-key service is suspended, return an explicit unavailable response to those sessions until the user chooses managed mode.
+
+## File map for implementation
+
+Paths are relative to the repository root. New filenames below are suggestions.
+
+| Area | Existing entry points | Change |
+| --- | --- | --- |
+| Session | `server/src/auth/session.js`, `middleware/auth.js` and `types/express.d.ts` under `server/src`, `server/src/routes/{connections,auth}.js` | Extend issued session claims and request types. Preserve the string-returning contract of existing `readSession` callers. Distinguish session claims from write-approval claims during verification. Wire logout to credential revocation. |
+| Storage and bootstrap | `server/src/db/connection.js`, `server/src/stores/tenant.js`, `server/src/index.js` | Use the native MongoDB driver and central `getDb()`. Add settings and allowance stores. Initialize indexes alongside `dashboardStore.initializeIndexes()` before listening. A transaction helper would need the central MongoClient, currently private to the connection module. |
+| Settings | New `server/src/routes/providerSettings.js` and `server/src/services/providerSettings.js`, existing `utils/encryption.js`, `utils/logger.js` and `middleware/rateLimiter.js` under `server/src` | Register the settings router after cookie parsing with `requireAuth`. Use the verified tenant and session, revision-checked updates, encryption and a limit on key validation. |
+| Generation | `server/src/routes/{query,voice}.js`, `server/src/services/queryExecutionEngine.js`, `server/src/services/engine/naturalLanguageQuery.js`, `server/src/services/groqService.js` | Pass server-created payer context through the engine facade to `generateMQL`. Pass it directly to `transcribeAudio` as well. Resolve and meter at dispatch so early clarification, history reads, export and approved writes incur zero provider usage when they make zero provider calls. |
+| Errors | `server/src/services/engineErrors.js`, `server/src/routes/engineHttp.js`, `client/src/lib/{apiError,queryStream,conversation}.js` | Map a typed provider failure to public fields before the adapter logs or serializes it. Today `errorResult` can forward an arbitrary error message. Test sanitized JSON, SSE and voice responses. |
+| UI | `client/src/components/app/{AppShell,Sidebar,ChatThread}.jsx`, `client/src/hooks/{useAuth,useChat,useVoice}.js`, `client/src/services/api.js`, `client/src/lib/models.js` | Share settings state between sidebar and chat, clear it on logout/reconnect and send revisions from both the fetch-based stream and Axios voice path. Intersect the displayed model list with server-supported models. |
+
+## Proposed HTTP contract
+
+Mount under `/api/provider-settings`. Return `Cache-Control: no-store`. The only request containing a raw key is the credential replacement request. Validate the candidate before the atomic write. A successful replacement selects personal mode with the user's explicit “Save and use” action.
+
+| Request | Input | Success |
+| --- | --- | --- |
+| GET /api/provider-settings | Session cookie | 200 with `{success:true,data:{mode,revision,hasKey,sessionExpiresAt,managedAllowance,allowedModels}}`. Legacy sessions also get `requiresReconnectForPersonal:true`. |
+| PUT /api/provider-settings/key | JSON `{apiKey,expectedRevision}` | 200 with updated public settings. Invalid candidates preserve the previous settings and revision. |
+| PATCH /api/provider-settings | JSON `{mode,expectedRevision}` | 200 with new revision. Personal mode requires a usable stored credential. Managed mode is an explicit choice. |
+| DELETE /api/provider-settings/key | JSON `{expectedRevision}` | 200 with new revision. Reject removal while personal is selected with 409 and present “Switch to managed and remove” as an explicit UI action. Switch first, then issue revision-checked deletion. |
+
+Use an integer revision starting at zero. Return UTC timestamps in ISO 8601 format. `managedAllowance` contains the connection's remaining text tokens, audio seconds and reset time when enforcement is enabled. Declare accounting mode separately as `observe` or `enforce`. Keep the installation-wide balance private. Personal mode shows that Groq manages the balance.
+
+Send `expectedRevision` in the JSON body of query and stream POSTs and as a decimal multipart field on voice POSTs. Parse and validate it once. The server chooses the actual payer from verified settings. Return `{success:false,error:{code,message,payer?,retryAfterSeconds?,resetAt?}}`. Suggested codes are `settings_changed` (409), `provider_key_invalid` (422), `provider_model_unavailable` (422), `managed_allowance_exhausted` (429), `provider_rate_limited` (429) and `managed_accounting_unavailable` (503). Preserve existing session and local limiter codes. A provider credential error must leave the AtlasMind session signed in.
+
+## Persistence and rollout defaults
+
+- Store settings with a unique compound index on connection ID and session ID, and a separate TTL index on expiry. Keep a revisioned record when the key is removed. Clear ciphertext and mark a credential revoked on logout through session expiry so an in-flight compare-and-swap cannot resurrect it.
+- In the transaction-backed ledger, identify daily counters by UTC day, scope, scope ID and unit. Give each SDK dispatch its own attempt ID. Reserve both counters and insert the attempt in one transaction, call Groq outside it, then conditionally settle a still-pending attempt against its original UTC day. A transaction retry must never replay a provider call. Keep accounting records free of credentials, audio, schema and prompts.
+- Suggested configuration names are `GROQ_ALLOWANCE_MODE` (initially `observe`) and `GROQ_{CONNECTION,GLOBAL}_DAILY_{TOKENS,AUDIO_SECONDS}` (four explicit integer limits). Validate configuration and topology before enabling enforcement. If production limits or topology are unknown, ship code and automated tests with observation as the default and leave production activation to the operator.
+
+## Verification handoff
+
+Use synthetic keys and mocked SDK calls. Extend server suites `session.test.js`, `authMe.test.js`, `groqService.test.js`, `queryExecutionEngine.test.js`, `queryStream.test.js` and `routesSmoke.test.js` in `server/src/__tests__`. Add focused tests for the new credential store and quota ledger. Run the concurrency and crash-recovery checks against a disposable transaction-capable MongoDB instance before enabling managed enforcement. Update `client/src/lib/__fixtures__`, `client/src/lib/queryStream.test.js`, `client/src/lib/conversation.test.js`, and `client/tests/e2e/chat.spec.ts`. Assert outbound call counts by payer, and inspect captured logs and responses for the synthetic secret on validation failure.
+
+From the repository root on Windows, use Node 24. Install dependencies once per package. Run each line separately and resolve failures before advancing.
+
+```powershell
+npm --prefix server ci
+npm --prefix client ci
+npm --prefix server run typecheck
+npm --prefix server test
+npm --prefix client run lint
+npm --prefix client test
+npm --prefix client run build
+Push-Location client
+npx playwright install chromium
+npm run test:e2e
+Pop-Location
+```
+
+### Starting prompt for the next session
+
+> Implement the Groq BYOK and managed-allowance plan in docs/groq-byok-plan.md. Start from plan/groq-byok-allowances and create an implementation branch from its tip. Follow AGENTS.md and the implementation sequence. Use the file map, contracts and acceptance cases in this document. Keep server credentials scoped to a sign-in and managed quotas scoped to a connection and the installation. Use observation mode for the pilot. Complete code, fixtures, docs and local checks. Report any deployment checks that still need the operator's environment.

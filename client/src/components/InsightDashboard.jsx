@@ -4,9 +4,9 @@ import {
     LineChart, Line, PieChart, Pie, Cell, Legend, AreaChart, Area
 } from 'recharts';
 import { motion } from 'framer-motion';
-import { TrendingUp, Download, Share2 } from 'lucide-react';
+import { TrendingUp, Download, Share2, Link2Off, X } from 'lucide-react';
 import { downloadCsv } from '../lib/csv';
-import { shareDashboardPin } from '../services/api';
+import { shareDashboardPin, unshareDashboardPin } from '../services/api';
 
 // Verdigris: accent, clay, amber, text-2, accent-deep, red
 const COLORS = ['#4FC79B', '#C98F5C', '#D4A961', '#A9B5AC', '#2A8467', '#DF6A57'];
@@ -27,8 +27,11 @@ const CustomTooltip = ({ active, payload, label }) => {
     return null;
 };
 
-const InsightDashboard = ({ data, type = 'bar', title, pinId, hideActions = false }) => {
+const ACTION_BUTTON = 'w-8 h-8 flex items-center justify-center rounded-md text-vg-text-3 hover:bg-vg-surface-2 hover:text-vg-text transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vg-accent';
+
+const InsightDashboard = ({ data, type = 'bar', title, pinId, shared = false, onRemove, hideActions = false }) => {
     const [toastMsg, setToastMsg] = React.useState(null);
+    const [isShared, setIsShared] = React.useState(shared);
 
     if (!data || data.length === 0) return null;
 
@@ -61,6 +64,7 @@ const InsightDashboard = ({ data, type = 'bar', title, pinId, hideActions = fals
             showToast('Failed to create share link');
             return;
         }
+        setIsShared(true);
         const url = `${window.location.origin}/shared/${shareToken}`;
         try {
             await navigator.clipboard.writeText(url);
@@ -68,6 +72,18 @@ const InsightDashboard = ({ data, type = 'bar', title, pinId, hideActions = fals
         } catch (err) {
             if (import.meta.env.DEV) console.error('Failed to copy link', err);
             showToast('Failed to copy link');
+        }
+    };
+
+    const handleUnshare = async () => {
+        if (!pinId) return;
+        try {
+            await unshareDashboardPin(pinId);
+            setIsShared(false);
+            showToast('Public link revoked');
+        } catch (err) {
+            if (import.meta.env.DEV) console.error('Failed to revoke share link', err);
+            showToast('Failed to revoke link');
         }
     };
 
@@ -180,16 +196,36 @@ const InsightDashboard = ({ data, type = 'bar', title, pinId, hideActions = fals
                 </div>
                 {!hideActions && (
                     <div className="flex gap-2">
+                        {onRemove && (
+                            <button
+                                type="button"
+                                onClick={onRemove}
+                                aria-label={`Remove ${title || 'chart'} from dashboards`}
+                                title="Remove from dashboards"
+                                className="w-8 h-8 rounded-md flex items-center justify-center text-vg-text-3 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:bg-vg-red-wash hover:text-vg-red transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vg-accent"
+                            >
+                                <X size={15} aria-hidden="true" />
+                            </button>
+                        )}
                         <button 
                             onClick={handleShare}
-                            aria-label="Share as public link" className="w-8 h-8 flex items-center justify-center rounded-md text-vg-text-3 hover:bg-vg-surface-2 hover:text-vg-text transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vg-accent"
-                            title="Share as Public Link"
+                            aria-label={isShared ? 'Copy public link' : 'Share as public link'} className={ACTION_BUTTON}
+                            title={isShared ? 'Copy Public Link' : 'Share as Public Link'}
                         >
-                            <Share2 size={16} />
+                            <Share2 size={16} className={isShared ? 'text-vg-accent' : undefined} />
                         </button>
+                        {isShared && (
+                            <button
+                                onClick={handleUnshare}
+                                aria-label="Stop sharing" className={ACTION_BUTTON}
+                                title="Stop Sharing"
+                            >
+                                <Link2Off size={16} />
+                            </button>
+                        )}
                         <button 
                             onClick={handleDownload}
-                            aria-label="Download data as CSV" className="w-8 h-8 flex items-center justify-center rounded-md text-vg-text-3 hover:bg-vg-surface-2 hover:text-vg-text transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vg-accent"
+                            aria-label="Download data as CSV" className={ACTION_BUTTON}
                             title="Download Data as CSV"
                         >
                             <Download size={16} />

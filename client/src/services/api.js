@@ -180,6 +180,14 @@ export async function shareDashboardPin(pinId) {
     return data.data;
 }
 
+/**
+ * Revoke a pin's public link (the pin stays on the dashboard).
+ * @param {string} pinId
+ */
+export async function unshareDashboardPin(pinId) {
+    await api.delete(`dashboard/${pinId}/share`);
+}
+
 /** @param {string} shareToken */
 export async function fetchSharedDashboardPin(shareToken) {
     const { data } = await api.get(`dashboard/shared/${shareToken}`);

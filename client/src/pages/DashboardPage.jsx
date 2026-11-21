@@ -1,4 +1,4 @@
-import { LayoutDashboard, X } from 'lucide-react';
+import { LayoutDashboard } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import InsightDashboard from '../components/InsightDashboard';
 
@@ -46,19 +46,13 @@ export default function DashboardPage({ pins = [], onRemovePin, isLoading }) {
                     transition={{ duration: 0.18 }}
                     className="relative group"
                   >
-                    <button
-                      type="button"
-                      onClick={() => onRemovePin(id)}
-                      aria-label={`Remove ${pin.chartTitle || pin.queryText || 'chart'} from dashboards`}
-                      className="absolute top-4 right-[88px] z-10 w-8 h-8 rounded-md flex items-center justify-center text-vg-text-3 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:bg-vg-red-wash hover:text-vg-red transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-vg-accent"
-                    >
-                      <X size={15} aria-hidden="true" />
-                    </button>
                     <InsightDashboard
                       data={pin.results}
                       type={pin.chartType || 'bar'}
                       title={pin.chartTitle || pin.queryText || pin.query || 'Untitled'}
                       pinId={id}
+                      shared={Boolean(pin.shared)}
+                      onRemove={() => onRemovePin(id)}
                     />
                   </motion.div>
                 );

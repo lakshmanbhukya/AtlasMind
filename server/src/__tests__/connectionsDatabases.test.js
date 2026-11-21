@@ -27,6 +27,16 @@ jest.mock('../services/userDbPool', () => ({ evictUserDb: jest.fn() }));
 jest.mock('../utils/encryption', () => ({ encrypt: jest.fn(), hashString: jest.fn() }));
 
 const connectionsRouter = require('../routes/connections');
+const { MongoClient } = require('mongodb');
+
+/** Makes the next `new MongoClient(...)` throw, as the driver does for a URI it cannot parse. */
+function failNextParse() {
+    MongoClient.mockImplementationOnce(() => {
+        const err = new Error('Unable to parse host:notaport with URL');
+        err.name = 'MongoRuntimeError';
+        throw err;
+    });
+}
 
 describe('POST /api/connections/databases', () => {
     let app;
@@ -96,6 +106,14 @@ describe('POST /api/connections/databases', () => {
         expect(res.body.error.code).toBe('validation_error');
     });
 
+    test('maps a URI the driver cannot parse to 400 validation_error without connecting (F21)', async () => {
+        failNextParse();
+        const res = await request(app).post('/api/connections/databases').send({ connectionString: 'mongodb://host:notaport' });
+        expect(res.status).toBe(400);
+        expect(res.body.error).toEqual({ code: 'validation_error', message: 'Invalid MongoDB connection string format' });
+        expect(mockConnect).not.toHaveBeenCalled();
+    });
+
     test('maps an unexpected failure to 500 list_databases_failed', async () => {
         jest.spyOn(console, 'error').mockImplementation(() => {});
         mockConnect.mockRejectedValue(new Error('boom'));
@@ -137,6 +155,18 @@ describe('POST /api/connections/connect failures', () => {
 
         expect(res.status).toBe(400);
         expect(res.body.error.code).toBe('connection_failed');
+    });
+
+    test('maps a URI the driver cannot parse to 400 validation_error without saving (F21)', async () => {
+        failNextParse();
+        const res = await request(app)
+            .post('/api/connections/connect')
+            .send({ connectionString: 'mongodb://host:notaport', dbName: 'shop' });
+
+        expect(res.status).toBe(400);
+        expect(res.body.error).toEqual({ code: 'validation_error', message: 'Invalid MongoDB connection string format' });
+        expect(mockConnect).not.toHaveBeenCalled();
+        expect(upsertConnection).not.toHaveBeenCalled();
     });
 
     test('maps a failed save to 500 connection_save_failed', async () => {

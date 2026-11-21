@@ -6,10 +6,15 @@ const { upsertConnection } = userConnections;
 const { issueSession } = require('../auth/session');
 const { requireAuth } = require('../middleware/auth');
 const { evictUserDb } = require('../services/userDbPool');
-const { listUserDatabases, discoverDatabases, openTemporaryClient } = require('../services/databaseDiscovery');
+const { listUserDatabases, discoverDatabases, openTemporaryClient, InvalidConnectionStringError } = require('../services/databaseDiscovery');
 const { listUserCollections } = require('../services/tenantSchema');
 
 const isMongoUri = (s) => typeof s === 'string' && /^mongodb(\+srv)?:\/\//.test(s);
+
+const INVALID_URI_RESPONSE = {
+    success: false,
+    error: { code: 'validation_error', message: 'Invalid MongoDB connection string format' },
+};
 
 const connectionFailed = (err) =>
     err && (err.name === 'MongoServerSelectionError' || err.name === 'MongoNetworkError' || err.name === 'MongoParseError' || err.name === 'MongoAPIError');
@@ -91,6 +96,8 @@ router.post('/connect', async (req, res) => {
         });
 
     } catch (err) {
+        if (err instanceof InvalidConnectionStringError) return res.status(400).json(INVALID_URI_RESPONSE);
+
         console.error('❌ [CONNECT_ERROR]', err);
 
         // Distinguish connection errors from other errors
@@ -136,6 +143,7 @@ router.post('/databases', async (req, res) => {
             databases: databases.map(({ name, collectionCount }) => ({ name, collectionCount })),
         });
     } catch (err) {
+        if (err instanceof InvalidConnectionStringError) return res.status(400).json(INVALID_URI_RESPONSE);
         if (connectionFailed(err)) {
             return res.status(400).json({
                 success: false,

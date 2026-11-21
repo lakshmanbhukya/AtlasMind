@@ -167,4 +167,16 @@ describe('dashboard pins go through the guard', () => {
         expect(res.body.data.results).toEqual([{ total: 3 }]);
         expect(aggregate).toHaveBeenCalledTimes(1);
     });
+
+    test('a 500 returns a generic message, not the internal error text', async () => {
+        const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
+        pins.findOne.mockRejectedValue(new Error('connection to mongodb://secret-host failed'));
+
+        const res = await request(app).post(`/api/dashboard/${new ObjectId()}/refresh`);
+
+        expect(res.status).toBe(500);
+        expect(res.body.error).toEqual({ code: 'dashboard_error', message: 'Dashboard operation failed' });
+        expect(spy).toHaveBeenCalled();
+        spy.mockRestore();
+    });
 });

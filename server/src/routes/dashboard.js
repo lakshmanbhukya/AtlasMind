@@ -31,7 +31,7 @@ function sendDashboardError(res, error, label) {
     console.error(`❌ Dashboard ${label} error:`, error);
     return res.status(500).json({
         success: false,
-        error: { code: 'dashboard_error', message: error.message },
+        error: { code: 'dashboard_error', message: 'Dashboard operation failed' },
     });
 }
 

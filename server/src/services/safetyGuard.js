@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Safety Guard — validates generated MQL pipelines before execution.
  *
@@ -69,6 +70,48 @@ const HARD_DENY_OPERATORS = new Set([
 ]);
 
 const MAX_RESULT_LIMIT = 1000;
+
+/** @typedef {Record<string, any>} Stage One aggregation stage, e.g. `{ $match: {...} }`. */
+
+/**
+ * Scope options for pipeline validation.
+ * @typedef {object} ScopeOptions
+ * @property {string[]|Set<string>|null} [allowedCollections] - null/undefined means unrestricted
+ * @property {string|null} [targetCollection]
+ * @property {string} [targetDatabase] - the connected database
+ * @property {string[]} [allowedDatabases]
+ * @property {boolean} [requireTargetDatabase] - an explicit db must equal targetDatabase
+ */
+
+/**
+ * Result of the collection-reference walk. `database` marks a database-level violation.
+ * @typedef {{ safe: boolean, reason?: string, code?: string, violatingCollections?: string[], database?: string, referenced?: string[] }} ReferenceCheck
+ */
+
+/**
+ * Result of the recursive stage check. `reference` is the offending stage or operator.
+ * @typedef {{ safe: boolean, reason?: string, isWrite?: boolean, code?: string, reference?: string }} StageCheck
+ */
+
+/**
+ * Structured description of a block, for the client's "Query blocked" card.
+ * @typedef {{ code: string, rule: string, stage: string|null, stageIndex: number|null, referenceType: string, reference: string|null }} BlockInfo
+ */
+
+/**
+ * Result of pipeline validation. `pipeline` is the (possibly $limit-capped)
+ * pipeline; `block` is set by validatePipeline on an unsafe result.
+ * @typedef {object} PipelineCheck
+ * @property {boolean} safe
+ * @property {Stage[]} pipeline
+ * @property {string} [reason]
+ * @property {string} [code]
+ * @property {string[]} [violatingCollections]
+ * @property {boolean} [isWrite]
+ * @property {string} [reference]
+ * @property {string} [database]
+ * @property {BlockInfo} [block]
+ */
 
 /**
  * Recursively check for hard-denied code execution operators.
@@ -168,9 +211,9 @@ function validateCollectionName(collectionName) {
  * Recursively find and validate all collections referenced across top-level and nested stages.
  * Supports string and document-form $lookup.from ({ coll, [db] }), $unionWith, $graphLookup, and $facet.
  *
- * @param {Array} stages
- * @param {object} [options={}]
- * @returns {{ safe: boolean, reason?: string, code?: string, violatingCollections?: string[], referenced: string[] }}
+ * @param {Stage[]} stages
+ * @param {ScopeOptions} [options={}]
+ * @returns {ReferenceCheck}
  */
 function extractAndValidateCollectionReferences(stages, options = {}) {
     if (!Array.isArray(stages)) return { safe: true, referenced: [] };
@@ -334,9 +377,9 @@ function extractAndValidateCollectionReferences(stages, options = {}) {
  * Recursively validate that all stages (top-level and nested inside $facet, $lookup.pipeline, $unionWith.pipeline)
  * belong to ALLOWED_STAGES and do not contain BLOCKED_STAGES or BLOCKED_OPERATORS.
  *
- * @param {Array} stages
+ * @param {Stage[]} stages
  * @param {string} [context='']
- * @returns {{ safe: boolean, reason?: string, isWrite?: boolean, code?: string }}
+ * @returns {StageCheck}
  */
 function validateStagesRecursively(stages, context = '') {
     if (!Array.isArray(stages)) {
@@ -412,9 +455,9 @@ function validateStagesRecursively(stages, context = '') {
 /**
  * Validate an aggregation pipeline for safety.
  *
- * @param {object[]} pipeline - The MongoDB aggregation pipeline
- * @param {object} [options={}] - Validation options (allowedCollections, targetCollection, targetDatabase)
- * @returns {{ safe: boolean, reason?: string, pipeline: object[], code?: string, violatingCollections?: string[], isWrite?: boolean }}
+ * @param {Stage[]} pipeline - The MongoDB aggregation pipeline
+ * @param {ScopeOptions} [options={}] - Validation options (allowedCollections, targetCollection, targetDatabase)
+ * @returns {PipelineCheck}
  *   Returns the (potentially modified) pipeline with a $limit injected if needed.
  */
 function validatePipelineCore(pipeline, options = {}) {
@@ -546,7 +589,7 @@ function firstKey(stage) {
 
 /**
  * Structured description of why a pipeline was rejected, for the "Query blocked" UI.
- * @returns {{ code: string, rule: string, stage: string|null, stageIndex: number|null, referenceType: string, reference: string|null }}
+ * @returns {BlockInfo}
  */
 function describeBlock(result, pipeline, options = {}) {
     const stages = Array.isArray(pipeline) ? pipeline : [];
@@ -676,8 +719,9 @@ function describeBlock(result, pipeline, options = {}) {
  * Validate an aggregation pipeline for safety.
  * Unsafe results also carry `block` (see describeBlock) for the client's "Query blocked" card.
  *
- * @param {object[]} pipeline - The MongoDB aggregation pipeline
- * @param {object} [options={}] - Validation options (allowedCollections, targetCollection, targetDatabase)
+ * @param {Stage[]} pipeline - The MongoDB aggregation pipeline
+ * @param {ScopeOptions} [options={}] - Validation options (allowedCollections, targetCollection, targetDatabase)
+ * @returns {PipelineCheck}
  */
 function validatePipeline(pipeline, options = {}) {
     const result = validatePipelineCore(pipeline, options);
@@ -703,7 +747,7 @@ function describeCollectionBlock(collectionName) {
 
 /**
  * Describe a staged write for the approval UI: the write stage, its target and the fields it writes.
- * @param {object[]} pipeline
+ * @param {Stage[]} pipeline
  * @param {string} [sourceCollection]
  * @returns {{ writeStage: string|null, writeStageIndex: number|null, sourceCollection: string|null, targetCollection: string|null, fieldsWritten: string[] }}
  */
@@ -809,10 +853,16 @@ function splitFinalWrite(pipeline) {
     return { stage: keys[0], stageIndex: index, spec: last[keys[0]], readPart: pipeline.slice(0, index) };
 }
 
-/** Read-part checks. An empty read part is legal next to a write; only the target collection's scope applies. */
+/**
+ * Read-part checks. An empty read part is legal next to a write; only the target collection's scope applies.
+ * @param {Stage[]} readPart
+ * @param {ScopeOptions} options - from classifyExecution, so allowedCollections is an array or null
+ * @returns {PipelineCheck}
+ */
 function checkReadPart(readPart, options) {
     if (readPart.length > 0) return validatePipelineCore(readPart, options);
-    const { allowedCollections, targetCollection } = options;
+    const { targetCollection } = options;
+    const allowedCollections = /** @type {string[]|null} */ (options.allowedCollections);
     if (allowedCollections && !allowedCollections.includes(targetCollection)) {
         return {
             safe: false,
@@ -827,6 +877,12 @@ function checkReadPart(readPart, options) {
 
 const MISPLACED_WRITE_RULE = 'A write is only approvable as a single $out or $merge in the final top-level stage.';
 
+/**
+ * @param {Record<string, any>} result - a failed check (PipelineCheck-like)
+ * @param {Stage[]} pipeline
+ * @param {ScopeOptions} options
+ * @returns {Extract<ExecutionVerdict, { kind: 'blocked' }>}
+ */
 function blockedVerdict(result, pipeline, options) {
     const block = describeBlock(result, pipeline, options);
     if (result.isWrite && block.code === 'blocked_write_stage') block.rule = MISPLACED_WRITE_RULE;
@@ -840,16 +896,21 @@ function blockedVerdict(result, pipeline, options) {
 }
 
 /**
+ * The verdict classifyExecution returns (ADR 0004).
+ * @typedef {{ kind: 'runnable', pipeline: Stage[] }
+ *   | { kind: 'needs_approval', pipeline: Stage[], write: { stage: string, stageIndex: number, targetCollection: string } }
+ *   | { kind: 'scope_insufficient', reason: string, code: string, violatingCollections: string[], block: BlockInfo }
+ *   | { kind: 'blocked', reason: string, code: string, isWrite: boolean, block: BlockInfo }} ExecutionVerdict
+ */
+
+/**
  * Safe Execution's one classification of (collection, pipeline, Effective Scope).
  *
  * Scope convention: a non-empty array is restricted; null, undefined or [] is unrestricted.
  * `tenantDatabase` is the connected database's name; when it is unknown, any explicit `db` is blocked.
  *
- * @param {{ collection: string, pipeline: object[], scope?: string[]|null, tenantDatabase?: string|null }} input
- * @returns {{ kind: 'runnable', pipeline: object[] }
- *   | { kind: 'needs_approval', pipeline: object[], write: { stage: string, stageIndex: number, targetCollection: string } }
- *   | { kind: 'scope_insufficient', reason: string, code: string, violatingCollections: string[], block: object }
- *   | { kind: 'blocked', reason: string, code: string, isWrite: boolean, block: object }}
+ * @param {{ collection?: string, pipeline?: Stage[], scope?: string[]|null, tenantDatabase?: string|null }} [input]
+ * @returns {ExecutionVerdict}
  */
 function classifyExecution({ collection, pipeline, scope = null, tenantDatabase = null } = {}) {
     // 1. Target collection

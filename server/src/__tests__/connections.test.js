@@ -93,5 +93,48 @@ describe('B2: routes/connections.js GET /:connectionId authorization', () => {
 
         expect(res.status).toBe(404);
         expect(res.body.success).toBe(false);
+        expect(res.body.error.code).toBe('not_found');
+    });
+
+    test('returns 500 connection_fetch_failed when the lookup throws', async () => {
+        jest.spyOn(console, 'error').mockImplementation(() => {});
+        getConnectionByIdSpy.mockRejectedValueOnce(new Error('central db down'));
+
+        const res = await request(app)
+            .get('/api/connections/conn-123')
+            .set('Cookie', [`am_token=${signToken('conn-123')}`]);
+
+        expect(res.status).toBe(500);
+        expect(res.body).toEqual({
+            success: false,
+            error: { code: 'connection_fetch_failed', message: 'Failed to fetch connection details' },
+        });
     });
 });
+
+describe('POST /api/connections/connect error envelope', () => {
+    let app;
+
+    beforeEach(() => {
+        app = express();
+        app.use(express.json());
+        app.use('/api/connections', connectionRouter);
+    });
+
+    afterEach(() => {
+        jest.restoreAllMocks();
+    });
+
+    test('400 validation_error for a malformed connection string', async () => {
+        const res = await request(app).post('/api/connections/connect').send({ connectionString: 'postgres://x', dbName: 'shop' });
+        expect(res.status).toBe(400);
+        expect(res.body.error).toEqual({ code: 'validation_error', message: 'Invalid MongoDB connection string format' });
+    });
+
+    test('400 validation_error when dbName is missing', async () => {
+        const res = await request(app).post('/api/connections/connect').send({ connectionString: 'mongodb://localhost:27017' });
+        expect(res.status).toBe(400);
+        expect(res.body.error).toEqual({ code: 'validation_error', message: 'dbName is required' });
+    });
+});
+

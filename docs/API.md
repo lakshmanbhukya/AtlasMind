@@ -34,6 +34,12 @@ Validates a MongoDB connection string + database name, stores encrypted credenti
 }
 ```
 
+**Errors** (every error carries `error.code`):
+- `validation_error` (400): the connection string is not a `mongodb://` / `mongodb+srv://` URI, or `dbName` is missing.
+- `empty_database` (400): the database has no collections; the body also carries `availableDatabases`.
+- `connection_failed` (400): MongoDB could not be reached or rejected the connection string.
+- `connection_save_failed` (500): any other failure while validating or storing the connection.
+
 ### POST `/api/connections/databases` *(Public - auth rate limiter)*
 Lists the non-empty databases a connection string can see, so the landing page can offer them before connecting. Internal databases (`admin`, `local`, `config`) and `system.*` collections are skipped. Nothing is stored and no session cookie is issued. If the user lacks the `listDatabases` privilege the list is empty.
 
@@ -53,7 +59,12 @@ Lists the non-empty databases a connection string can see, so the landing page c
 }
 ```
 
-**Errors**: `400` for a malformed connection string or an unreachable cluster, `500` otherwise.
+**Errors**: `validation_error` (400) for a malformed connection string, `connection_failed` (400) for an unreachable cluster, `list_databases_failed` (500) otherwise.
+
+### GET `/api/connections/:connectionId` *(Protected)*
+Returns the stored details (`connectionId`, `dbName`, `label`, `lastConnectedAt`, `createdAt`) of the session's own connection.
+
+**Errors**: `forbidden` (403) when `:connectionId` is not the session's connection, `not_found` (404), `connection_fetch_failed` (500).
 
 ### GET `/api/auth/me`
 Validates the current session cookie and returns active connection metadata.

@@ -188,6 +188,7 @@ async function profileCollection(db, collectionName, { sampleSize = 5 } = {}) {
  * @param {string} [options.connectionId] Tenant identity; required for caching
  * @param {boolean} [options.forceRefresh=false] Bypass the cache
  * @param {number} [options.sampleSize=5] Number of sample documents per collection
+ * @param {string[]} [options.collections] Limit the result to these collections
  * @param {object} [options.snapshot] `{ [databaseName]: schema }` returned instead of live profiling
  *        (supplied by an ExperimentConfig; see services/experiment.js)
  * @returns {Promise<object>}

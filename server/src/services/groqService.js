@@ -58,7 +58,7 @@ const TRANSCRIPTION_TIMEOUT_MS = 60_000;
  * @param {object} [options={}] - Options controlling generation mode
  * @param {import('./experiment').LlmHooks} [options.llm] - Research hooks (quota, JSON-mode probing,
  *        strict model). Supplied only through an ExperimentConfig; production passes none.
- * @returns {Promise<{ pipeline: object[], collection: string, chartType: string, explanation: string|null, usage: object, model: string, rawText: string, timings: object, retries: number, jsonModeUsed: boolean }>}
+ * @returns {Promise<{ pipeline: object[], collection: string, chartType: string, explanation: string|null, usage: object, model: string, rawText: string, timings: { llmMs?: number, [k: string]: any }, retries: number, jsonModeUsed: boolean, needsClarification?: boolean, questions?: any[], missingCollections?: string[], [k: string]: any }>}
  */
 async function generateMQL(naturalLanguage, schemaContext, fewShotExamples, model = DEFAULT_MODEL, options = {}) {
     const client = getGroqClient();

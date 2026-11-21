@@ -6,7 +6,9 @@ const { QueryEngineError } = require('../services/engineErrors');
 /**
  * HTTP mapping for QueryExecutionEngine outcomes and errors.
  * Shared by the query, voice and approve intake adapters so all three map
- * the engine's typed results to status codes the same way.
+ * the engine's typed results to status codes the same way. The pure helpers
+ * (outcomeStatus, errorResult) are also used by the SSE stream, which sends
+ * the same status and body inside its `result` event.
  */
 
 const OUTCOME_STATUS = {
@@ -16,26 +18,43 @@ const OUTCOME_STATUS = {
     safety_blocked: 422,
 };
 
-function sendOutcome(res, outcome, body = outcome.data) {
-    const status = OUTCOME_STATUS[outcome.type] || 200;
-    return res.status(status).json(body);
+/**
+ * @param {{ type: string }} outcome
+ * @returns {number}
+ */
+function outcomeStatus(outcome) {
+    return OUTCOME_STATUS[outcome.type] || 200;
 }
 
 /**
  * Typed engine errors carry their own status and code. Anything else is an
  * unexpected failure in the adapter itself and maps to 500 with `fallbackCode`.
+ * @param {any} error
+ * @param {string} fallbackCode
+ * @param {string} fallbackMessage
+ * @returns {{ status: number, body: { success: false, error: { code: string, message: string } } }}
  */
-function sendError(res, error, fallbackCode, fallbackMessage) {
+function errorResult(error, fallbackCode, fallbackMessage) {
     const isEngineError = error instanceof QueryEngineError;
-    const status = isEngineError ? error.statusCode : 500;
-    const code = isEngineError ? error.code : fallbackCode;
-    return res.status(status).json({
-        success: false,
-        error: {
-            code,
-            message: (error && error.message) || fallbackMessage,
+    return {
+        status: isEngineError ? error.statusCode : 500,
+        body: {
+            success: false,
+            error: {
+                code: isEngineError ? error.code : fallbackCode,
+                message: (error && error.message) || fallbackMessage,
+            },
         },
-    });
+    };
 }
 
-module.exports = { sendOutcome, sendError };
+function sendOutcome(res, outcome, body = outcome.data) {
+    return res.status(outcomeStatus(outcome)).json(body);
+}
+
+function sendError(res, error, fallbackCode, fallbackMessage) {
+    const { status, body } = errorResult(error, fallbackCode, fallbackMessage);
+    return res.status(status).json(body);
+}
+
+module.exports = { sendOutcome, sendError, outcomeStatus, errorResult };

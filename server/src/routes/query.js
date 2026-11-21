@@ -2,7 +2,7 @@
 const express = require('express');
 const { QueryExecutionEngine } = require('../services/queryExecutionEngine');
 const queryHistoryStore = require('../stores/queryHistoryStore');
-const { sendOutcome, sendError } = require('./engineHttp');
+const { sendOutcome, sendError, outcomeStatus, errorResult } = require('./engineHttp');
 const { forRequest } = require('../utils/logger');
 
 const router = express.Router();
@@ -50,6 +50,81 @@ router.post('/', async (req, res) => {
         forRequest(req).error({ err: error }, 'Query pipeline error');
         return sendError(res, error, 'query_error', 'Failed to process query');
     }
+});
+
+const SSE_PING_MS = 15000;
+
+/**
+ * POST /api/query/stream (F16)
+ *
+ * Same body and engine call as POST /, streamed as Server-Sent Events:
+ *   event: progress  data: {"stage":"scope"|"schema"|"ambiguity"|"generating"|"safety"|"executing"}
+ *   event: result    data: {"status":<HTTP status POST / would use>,"body":<the response envelope>}
+ * Exactly one `result` ends the stream. The HTTP status is always 200 once the
+ * stream starts, so `result.status` carries the real one (422 for a safety
+ * block, the engine error's status, ...). Errors raised before the stream
+ * starts (requireAuth's 401, llmLimiter's 429) are plain JSON responses.
+ */
+router.post('/stream', async (req, res) => {
+    const {
+        text,
+        model,
+        collections,
+        workspaceId,
+        dropMissing,
+        clarifications,
+        bypassAmbiguity,
+        isEdit,
+    } = req.body || {};
+    const connectionId = req.connectionId;
+
+    res.status(200);
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+
+    // `res` 'close' fires when the client disconnects (or the response ends).
+    // `req` 'close' would fire as soon as the request body was read.
+    let open = true;
+    const ping = setInterval(() => {
+        if (open) res.write(': ping\n\n');
+    }, SSE_PING_MS);
+    res.on('close', () => {
+        open = false;
+        clearInterval(ping);
+    });
+
+    const send = (event, data) => {
+        if (!open) return;
+        res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+
+    let result;
+    try {
+        const outcome = await QueryExecutionEngine.executeNaturalLanguageQuery({
+            connectionId,
+            text,
+            model,
+            collections,
+            workspaceId,
+            dropMissing,
+            clarifications,
+            bypassAmbiguity,
+            isEdit,
+            // Never forward an ExperimentConfig from a request body.
+            source: 'query',
+            onProgress: (stage) => send('progress', { stage }),
+        });
+        result = { status: outcomeStatus(outcome), body: outcome.data };
+    } catch (error) {
+        forRequest(req).error({ err: error }, 'Query pipeline error');
+        result = errorResult(error, 'query_error', 'Failed to process query');
+    }
+
+    send('result', result);
+    clearInterval(ping);
+    if (open) res.end();
 });
 
 /**

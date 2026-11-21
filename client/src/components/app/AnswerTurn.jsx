@@ -135,12 +135,12 @@ export default function AnswerTurn({ message, onPin }) {
         icon={TitleIcon}
         iconClass={isWrite ? 'text-vg-accent' : 'text-vg-text-2'}
         title={title}
-        aside={
+        aside={(isWrite || hasPipeline) && (
           <span className="flex items-center gap-1.5 text-vg-text-2">
             <CircleCheck size={15} className="text-vg-accent" aria-hidden="true" />
             {isWrite ? 'Approved write executed' : 'Read-only verified'}
           </span>
-        }
+        )}
       />
 
       {hasResults ? (

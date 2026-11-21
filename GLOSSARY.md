@@ -6,7 +6,7 @@ This document records the ubiquitous language and domain model boundaries for At
 
 ### `QueryExecutionEngine`
 **Type**: Deep Module (In-process orchestrator)  
-**Location**: `server/src/services/queryExecutionEngine.js`  
+**Location**: `server/src/services/queryExecutionEngine.js` (façade; flows in `services/engine/`)  
 **Seam**: Sits directly beneath HTTP intake adapters (`routes/query.js`, `routes/voice.js`).  
 **Interface**:
 - `executeNaturalLanguageQuery(params)`: returns `Promise<QueryOutcome>`
@@ -49,7 +49,7 @@ Mapped by HTTP adapters to status codes (`200`, `422`, etc.).
 
 ### `Ambiguity Gate`
 **Type**: Deep Module (in-process)  
-**Location**: `server/src/services/ambiguityGate.js`  
+**Location**: `server/src/services/ambiguityGate.js` (façade; stages in `services/ambiguity/`)  
 **Interface**: `decide(input)` → `{ action: 'ask'|'proceed'|'reject', questions, queryForGeneration, clarifications, ... }`; `reviewModelQuestions(decision, llmResult, schema)`; `recordGeneration(decision)`.  
 **Definition**: Decides before MQL generation whether to ask the user a clarification. Owns write-intent bypass, user bypass, clarification validation (schema-field allowlist against prompt injection), prompt enrichment, the deterministic vague-term check, and its metrics. After generation it only shows LLM-asked questions whose options are real schema fields. Building blocks are under `ambiguityGate.internals` for the gate's own tests.
 

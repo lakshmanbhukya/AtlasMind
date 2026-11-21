@@ -249,7 +249,7 @@ sequenceDiagram
 ## 3. Subsystem Breakdown & Implementation Details
 
 ### 3.1 Deep Query Execution Engine (`server/src/services/queryExecutionEngine.js`)
-The central deep domain engine for AtlasMind:
+The central deep domain engine for AtlasMind. The file is a façade (the class, `toEngineError`, `normalizeParams`); the two flows live in `services/engine/`: `naturalLanguageQuery.js` (steps 1–11), `approvedWrite.js`, and `shared.js`.
 - **Unified Domain Core**: Replaces legacy duplicate orchestration across HTTP routes. Powers both text (`POST /api/query`) and voice (`POST /api/voice`) through a single transport-agnostic interface:
   - `executeNaturalLanguageQuery(context, input)`: Complete natural language query lifecycle returning typed domain outcomes (`success`, `clarification_required`, `approval_required`, `safety_blocked`).
   - `executeApprovedWrite(context, input)`: Encapsulated Human-in-the-Loop mutating write validation, single-use `jti` replay prevention, and database execution.
@@ -266,7 +266,7 @@ The central deep domain engine for AtlasMind:
   9. Telemetry recording and persistent query history save.
 
 ### 3.2 Ambiguity Gate Service (`server/src/services/ambiguityGate.js`)
-Protects against hallucinated business logic:
+Protects against hallucinated business logic. `ambiguityGate.js` is a façade over `services/ambiguity/`: `vagueTerms.js` (term lists, write intent, field helpers), `analysis.js` (deterministic detectors), `clarifications.js` (validation and the enriched query), `metrics.js` (the single metrics store) and `decide.js` (the interface).
 - **Deterministic Check**: Evaluates vague terms against a curated dictionary (`top`, `best`, `highest`, `lowest`, `recent`, `growth`, `popular`, etc.). Clarification triggers immediately if two or more numeric field candidates exist across active collections.
 - **Anti-Injection Validator (`validateClarifications`)**: Ensures clarification choices from the client match real schema fields. Discards hallucinated or malicious string injections.
 - **Telemetry Observability Engine**: Records granular events (`ambiguity_asked`, `ambiguity_skipped`, `ambiguity_resolved`, `ambiguity_bypassed`, `clarification_edit`) to calculate empirical KPIs (Ask Rate, Resolution Rate, Edit-after-Result Rate).
@@ -298,6 +298,7 @@ Protects against hallucinated business logic:
 - **Multimodal STT (Whisper Large v3 Turbo)**: Transcribes audio buffers at the `POST /api/voice` intake boundary and hands normalized transcripts to `QueryExecutionEngine` with `source: 'voice'`.
 
 ### 3.8 AST Safety Guard (`server/src/services/safetyGuard.js`)
+- `safetyGuard.js` is a façade over `services/safety/`: `operators.js` (stage and operator lists), `names.js` (protected and valid names), `references.js` (collection references), `pipeline.js` (stage checks, `validatePipeline`, block descriptions), `verdict.js` (`classifyExecution`) and `types.js` (shared JSDoc types).
 - `classifyExecution` returns one verdict per `(collection, pipeline, Effective Scope, tenant database)`: `runnable`, `needs_approval`, `scope_insufficient` or `blocked` (ADR 0004).
 - Enforces a stage allowlist recursively (`$facet`, `$lookup.pipeline`, `$unionWith.pipeline`); hard-denies `$function`, `$accumulator`, `$where`.
 - Blocks protected collections and any explicit `db` other than the connected database, in reads and write targets.

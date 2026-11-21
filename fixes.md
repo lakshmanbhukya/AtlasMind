@@ -28,6 +28,7 @@ Status: `todo` · `in progress` · `done` · `won't do`. Effort: S (under an hou
 | F15 | `connectionId` = `connectionIdFor(uri, dbName)`, so one cluster connected with two databases gives two separate sessions | `da81f33` | **Run the migration once after deploying:** `npm run migrate:connection-ids -- --dry-run`, then without the flag (see `docs/DEPLOYMENT.md`). Users reconnect once. If the migration is skipped, old history, dashboards and workspaces stay under the old ID. |
 | F17 | pino JSON logging (`utils/logger.js`, `LOG_LEVEL`, default `info`) and `pino-http` with an `X-Request-Id` on every response; `requireAuth` adds `connectionId` to the request's log lines | `eb369a5`, `7bf1ad8` | All `console.*` in `routes/`, `services/`, `stores/`, `models/`, `db/connection.js`, `utils/` and `index.js` replaced; `db/seed.js` and migrations stay on `console`. Redacts URIs, cookies and auth headers; the raw LLM output and voice filenames are no longer logged. `/api/health` is not logged. |
 | F19 | `// @ts-check` on every non-test server file except `db/seed.js`; `npm run typecheck` (`tsc -p .`, no emit) runs in CI before `npm test` | `dc3d7a8`, `170255b`, `290db5e`, `a6e347d`, `d8ed206` | TypeScript 7.0.2, `strict: false`, `checkJs: false`. Typedefs `QueryOutcome`, `ExecutionVerdict`, `PipelineCheck`, `ScopeOptions`, `AmbiguityDiagnostics`; `types/express.d.ts` declares `req.connectionId`. Only JSDoc and casts changed, no runtime code. |
+| F18 | `ambiguityGate.js` → `services/ambiguity/` (5 modules), `safetyGuard.js` → `services/safety/` (5 + `types.js`), `queryExecutionEngine.js` → `services/engine/` (`naturalLanguageQuery`, `approvedWrite`, `shared`), each behind a façade with identical exports | `ffc973f`, `4340381`, `8712e8f` | Pure moves: tests unchanged, a line-multiset comparison shows only require/export boilerplate. The engine's steps 1–11 stay in one function (see F23). |
 
 ## To do: quick wins (S)
 
@@ -44,9 +45,9 @@ Status: `todo` · `in progress` · `done` · `won't do`. Effort: S (under an hou
 | ID | Fix | Status | Notes |
 |----|-----|--------|-------|
 | F16 | Stream LLM progress and explanations over SSE | todo | |
-| F18 | Split `ambiguityGate.js` (1033 lines), `safetyGuard.js` and `queryExecutionEngine.js` by stage | todo | |
 
 ## Follow-ups from finished work
 
 | ID | Fix | Status | Notes |
 |----|-----|--------|-------|
+| F23 | Split `runNaturalLanguageQuery` (`services/engine/naturalLanguageQuery.js`, ~500 lines) into per-stage modules (scope, context, ambiguity, generation, verdict, execute) | todo | Found in F18: steps 1–11 share about ten mutable locals (timings, `gateInfo`, `safetyInfo`, `currentLlmResult`, `clarificationSource`, `complianceInfo`) and the `buildOutcomePayload`/`clarificationOutcome` closures, and several steps return early. Needs a per-query run-context object, a behaviour-sensitive rewrite rather than a move, so it was left out of the pure-move rule. Pin the response shapes with tests first. |

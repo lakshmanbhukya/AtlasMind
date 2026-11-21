@@ -13,7 +13,12 @@ import { apiErrorMessage } from './apiError';
  */
 
 /** @typedef {'text' | 'voice'} Source */
-/** @typedef {{ turns: object[], pending: null | Source }} ConversationState */
+/**
+ * `pendingStage` is the server stage of the pending text question (F16 stream progress).
+ * It is only present while progress arrives: every transition that settles or starts a
+ * request builds a new state without it.
+ * @typedef {{ turns: object[], pending: null | Source, pendingStage?: string }} ConversationState
+ */
 
 export const initialConversation = Object.freeze({ turns: [], pending: null });
 
@@ -139,6 +144,7 @@ const updateTurn = (turns, id, update) => turns.map((t) => (t.id === id ? { ...t
  * - `cleared`
  * - `replayStarted` / `replayed { item, now }` / `replayFailed`
  * - `asked { source, userTurn? }`
+ * - `progressed { stage }`: a stream progress event for the pending question
  * - `answered { body, source, ids: { assistant, user? }, now }`
  * - `failed { error, source, question?, retryOptions?, ids: { assistant, user? }, now }`
  * - `approveStarted` / `approved { turnId, body }` / `approveFailed { turnId, error }`
@@ -171,6 +177,10 @@ export function conversationReducer(state, action) {
                 turns: action.userTurn ? [...state.turns, action.userTurn] : state.turns,
                 pending: action.source,
             };
+
+        case 'progressed':
+            // Late progress after the answer (or with nothing pending) is ignored.
+            return state.pending ? { ...state, pendingStage: action.stage } : state;
 
         case 'answered': {
             const { body, source, ids, now } = action;
@@ -233,6 +243,21 @@ export function conversationReducer(state, action) {
 }
 
 // ─── Selectors ───────────────────────────────────────────────────────────────
+
+const STAGE_LABELS = {
+    scope: 'Checking collections…',
+    schema: 'Reading your schema…',
+    ambiguity: 'Checking the question…',
+    generating: 'Generating pipeline…',
+    safety: 'Running safety checks…',
+    executing: 'Running the query…',
+};
+
+/** The pending indicator's label: the current stream stage, or the default for the source. */
+export function pendingLabel({ pending, pendingStage }) {
+    if (pending === 'voice') return 'Transcribing and generating pipeline…';
+    return STAGE_LABELS[pendingStage] || 'Generating pipeline…';
+}
 
 /** The question a turn answers, for re-asking it. */
 export const questionOf = (turn) => turn.naturalLanguage || turn.content;

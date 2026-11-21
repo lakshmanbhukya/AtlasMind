@@ -279,6 +279,30 @@ Returned when a query is unambiguous or has been successfully clarified:
 }
 ```
 
+### POST `/api/query/stream`
+*(Protected, same `llmLimiter` as `POST /api/query`)*
+
+Takes the same request body as `POST /api/query` and runs the same engine call, but streams stage progress as Server-Sent Events (`Content-Type: text/event-stream`). The client's text questions use it (`streamQuery` in `client/src/services/api.js`); voice still uses `POST /api/voice`. `POST /api/query` is unchanged.
+
+```text
+event: progress
+data: {"stage":"scope"}
+
+event: progress
+data: {"stage":"generating"}
+
+: ping
+
+event: result
+data: {"status":200,"body":{"success":true,"aiMessage":"...","pipeline":[...]}}
+```
+
+- `progress` events report the stage the engine has reached: `scope`, `schema`, `ambiguity`, `generating`, `safety`, `executing`, in that order. A query that stops early (a clarification, a safety block) sends only the stages it reached. Progress is stage-level only; there is no token streaming.
+- Exactly one `result` event ends the stream. Once the stream has started the HTTP status is always 200, so `result.status` carries the status `POST /api/query` would have returned, and `result.body` is that response's envelope: 200 for an answer, clarification, approval or scope-expansion response, 422 with `safetyBlock` for a safety block, and the engine error's status and `{ success: false, error: { code, message } }` otherwise.
+- A `: ping` comment is sent every 15 seconds while the stream is open. Clients ignore comment lines.
+- Errors raised before the stream starts (401 from `requireAuth`, 429 from the rate limiter) are ordinary JSON responses, not event streams. Check `Content-Type` before parsing.
+- If the client disconnects, the server stops writing; the query itself still runs to completion.
+
 ---
 
 ## 4. Cryptographic Write Approval API

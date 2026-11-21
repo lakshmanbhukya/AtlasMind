@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useChat } from '../../hooks/useChat';
 import { useVoice } from '../../hooks/useVoice';
 import { pinToDashboard } from '../../services/api';
-import { questionOf, answerableClarificationId } from '../../lib/conversation';
+import { questionOf, answerableClarificationId, pendingLabel } from '../../lib/conversation';
 import { cn } from '../../lib/utils';
 import Composer from './Composer';
 import EmptyState from './EmptyState';
@@ -32,6 +32,7 @@ export default function ChatThread({
   const {
     messages,
     pending,
+    pendingStage,
     selectedModel,
     setSelectedModel,
     sendMessage,
@@ -208,7 +209,7 @@ export default function ChatThread({
           })}
           {busy && (
             <div className={messages.length ? 'mt-6' : ''}>
-              <PendingTurn label={voicePending ? 'Transcribing and generating pipeline…' : 'Generating pipeline…'} />
+              <PendingTurn label={pendingLabel({ pending, pendingStage })} />
             </div>
           )}
           {/* Clearance for the floating composer; also the scroll anchor, so the newest turn lands above it. */}

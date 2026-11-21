@@ -9,6 +9,7 @@ import {
     blockedBodyFromError,
     questionOf,
     answerableClarificationId,
+    pendingLabel,
 } from './conversation';
 
 const fixture = (name) => JSON.parse(readFileSync(new URL(`./__fixtures__/${name}.json`, import.meta.url), 'utf8'));
@@ -256,5 +257,54 @@ describe('selectors', () => {
         const later = run([ask('something else', 3), answer(fixture('answer'), 3)], second);
         expect(answerableClarificationId(later.turns)).toBeNull();
         expect(answerableClarificationId([])).toBeNull();
+    });
+});
+
+describe('stream progress (F16)', () => {
+    it('progressed sets the stage of the pending question, and every settle drops it', () => {
+        const asking = run([ask('Total revenue by region', 1), { type: 'progressed', stage: 'generating' }]);
+        expect(asking.pending).toBe('text');
+        expect(asking.pendingStage).toBe('generating');
+
+        const answered = run([answer(fixture('answer'), 1)], asking);
+        expect(answered.pending).toBeNull();
+        expect(answered.pendingStage).toBeUndefined();
+
+        const failed = run([
+            ask('q', 2),
+            { type: 'progressed', stage: 'safety' },
+            { type: 'failed', source: 'text', error: httpError(500, fixture('error-500')), question: 'q', ids: { assistant: 'a2' }, now: NOW },
+        ]);
+        expect(failed.pendingStage).toBeUndefined();
+
+        const cleared = run([ask('q', 3), { type: 'progressed', stage: 'schema' }, { type: 'cleared' }]);
+        expect(cleared).toEqual(initialConversation);
+    });
+
+    it('a new question starts without the previous stage', () => {
+        const state = run([ask('a', 1), { type: 'progressed', stage: 'executing' }, answer(fixture('answer'), 1), ask('b', 2)]);
+        expect(state.pendingStage).toBeUndefined();
+    });
+
+    it('progress with nothing pending is ignored', () => {
+        const idle = run([ask('q', 1), answer(fixture('answer'), 1)]);
+        expect(run([{ type: 'progressed', stage: 'scope' }], idle)).toBe(idle);
+    });
+
+    it('a 422 result from the stream still draws a blocked turn', () => {
+        const state = run([
+            ask('Join users with system users', 1),
+            { type: 'progressed', stage: 'safety' },
+            { type: 'failed', source: 'text', error: httpError(422, fixture('blocked-422')), question: 'Join users with system users', ids: { assistant: 'a1' }, now: NOW },
+        ]);
+        expect(state.turns[1].kind).toBe('blocked');
+    });
+
+    it('pendingLabel names the stage, with the old defaults', () => {
+        expect(pendingLabel({ pending: 'text', pendingStage: 'generating' })).toBe('Generating pipeline…');
+        expect(pendingLabel({ pending: 'text', pendingStage: 'safety' })).toBe('Running safety checks…');
+        expect(pendingLabel({ pending: 'text' })).toBe('Generating pipeline…');
+        expect(pendingLabel({ pending: 'text', pendingStage: 'unknown' })).toBe('Generating pipeline…');
+        expect(pendingLabel({ pending: 'voice', pendingStage: 'schema' })).toBe('Transcribing and generating pipeline…');
     });
 });

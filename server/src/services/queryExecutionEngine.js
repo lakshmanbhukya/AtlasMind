@@ -58,6 +58,8 @@ class QueryExecutionEngine {
      *
      * @param {object|string} contextOrParams - Context object or connectionId string or combined params
      * @param {object} [inputParams] - Input params if context was provided as 1st arg
+     *   Optional `onProgress(stage)` receives 'scope', 'schema', 'ambiguity', 'generating',
+     *   'safety' and 'executing' as the query reaches each stage (route-supplied, F16).
      * @returns {Promise<QueryOutcome>}
      */
     static async executeNaturalLanguageQuery(contextOrParams, inputParams) {

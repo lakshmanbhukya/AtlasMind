@@ -1,3 +1,4 @@
+// @ts-check
 'use strict';
 
 /**
@@ -54,10 +55,10 @@ function normalizeMetricField(metricStr) {
 /**
  * Verify interpretation compliance of a pipeline against a clarified metric.
  *
- * @param {Array<object>} pipeline - The generated aggregation pipeline
- * @param {string|object} clarifiedMetric - The metric selected by user (field name or clarification object)
+ * @param {Array<Record<string, any>>} pipeline - The generated aggregation pipeline
+ * @param {string|Record<string, any>} clarifiedMetric - The metric selected by user (field name or clarification object)
  * @param {string} [queryText=''] - Original query text to infer ranking direction
- * @returns {{ compliant: boolean, reason?: string, details?: object }}
+ * @returns {{ compliant: boolean, reason?: string, details?: Record<string, any> }}
  */
 function verifyInterpretationCompliance(pipeline, clarifiedMetric, queryText = '') {
   if (!Array.isArray(pipeline) || pipeline.length === 0) {
@@ -78,8 +79,9 @@ function verifyInterpretationCompliance(pipeline, clarifiedMetric, queryText = '
 
   if (!targetMetricRaw || targetMetricRaw === '__other__') {
     // If user provided a raw text interpretation in __other__, check if a field can be identified
-    if (clarifiedMetric?.customText) {
-      targetMetricRaw = clarifiedMetric.customText;
+    const metricObj = /** @type {Record<string, any>} */ (clarifiedMetric);
+    if (metricObj?.customText) {
+      targetMetricRaw = metricObj.customText;
     } else {
       return { compliant: true, details: { skipped: true, reason: 'unstructured_other_metric' } };
     }

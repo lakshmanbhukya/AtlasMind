@@ -1,3 +1,4 @@
+// @ts-check
 const express = require('express');
 const { getSchema } = require('../services/tenantSchema');
 const { getSimilarExamples } = require('../services/fewShotRetriever');

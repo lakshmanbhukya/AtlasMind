@@ -1,14 +1,16 @@
-const Groq = require('groq-sdk');
+// @ts-check
+// The typings model Groq as an ES default export; the CommonJS entry is the class itself.
+const Groq = /** @type {typeof import('groq-sdk').default} */ (/** @type {unknown} */ (require('groq-sdk')));
 const { toFile } = require('groq-sdk');
 const { buildSystemPrompt } = require('../prompts/systemPrompt');
 const log = require('../utils/logger').logger.child({ module: 'groqService' });
 
-/** @type {Groq|null} */
+/** @type {import('groq-sdk').default|null} */
 let groqClient = null;
 
 /**
  * Get or create the Groq client singleton.
- * @returns {Groq}
+ * @returns {import('groq-sdk').default}
  */
 function getGroqClient() {
     if (!groqClient) {
@@ -51,14 +53,16 @@ const TRANSCRIPTION_TIMEOUT_MS = 60_000;
 /**
  * Generate an MQL aggregation pipeline from natural language.
  *
- * @param {string} naturalLanguage - The user's query in plain English
+ * @param {string|Record<string, any>} naturalLanguage - The user's query in plain English (or an object carrying `query`/`naturalLanguage`)
  * @param {string} schemaContext - Minified schema string
- * @param {object[]} fewShotExamples - Similar NL→MQL examples
+ * @param {Record<string, any>[]} fewShotExamples - Similar NL→MQL examples
  * @param {string} [model='openai/gpt-oss-120b'] - Groq LLM model ID
- * @param {object} [options={}] - Options controlling generation mode
+ * @param {object} [options={}] - Options controlling generation mode (also passed to buildSystemPrompt)
+ * @param {number} [options.temperature]
+ * @param {number} [options.max_tokens]
  * @param {import('./experiment').LlmHooks} [options.llm] - Research hooks (quota, JSON-mode probing,
  *        strict model). Supplied only through an ExperimentConfig; production passes none.
- * @returns {Promise<{ pipeline: object[], collection: string, chartType: string, explanation: string|null, usage: object, model: string, rawText: string, timings: { llmMs?: number, [k: string]: any }, retries: number, jsonModeUsed: boolean, needsClarification?: boolean, questions?: any[], missingCollections?: string[], [k: string]: any }>}
+ * @returns {Promise<{ pipeline: Record<string, any>[], collection: string, chartType: string, explanation: string|null, usage: Record<string, any>, model: string, rawText: string, timings: { llmMs?: number, [k: string]: any }, retries: number, jsonModeUsed: boolean, needsClarification?: boolean, questions?: any[], missingCollections?: string[], [k: string]: any }>}
  */
 async function generateMQL(naturalLanguage, schemaContext, fewShotExamples, model = DEFAULT_MODEL, options = {}) {
     const client = getGroqClient();
@@ -88,6 +92,7 @@ async function generateMQL(naturalLanguage, schemaContext, fewShotExamples, mode
         ? naturalLanguage
         : (naturalLanguage?.query || naturalLanguage?.naturalLanguage || JSON.stringify(naturalLanguage));
 
+    /** @type {import('groq-sdk/resources/chat/completions').ChatCompletionMessageParam[]} */
     const messages = [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: nlText },
@@ -104,7 +109,8 @@ async function generateMQL(naturalLanguage, schemaContext, fewShotExamples, mode
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
-            const createParams = {
+            // extraParams come from an ExperimentConfig and are passed through as is.
+            const createParams = /** @type {import('groq-sdk/resources/chat/completions').ChatCompletionCreateParamsNonStreaming} */ ({
                 messages,
                 model: targetModel,
                 temperature: options.temperature !== undefined ? options.temperature : 0.1,
@@ -112,7 +118,7 @@ async function generateMQL(naturalLanguage, schemaContext, fewShotExamples, mode
                 top_p: 1,
                 ...(jsonModeUsed ? { response_format: { type: 'json_object' } } : {}),
                 ...extraParams,
-            };
+            });
             chatCompletion = await client.chat.completions.create(createParams);
             break;
         } catch (err) {
@@ -292,7 +298,7 @@ async function transcribeAudio(audioBuffer, filename = 'recording.webm') {
 
 /**
  * Set the Groq client instance (for testing/mocking).
- * @param {Groq|null} client
+ * @param {import('groq-sdk').default|null} client
  */
 function setGroqClient(client) {
     groqClient = client;

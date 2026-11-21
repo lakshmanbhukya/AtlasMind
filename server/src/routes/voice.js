@@ -1,3 +1,4 @@
+// @ts-check
 const express = require('express');
 const multer = require('multer');
 const { transcribeAudio } = require('../services/groqService');
@@ -23,7 +24,8 @@ const upload = multer({
         if (allowedMimes.includes(file.mimetype) || file.originalname.match(/\.(mp3|wav|webm|ogg|flac|m4a|mp4)$/i)) {
             cb(null, true);
         } else {
-            cb(new Error(`Unsupported audio format: ${file.mimetype}`), false);
+            // multer's typings declare (error) or (null, accept); it accepts (error, false) at runtime.
+            cb(/** @type {any} */ (new Error(`Unsupported audio format: ${file.mimetype}`)), false);
         }
     },
 });

@@ -1,3 +1,4 @@
+// @ts-check
 const express = require('express');
 const { ObjectId } = require('mongodb');
 const dashboardStore = require('../stores/dashboardStore');

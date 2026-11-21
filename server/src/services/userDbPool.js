@@ -1,3 +1,4 @@
+// @ts-check
 const { MongoClient } = require('mongodb');
 const { getConnectionById } = require('../models/UserConnection');
 const { decrypt } = require('../utils/encryption');

@@ -11,6 +11,7 @@ AtlasMind is a conversational BI app for MongoDB: a user connects their own Mong
 Server (`cd server`):
 - `npm run dev`: nodemon on port 3001 (needs `server/.env`; see `server/.env.example`: `MONGODB_URI`, `GROQ_API_KEY`, `ENCRYPTION_KEY` (64 hex chars), `JWT_SECRET`, optional `CORS_ALLOWED_ORIGINS`, `LOG_LEVEL`). Output is piped through `pino-pretty`; `npm start` logs plain JSON lines
 - `npm test`: Jest (`jest --verbose`). CI runs this on Node 24 when `server/**` changes; on a push to `main` it then builds and pushes the `atlasmind-server` image (gated only on the server job)
+- `npm run typecheck`: `tsc -p .` over `src` (no emit). Every non-test file except `db/seed.js` starts with `// @ts-check`; new files must too. Fix type errors with JSDoc or casts only, never a runtime change. CI runs it before `npm test`
 - Single test: `npx jest src/__tests__/routesSmoke.test.js` or `npx jest -t "test name"`
 - `npm run test:coverage`, `npm run seed` (seeds the `sample_sales` collection)
 - `npm run migrate:connection-ids -- --dry-run` (then without `--dry-run`): one-off F15 migration that re-keys stored connections to `connectionIdFor(uri, dbName)`; see `docs/DEPLOYMENT.md`

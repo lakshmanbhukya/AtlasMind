@@ -1,3 +1,4 @@
+// @ts-check
 const express = require('express');
 const dashboardStore = require('../stores/dashboardStore');
 const { forRequest } = require('../utils/logger');

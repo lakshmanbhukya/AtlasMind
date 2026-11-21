@@ -1,3 +1,4 @@
+// @ts-check
 const dbConnection = require('../db/connection');
 const log = require('../utils/logger').logger.child({ module: 'fewShotRetriever' });
 
@@ -17,7 +18,7 @@ function escapeRegex(string) {
  *
  * @param {string|null} [connectionId]
  * @param {string[]|null} [collections]
- * @returns {object}
+ * @returns {Record<string, any>}
  */
 function buildExampleFilter(connectionId, collections = null) {
     const tenantOr = connectionId
@@ -61,7 +62,7 @@ function buildExampleFilter(connectionId, collections = null) {
  * @param {number} [limit=3] - Number of examples to return
  * @param {string|null} [connectionId=null] - Multi-tenant connection ID
  * @param {string[]|null} [collections=null] - Allowed collections scope
- * @returns {Promise<object[]>}
+ * @returns {Promise<Record<string, any>[]>}
  */
 async function getSimilarExamples(queryText, limit = 3, connectionId = null, collections = null) {
     let db;
@@ -113,8 +114,8 @@ function sampleExamples(collection, limit, tenantFilter) {
  * @param {import('mongodb').Collection} collection
  * @param {string} queryText
  * @param {number} limit
- * @param {object} tenantFilter - from buildExampleFilter
- * @returns {Promise<object[]>}
+ * @param {Record<string, any>} tenantFilter - from buildExampleFilter
+ * @returns {Promise<Record<string, any>[]>}
  */
 async function attemptAtlasSearch(collection, queryText, limit, tenantFilter) {
     // For vector search, we need an embedding of the query text.
@@ -154,8 +155,8 @@ async function attemptAtlasSearch(collection, queryText, limit, tenantFilter) {
  * @param {import('mongodb').Collection} collection
  * @param {string} queryText
  * @param {number} limit
- * @param {object} tenantFilter - from buildExampleFilter
- * @returns {Promise<object[]>}
+ * @param {Record<string, any>} tenantFilter - from buildExampleFilter
+ * @returns {Promise<Record<string, any>[]>}
  */
 async function textFallbackSearch(collection, queryText, limit, tenantFilter) {
     // Extract significant keywords (remove stopwords)
@@ -219,7 +220,7 @@ async function textFallbackSearch(collection, queryText, limit, tenantFilter) {
  * nothing is stored (only the seeder writes global examples).
  * @param {object} param0
  * @param {string} param0.naturalLanguage
- * @param {object[]} param0.mqlPipeline
+ * @param {Record<string, any>[]} param0.mqlPipeline
  * @param {string} param0.collection
  * @param {string} [param0.connectionId]
  */

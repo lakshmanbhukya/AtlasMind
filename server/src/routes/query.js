@@ -1,3 +1,4 @@
+// @ts-check
 const express = require('express');
 const { QueryExecutionEngine } = require('../services/queryExecutionEngine');
 const queryHistoryStore = require('../stores/queryHistoryStore');

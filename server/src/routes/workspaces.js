@@ -1,3 +1,4 @@
+// @ts-check
 const express = require('express');
 const Workspace = require('../models/Workspace');
 const { getUserCollections } = require('../services/tenantSchema');

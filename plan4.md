@@ -17,7 +17,7 @@ Status: `todo` · `in progress` · `blocked` · `done` · `won't do`
 | 3 | F17 | pino structured logging with a request ID | L | `feat/structured-logging` | done | `eb369a5`, `7bf1ad8` | `forRequest(req)` falls back to the root logger for routers mounted without pino-http (unit tests). One test did assert on `console.error` (`safeExecution.test.js`); it now spies on the logger |
 | 4 | F19 | `// @ts-check` and JSDoc on the server, plus a `typecheck` CI step | L | `chore/server-ts-check` | done | `dc3d7a8`, `170255b`, `290db5e`, `a6e347d`, `d8ed206` | TS 7.0.2 (needs explicit `types: ["node"]`). helmet/pino-http/groq-sdk `require`s are cast, since their typings only declare an ES default |
 | 5 | F18 | Split `ambiguityGate.js`, `safetyGuard.js` and `queryExecutionEngine.js` by stage | L | `refactor/split-by-stage` | done | `ffc973f`, `4340381`, `8712e8f` | Behaviour unchanged. The engine moved per flow, not per step: steps 1–11 share mutable locals, so a per-step split isn't a pure move (F23) |
-| 6 | F16 | Stream query progress over SSE | L | `feat/query-sse` | todo | | |
+| 6 | F16 | Stream query progress over SSE | L | `feat/query-sse` | done | `05c3009`, `719d102`, `f30084d` | Text questions stream; voice keeps `sendVoice`. Render streaming not checked yet (after deploy) |
 
 **Progress log** (add one line per session: date, phase, result):
 - 2026-11-21, phase 1: F21 and F22 done on `fix/uri-validation`. Server 432/432 tests, client lint, 29 unit, build and 11 e2e pass.
@@ -26,6 +26,7 @@ Status: `todo` · `in progress` · `blocked` · `done` · `won't do`
 - 2026-11-21, phase 3: F17 done on `feat/structured-logging`. Server 451/451 tests (9 new). Checked against a real server on port 3002: JSON lines, `X-Request-Id` echoed, cookie redacted, `connectionId` on authenticated access lines, health not logged. Next: phase 4 (F19).
 - 2026-11-21, phase 4: F19 done on `chore/server-ts-check`. `npm run typecheck` exits 0; server 451/451 tests unchanged. Next: phase 5 (F18).
 - 2026-11-21, phase 5: F18 done on `refactor/split-by-stage`. Server 451/451 tests with `src/__tests__` unchanged; typecheck exits 0; total lines 2837 → 3048 (boilerplate only). Engine split per flow, per-step split logged as F23. Phase 6 places `onProgress` at the step boundaries in `engine/naturalLanguageQuery.js`. Next: phase 6 (F16).
+- 2026-11-21, phase 6: F16 done on `feat/query-sse`. Server 459/459 tests, typecheck exits 0; client lint, 48 unit, build and 12/12 e2e pass. Checked on a real server (port 3002) with curl: SSE headers, `progress` then one `result` (an engine 404 inside the stream), plain JSON 401 without a session. A full live query wasn't possible (the central Atlas DB was unreachable from this machine). The e2e suite must not reuse a dev server from another checkout on 5173. Plan 4 complete.
 
 ## How to run this plan (for the agent)
 Work through the phases in order without stopping for confirmation. Ask the user only where a phase says to, or when a step fails in a way this file doesn't cover.

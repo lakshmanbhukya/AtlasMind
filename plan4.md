@@ -13,7 +13,7 @@ Status: `todo` · `in progress` · `blocked` · `done` · `won't do`
 |-------|----|-----|--------|--------|--------|---------|-------|
 | 1 | F21 | Driver URI parse errors → 400 `validation_error` | S | `fix/uri-validation` | done | `6af5fde` | Validated with the driver itself (`InvalidConnectionStringError` in `openTemporaryClient`): `mongodb-connection-string-url` accepts `host:notaport`, so the default below didn't work |
 | 1 | F22 | Narrow CSP `connect-src` and enforce it | S | `fix/uri-validation` | done | `dc29fd1` | API origin `https://atlasmind-on2d.onrender.com`; no violations in headless Chromium on `/` and `/shared/*` |
-| 2 | F15 | `dbName` in the `connectionId` hash, plus a migration | M | `fix/connection-id-db` | todo | | Run the migration only with the user's go-ahead |
+| 2 | F15 | `dbName` in the `connectionId` hash, plus a migration | M | `fix/connection-id-db` | done | `da81f33` | Migration **not run yet**: the user runs `npm run migrate:connection-ids -- --dry-run`, then without the flag, after deploying |
 | 3 | F17 | pino structured logging with a request ID | L | `feat/structured-logging` | todo | | |
 | 4 | F19 | `// @ts-check` and JSDoc on the server, plus a `typecheck` CI step | L | `chore/server-ts-check` | todo | | |
 | 5 | F18 | Split `ambiguityGate.js`, `safetyGuard.js` and `queryExecutionEngine.js` by stage | L | `refactor/split-by-stage` | todo | | Behaviour must not change |
@@ -22,6 +22,7 @@ Status: `todo` · `in progress` · `blocked` · `done` · `won't do`
 **Progress log** (add one line per session: date, phase, result):
 - 2026-11-21, phase 1: F21 and F22 done on `fix/uri-validation`. Server 432/432 tests, client lint, 29 unit, build and 11 e2e pass.
 - 2026-11-21: checked phases 2–6 against the code and corrected them (see Review notes). Next session: start phase 2 (F15).
+- 2026-11-21, phase 2: F15 done on `fix/connection-id-db`. Server 442/442 tests. The migration has been checked with an in-memory DB and an offline CLI run, but not against a real database. Next: phase 3 (F17).
 
 ## How to run this plan (for the agent)
 Work through the phases in order without stopping for confirmation. Ask the user only where a phase says to, or when a step fails in a way this file doesn't cover.

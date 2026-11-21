@@ -25,6 +25,7 @@ Status: `todo` · `in progress` · `done` · `won't do`. Effort: S (under an hou
 | F20 | Revoke share links: `DELETE /api/dashboard/:id/share` (`dashboardStore.unshare`), and a "Stop sharing" button next to Share | `fa2b43c`, `442f239`, `2846dc3` | `GET /api/dashboard` now returns `shared: boolean` instead of the token. The remove button moved into `InsightDashboard`'s action row; empty pins now render so they stay removable. |
 | F21 | `/connect` and `/databases` return 400 `validation_error` for a URI the driver cannot parse (e.g. `mongodb://host:notaport`) instead of 500 | `6af5fde` | `openTemporaryClient` wraps the synchronous `new MongoClient` throw in `InvalidConnectionStringError`. `mongodb-connection-string-url` was not used: it accepts a non-numeric port. |
 | F22 | CSP enforced (`Content-Security-Policy`, no longer Report-Only) with `connect-src 'self' https://atlasmind-on2d.onrender.com` | `dc29fd1` | Checked in headless Chromium against the production build: no violations on `/` or `/shared/*`. If the API moves off Render, update all three CSP blocks in `client/netlify.toml`. |
+| F15 | `connectionId` = `connectionIdFor(uri, dbName)`, so one cluster connected with two databases gives two separate sessions | `da81f33` | **Run the migration once after deploying:** `npm run migrate:connection-ids -- --dry-run`, then without the flag (see `docs/DEPLOYMENT.md`). Users reconnect once. If the migration is skipped, old history, dashboards and workspaces stay under the old ID. |
 
 ## To do: quick wins (S)
 
@@ -35,7 +36,6 @@ Status: `todo` · `in progress` · `done` · `won't do`. Effort: S (under an hou
 
 | ID | Fix | Status | Where | Notes |
 |----|-----|--------|-------|-------|
-| F15 | Include `dbName` in the `connectionId` hash so two sessions using the same URI with different databases don't overwrite each other | todo | `server/src/routes/connections.js` | Changes existing IDs, so a migration is needed. |
 
 ## To do: larger investments (L)
 

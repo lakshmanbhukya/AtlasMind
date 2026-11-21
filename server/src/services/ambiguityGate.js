@@ -13,6 +13,7 @@
  */
 
 const { isMetricCandidate } = require('./schemaProfiler');
+const log = require('../utils/logger').logger.child({ module: 'ambiguityGate' });
 
 // ---------------------------------------------------------------------------
 // Term Sets
@@ -240,13 +241,11 @@ function recordAmbiguityMetric(event, meta = {}) {
     if (Object.prototype.hasOwnProperty.call(metricsStore, event)) {
         metricsStore[event] += 1;
     }
-    if (process.env.NODE_ENV === 'production') return;
-    console.log('[AMBIGUITY_METRIC]', {
+    log.debug({
         event,
         connectionId: meta.connectionId || 'anonymous',
         source: meta.source || 'query',
-        timestamp: new Date().toISOString(),
-    });
+    }, 'Ambiguity metric');
 }
 
 /**
@@ -954,7 +953,7 @@ function decide({
         return { ...decision, diagnostics, gateMs };
     } catch (err) {
         // Fail open: a gate bug must not block the query
-        console.warn(`⚠️ Deterministic ambiguity gate error (${context.source || 'query'}, failing open):`, err.message);
+        log.warn({ err, source: context.source || 'query' }, 'Deterministic ambiguity gate error, failing open');
         return decision;
     }
 }
@@ -978,7 +977,7 @@ function reviewModelQuestions(decision, llmResult, schema, context = {}) {
             recordAmbiguityMetric('ambiguity_asked', context);
             return { action: 'ask', questions: review.questions };
         }
-        console.warn(`⚠️ Discarded LLM clarification (${review.reason})`);
+        log.warn({ reason: review.reason }, 'Discarded LLM clarification');
     }
 
     if (!decision.clarifications && !decision.bypassed) {

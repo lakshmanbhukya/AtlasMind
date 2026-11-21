@@ -1,4 +1,5 @@
 const { getDb } = require('../db/connection');
+const log = require('../utils/logger').logger.child({ module: 'UserConnection' });
 
 const COLLECTION_NAME = 'user_connections';
 
@@ -22,9 +23,9 @@ async function initializeCollection() {
     try {
         const collection = getCollection();
         await collection.createIndex({ connectionId: 1 }, { unique: true });
-        console.log(`✅ Initialized indexes for ${COLLECTION_NAME} collection`);
+        log.info({ collection: COLLECTION_NAME }, 'Initialized indexes');
     } catch (err) {
-        console.error(`❌ Failed to initialize indexes for ${COLLECTION_NAME}:`, err);
+        log.error({ err, collection: COLLECTION_NAME }, 'Failed to initialize indexes');
     }
 }
 

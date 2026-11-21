@@ -1,6 +1,7 @@
 const Groq = require('groq-sdk');
 const { toFile } = require('groq-sdk');
 const { buildSystemPrompt } = require('../prompts/systemPrompt');
+const log = require('../utils/logger').logger.child({ module: 'groqService' });
 
 /** @type {Groq|null} */
 let groqClient = null;
@@ -134,7 +135,7 @@ async function generateMQL(naturalLanguage, schemaContext, fewShotExamples, mode
             }
 
             if (targetModel !== DEFAULT_MODEL) {
-                console.warn(`⚠️ Custom model "${targetModel}" execution failed, falling back to "${DEFAULT_MODEL}":`, err.message);
+                log.warn({ err, model: targetModel, fallback: DEFAULT_MODEL }, 'Custom model failed, falling back to default');
                 chatCompletion = await client.chat.completions.create({
                     messages: [
                         { role: 'system', content: systemPrompt },
@@ -220,8 +221,8 @@ async function generateMQL(naturalLanguage, schemaContext, fewShotExamples, mode
     }
 
     if (validationErrors.length > 0) {
-        console.error(`⚠️ LLM response validation failed: ${validationErrors.join(', ')}`);
-        console.error('Raw content:', content);
+        // The raw LLM output can echo the question, so only its length is logged.
+        log.error({ validationErrors, contentLength: content.length }, 'LLM response validation failed');
         throw new Error(`LLM response validation failed: ${validationErrors[0]}`);
     }
 
@@ -272,7 +273,7 @@ async function transcribeAudio(audioBuffer, filename = 'recording.webm') {
             response_format: 'verbose_json',
         }, { timeout: TRANSCRIPTION_TIMEOUT_MS });
     } catch (err) {
-        console.warn('⚠️ whisper-large-v3-turbo transcription failed, trying whisper-large-v3:', err.message);
+        log.warn({ err }, 'whisper-large-v3-turbo transcription failed, trying whisper-large-v3');
         const fallbackFile = await toFile(audioBuffer, filename);
         transcription = await client.audio.transcriptions.create({
             model: 'whisper-large-v3',

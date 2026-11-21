@@ -1,4 +1,5 @@
 const dns = require('node:dns');
+const log = require('./logger').logger.child({ module: 'dns' });
 
 /**
  * Ensures Node.js has valid external DNS resolvers configured.
@@ -25,7 +26,7 @@ function configureDns() {
             dns.setServers(['8.8.8.8', '1.1.1.1']);
         }
     } catch (err) {
-        console.warn('⚠️ [DNS] Failed to set fallback DNS servers:', err.message);
+        log.warn({ err }, 'Failed to set fallback DNS servers');
     }
 }
 

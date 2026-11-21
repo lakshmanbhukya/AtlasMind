@@ -1,4 +1,5 @@
 const queryHistoryStore = require('../stores/queryHistoryStore');
+const log = require('../utils/logger').logger.child({ module: 'cleanup' });
 
 const DEFAULT_RETENTION_DAYS = 30;
 const DEFAULT_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -11,9 +12,9 @@ let cleanupTimer = null;
 async function initializeCleanupIndexes() {
     try {
         await queryHistoryStore.ensureIndexes();
-        console.log('✅ Initialized query_history indexes');
+        log.info({ collection: 'query_history' }, 'Initialized indexes');
     } catch (err) {
-        console.warn('⚠️ Failed to initialize query_history indexes:', err.message);
+        log.warn({ err, collection: 'query_history' }, 'Failed to initialize indexes');
     }
 }
 
@@ -32,9 +33,9 @@ async function cleanOldPlaygroundChats(options = {}) {
         const deletedCount = await queryHistoryStore.purgeOlderThan(cutoffDate);
 
         if (deletedCount > 0) {
-            console.log(`🧹 [Auto-Clean Cron] Deleted ${deletedCount} playground chats older than ${retentionDays} days (before ${cutoffDate.toISOString()}) across all users.`);
+            log.info({ deletedCount, retentionDays, cutoff: cutoffDate.toISOString() }, 'Deleted old playground chats');
         } else {
-            console.log(`🧹 [Auto-Clean Cron] No playground chats older than ${retentionDays} days found to clean.`);
+            log.debug({ retentionDays }, 'No old playground chats to clean');
         }
 
         return {
@@ -44,7 +45,7 @@ async function cleanOldPlaygroundChats(options = {}) {
             retentionDays,
         };
     } catch (error) {
-        console.error('❌ [Auto-Clean Cron] Error cleaning old playground chats:', error.message);
+        log.error({ err: error }, 'Error cleaning old playground chats');
         return {
             success: false,
             error: error.message,
@@ -75,7 +76,7 @@ function startCleanupCron(options = {}) {
         cleanupTimer = null;
     }
 
-    console.log(`🕒 [Auto-Clean Cron] Started scheduled cleanup job (Interval: ${Math.round(intervalMs / 3600000)}h, Retention: ${retentionDays} days)`);
+    log.info({ intervalHours: Math.round(intervalMs / 3600000), retentionDays }, 'Started scheduled cleanup job');
 
     // Run initial cleanup after a short delay (e.g. 5 seconds after server boot) to let server initialize
     if (runImmediately) {
@@ -107,7 +108,7 @@ function stopCleanupCron() {
     if (cleanupTimer) {
         clearInterval(cleanupTimer);
         cleanupTimer = null;
-        console.log('🛑 [Auto-Clean Cron] Stopped scheduled cleanup job.');
+        log.info('Stopped scheduled cleanup job');
     }
 }
 

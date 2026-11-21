@@ -3,6 +3,7 @@ const router = express.Router();
 const { requireAuth } = require('../middleware/auth');
 const { getConnectionById } = require('../models/UserConnection');
 const { clearSession } = require('../auth/session');
+const { forRequest } = require('../utils/logger');
 
 /**
  * GET /api/auth/me
@@ -36,7 +37,7 @@ router.get('/me', requireAuth, async (req, res) => {
             lastConnectedAt: conn.lastConnectedAt,
         });
     } catch (err) {
-        console.error('❌ [AUTH_ME_ERROR]', err);
+        forRequest(req).error({ err }, 'Auth check failed');
         return res.status(500).json({ success: false, error: { message: 'Auth check failed' } });
     }
 });

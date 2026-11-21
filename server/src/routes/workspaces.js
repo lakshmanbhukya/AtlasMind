@@ -3,6 +3,7 @@ const Workspace = require('../models/Workspace');
 const { getUserCollections } = require('../services/tenantSchema');
 const { requireKnownCollections } = require('../services/effectiveScope');
 const { QueryEngineError } = require('../services/engineErrors');
+const { forRequest } = require('../utils/logger');
 
 const router = express.Router();
 
@@ -63,7 +64,7 @@ router.get('/', async (req, res) => {
             meta: { count: data.length },
         });
     } catch (error) {
-        console.error('❌ List workspaces error:', error);
+        forRequest(req).error({ err: error }, 'List workspaces error');
         return res.status(500).json({
             success: false,
             error: { code: 'workspaces_error', message: error.message },
@@ -133,7 +134,7 @@ router.post('/', async (req, res) => {
                 },
             });
         }
-        console.error('❌ Create workspace error:', error);
+        forRequest(req).error({ err: error }, 'Create workspace error');
         return res.status(500).json({
             success: false,
             error: { code: 'workspace_create_error', message: error.message },
@@ -216,7 +217,7 @@ router.patch('/:id', async (req, res) => {
                 },
             });
         }
-        console.error('❌ Update workspace error:', error);
+        forRequest(req).error({ err: error }, 'Update workspace error');
         return res.status(500).json({
             success: false,
             error: { code: 'workspace_update_error', message: error.message },
@@ -247,7 +248,7 @@ router.delete('/:id', async (req, res) => {
             message: 'Workspace deleted successfully',
         });
     } catch (error) {
-        console.error('❌ Delete workspace error:', error);
+        forRequest(req).error({ err: error }, 'Delete workspace error');
         return res.status(500).json({
             success: false,
             error: { code: 'workspace_delete_error', message: error.message },

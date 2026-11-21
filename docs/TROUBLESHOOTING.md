@@ -138,6 +138,21 @@ Fix:
 - Reduce burst traffic.
 - Validate GROQ_API_KEY and account quota.
 
+## Reading the server logs
+
+### Finding the log lines for one request
+
+Every response carries an `X-Request-Id` header (visible in the browser's network tab, or with `curl -i`). The server logs JSON lines, and every line logged for a request, including its "request completed" access line, carries that ID as `req.id`. To find them:
+
+- On Render, search the logs for the ID.
+- Locally, `npm run dev` pretty-prints through pino-pretty; to search raw JSON, run `npm start` and pipe through `grep <id>`.
+
+Log lines from route handlers come from the per-request logger, so they include the request ID and, once the session is read, the `connectionId`. Connection strings, cookies and question text are never logged.
+
+### Getting more detail
+
+Set `LOG_LEVEL=debug` (default `info`) and restart. Debug adds ambiguity metrics, few-shot saves and transcription details. Use `LOG_LEVEL=warn` to keep only warnings and errors.
+
 ## Support
 
 For bugs and feature requests, open an issue:

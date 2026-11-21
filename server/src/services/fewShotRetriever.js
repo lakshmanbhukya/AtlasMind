@@ -1,4 +1,5 @@
 const dbConnection = require('../db/connection');
+const log = require('../utils/logger').logger.child({ module: 'fewShotRetriever' });
 
 /**
  * Escape regular expression special characters in user input.
@@ -74,7 +75,7 @@ async function getSimilarExamples(queryText, limit = 3, connectionId = null, col
     // Check if the collection exists and has documents
     const count = await collection.estimatedDocumentCount();
     if (count === 0) {
-        console.warn('⚠️ No few-shot examples found. Returning empty array.');
+        log.warn('No few-shot examples found');
         return [];
     }
 
@@ -88,7 +89,7 @@ async function getSimilarExamples(queryText, limit = 3, connectionId = null, col
         }
     } catch (error) {
         // Vector search index not configured — fall back to text matching
-        console.warn('⚠️ Vector search unavailable, using text fallback:', error.message);
+        log.warn({ err: error }, 'Vector search unavailable, using text fallback');
     }
 
     // Fallback: regex-based text matching
@@ -225,7 +226,7 @@ async function textFallbackSearch(collection, queryText, limit, tenantFilter) {
 async function addExample({ naturalLanguage, mqlPipeline, collection, connectionId }) {
     try {
         if (!connectionId) {
-            console.warn('⚠️ Skipped saving memory example without a connectionId');
+            log.warn('Skipped saving memory example without a connectionId');
             return;
         }
         const db = dbConnection.getDb();
@@ -245,9 +246,9 @@ async function addExample({ naturalLanguage, mqlPipeline, collection, connection
         };
 
         await coll.insertOne(doc);
-        if (process.env.NODE_ENV !== 'production') console.log('Saved new few-shot memory example');
+        log.debug('Saved new few-shot memory example');
     } catch (error) {
-        console.error('❌ Failed to save memory example:', error.message);
+        log.error({ err: error }, 'Failed to save memory example');
     }
 }
 

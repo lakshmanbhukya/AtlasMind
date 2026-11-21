@@ -17,6 +17,7 @@ const { executePipeline, UnsafePipelineError } = require('../services/queryExecu
 const dashboardRouter = require('../routes/dashboard');
 const { getDb } = require('../db/connection');
 const { getUserDb } = require('../services/userDbPool');
+const { logger } = require('../utils/logger');
 
 function fakeUserDb(rows = [{ ok: 1 }]) {
     const aggregate = jest.fn().mockReturnValue({ toArray: jest.fn().mockResolvedValue(rows) });
@@ -169,14 +170,17 @@ describe('dashboard pins go through the guard', () => {
     });
 
     test('a 500 returns a generic message, not the internal error text', async () => {
-        const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
-        pins.findOne.mockRejectedValue(new Error('connection to mongodb://secret-host failed'));
+        // The internal error is logged server-side (the router runs without
+        // pino-http here, so it goes to the root logger), never sent back.
+        const spy = jest.spyOn(logger, 'error').mockImplementation(() => {});
+        const internal = new Error('connection to mongodb://secret-host failed');
+        pins.findOne.mockRejectedValue(internal);
 
         const res = await request(app).post(`/api/dashboard/${new ObjectId()}/refresh`);
 
         expect(res.status).toBe(500);
         expect(res.body.error).toEqual({ code: 'dashboard_error', message: 'Dashboard operation failed' });
-        expect(spy).toHaveBeenCalled();
+        expect(spy).toHaveBeenCalledWith(expect.objectContaining({ err: internal }), expect.any(String));
         spy.mockRestore();
     });
 });

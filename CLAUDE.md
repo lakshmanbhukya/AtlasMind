@@ -9,7 +9,7 @@ AtlasMind is a conversational BI app for MongoDB: a user connects their own Mong
 ## Commands
 
 Server (`cd server`):
-- `npm run dev`: nodemon on port 3001 (needs `server/.env`; see `server/.env.example`: `MONGODB_URI`, `GROQ_API_KEY`, `ENCRYPTION_KEY` (64 hex chars), `JWT_SECRET`, optional `CORS_ALLOWED_ORIGINS`)
+- `npm run dev`: nodemon on port 3001 (needs `server/.env`; see `server/.env.example`: `MONGODB_URI`, `GROQ_API_KEY`, `ENCRYPTION_KEY` (64 hex chars), `JWT_SECRET`, optional `CORS_ALLOWED_ORIGINS`, `LOG_LEVEL`). Output is piped through `pino-pretty`; `npm start` logs plain JSON lines
 - `npm test`: Jest (`jest --verbose`). CI runs this on Node 24 when `server/**` changes; on a push to `main` it then builds and pushes the `atlasmind-server` image (gated only on the server job)
 - Single test: `npx jest src/__tests__/routesSmoke.test.js` or `npx jest -t "test name"`
 - `npm run test:coverage`, `npm run seed` (seeds the `sample_sales` collection)
@@ -56,6 +56,7 @@ The authenticated chat app lives in `client/src/components/app/` (`AppShell` > `
 - Keep route handlers thin: put orchestration and business logic in `server/src/services`, and central-DB access in `server/src/stores`.
 - Never weaken the read-only safety guard. Pipelines run only through `queryExecutor.executePipeline`, which applies `validateCollectionName` and `validatePipeline`. Writes go only through the approval-token flow (`approvedWrite`).
 - Tenant data is always filtered by `connectionId`. Never write `connectionId ? { connectionId } : {}`; use a store, which fails closed.
+- Log with pino (`utils/logger.js`), not `console`: `forRequest(req)` (the request's `req.log`, carrying the request ID and `connectionId`) in route handlers, `logger.child({ module })` elsewhere, errors as `{ err }`. Never log connection strings or question text. Only CLI scripts (`db/seed.js`, `db/migrations/`) use `console`.
 - Do not add `process.env` research toggles to production modules or forward evaluation options from requests. Extend `ExperimentConfig` instead.
 - Architecture vocabulary (module, interface, seam, depth, adapter) and domain terms are in `GLOSSARY.md`; decisions are in `docs/adr/`.
 

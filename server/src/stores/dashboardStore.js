@@ -5,6 +5,7 @@ const connection = require('../db/connection');
 const { getUserDb } = require('../services/userDbPool');
 const { executePipeline, assertSafePipeline } = require('../services/queryExecutor');
 const { requireTenant, toObjectId } = require('./tenant');
+const log = require('../utils/logger').logger.child({ module: 'dashboardStore' });
 
 /**
  * Dashboard store: the only module that touches the central `dashboards`
@@ -42,9 +43,9 @@ async function initializeIndexes() {
         const pins = pinsCollection();
         await pins.createIndex({ connectionId: 1, pinnedAt: -1 });
         await pins.createIndex({ shareToken: 1 }, { unique: true, sparse: true });
-        console.log(`✅ Initialized indexes for ${COLLECTION} collection`);
+        log.info({ collection: COLLECTION }, 'Initialized indexes');
     } catch (err) {
-        console.error(`❌ Failed to initialize indexes for ${COLLECTION}:`, err.message);
+        log.error({ err, collection: COLLECTION }, 'Failed to initialize indexes');
     }
 }
 

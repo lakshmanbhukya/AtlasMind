@@ -1,6 +1,7 @@
 const { MongoClient } = require('mongodb');
 const { getConnectionById } = require('../models/UserConnection');
 const { decrypt } = require('../utils/encryption');
+const log = require('../utils/logger').logger.child({ module: 'userDbPool' });
 
 /**
  * User DB Connection Pool
@@ -55,7 +56,7 @@ async function getUserDb(connectionId) {
             await entry.db.admin().ping();
             return entry.db;
         } catch {
-            console.warn(`⚠️ [UserDbPool] Stale connection for ${connectionId.slice(0, 8)}…, reconnecting.`);
+            log.warn({ connectionId: connectionId.slice(0, 8) }, 'Stale connection, reconnecting');
             await safeClose(entry.client);
             pool.delete(connectionId);
         }
@@ -95,9 +96,9 @@ async function createEntry(connectionId, now) {
 
     pool.set(connectionId, { client, db, lastUsed: now });
 
-    console.log(
-        `✅ [UserDbPool] New connection cached for ${connectionId.slice(0, 8)}… ` +
-        `(db: ${userConn.dbName}, pool size: ${pool.size}/${MAX_CACHED_CLIENTS})`
+    log.info(
+        { connectionId: connectionId.slice(0, 8), db: userConn.dbName, poolSize: pool.size, maxPoolSize: MAX_CACHED_CLIENTS },
+        'New connection cached'
     );
 
     // Ensure eviction timer is running
@@ -126,7 +127,7 @@ function evictLRU() {
         const entry = pool.get(oldestKey);
         pool.delete(oldestKey);
         safeClose(entry.client);
-        console.log(`🧹 [UserDbPool] Evicted LRU connection ${oldestKey.slice(0, 8)}… (pool size: ${pool.size})`);
+        log.info({ connectionId: oldestKey.slice(0, 8), poolSize: pool.size }, 'Evicted LRU connection');
     }
 }
 
@@ -139,7 +140,7 @@ function evictIdleEntries() {
         if (now - entry.lastUsed > IDLE_TTL_MS) {
             pool.delete(key);
             safeClose(entry.client);
-            console.log(`🧹 [UserDbPool] Evicted idle connection ${key.slice(0, 8)}… (idle ${Math.round((now - entry.lastUsed) / 1000)}s)`);
+            log.info({ connectionId: key.slice(0, 8), idleSeconds: Math.round((now - entry.lastUsed) / 1000) }, 'Evicted idle connection');
         }
     }
 
@@ -179,7 +180,7 @@ async function safeClose(client) {
     try {
         await client.close();
     } catch (err) {
-        console.warn(`⚠️ [UserDbPool] Error closing client: ${err.message}`);
+        log.warn({ err }, 'Error closing client');
     }
 }
 
@@ -195,9 +196,9 @@ async function cleanupPool() {
 
     if (entries.length === 0) return;
 
-    console.log(`🔌 [UserDbPool] Closing ${entries.length} cached connection(s)…`);
+    log.info({ count: entries.length }, 'Closing cached user DB connections');
     await Promise.allSettled(entries.map(([, entry]) => safeClose(entry.client)));
-    console.log(`🔌 [UserDbPool] All user DB connections closed.`);
+    log.info('All user DB connections closed');
 }
 
 /**

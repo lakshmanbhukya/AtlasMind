@@ -2,6 +2,7 @@ const express = require('express');
 const { getSchema } = require('../services/tenantSchema');
 const { getSimilarExamples } = require('../services/fewShotRetriever');
 const { suggestCollections } = require('../services/scopeSuggestion');
+const { forRequest } = require('../utils/logger');
 
 const router = express.Router();
 
@@ -46,7 +47,7 @@ router.post('/suggest', async (req, res) => {
             suggestions,
         });
     } catch (error) {
-        console.error('❌ Scope suggestion error:', error);
+        forRequest(req).error({ err: error }, 'Scope suggestion error');
         return res.status(500).json({
             success: false,
             error: { code: 'suggestion_error', message: error.message },

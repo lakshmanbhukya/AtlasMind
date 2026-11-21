@@ -15,7 +15,7 @@ Status: `todo` · `in progress` · `blocked` · `done` · `won't do`
 | 1 | F22 | Narrow CSP `connect-src` and enforce it | S | `fix/uri-validation` | done | `dc29fd1` | API origin `https://atlasmind-on2d.onrender.com`; no violations in headless Chromium on `/` and `/shared/*` |
 | 2 | F15 | `dbName` in the `connectionId` hash, plus a migration | M | `fix/connection-id-db` | done | `da81f33` | Migration **not run yet**: the user runs `npm run migrate:connection-ids -- --dry-run`, then without the flag, after deploying |
 | 3 | F17 | pino structured logging with a request ID | L | `feat/structured-logging` | done | `eb369a5`, `7bf1ad8` | `forRequest(req)` falls back to the root logger for routers mounted without pino-http (unit tests). One test did assert on `console.error` (`safeExecution.test.js`); it now spies on the logger |
-| 4 | F19 | `// @ts-check` and JSDoc on the server, plus a `typecheck` CI step | L | `chore/server-ts-check` | todo | | |
+| 4 | F19 | `// @ts-check` and JSDoc on the server, plus a `typecheck` CI step | L | `chore/server-ts-check` | done | `dc3d7a8`, `170255b`, `290db5e`, `a6e347d`, `d8ed206` | TS 7.0.2 (needs explicit `types: ["node"]`). helmet/pino-http/groq-sdk `require`s are cast, since their typings only declare an ES default |
 | 5 | F18 | Split `ambiguityGate.js`, `safetyGuard.js` and `queryExecutionEngine.js` by stage | L | `refactor/split-by-stage` | todo | | Behaviour must not change |
 | 6 | F16 | Stream query progress over SSE | L | `feat/query-sse` | todo | | |
 
@@ -24,6 +24,7 @@ Status: `todo` · `in progress` · `blocked` · `done` · `won't do`
 - 2026-11-21: checked phases 2–6 against the code and corrected them (see Review notes). Next session: start phase 2 (F15).
 - 2026-11-21, phase 2: F15 done on `fix/connection-id-db`. Server 442/442 tests. The migration has been checked with an in-memory DB and an offline CLI run, but not against a real database. Next: phase 3 (F17).
 - 2026-11-21, phase 3: F17 done on `feat/structured-logging`. Server 451/451 tests (9 new). Checked against a real server on port 3002: JSON lines, `X-Request-Id` echoed, cookie redacted, `connectionId` on authenticated access lines, health not logged. Next: phase 4 (F19).
+- 2026-11-21, phase 4: F19 done on `chore/server-ts-check`. `npm run typecheck` exits 0; server 451/451 tests unchanged. Next: phase 5 (F18).
 
 ## How to run this plan (for the agent)
 Work through the phases in order without stopping for confirmation. Ask the user only where a phase says to, or when a step fails in a way this file doesn't cover.

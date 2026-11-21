@@ -4,6 +4,8 @@ AtlasMind exposes a cookie-authenticated REST API for database connection manage
 
 **Base Path**: `/api`
 
+**Request IDs**: every response carries an `X-Request-Id` header (exposed to the browser through CORS). Send your own `x-request-id` (1 to 64 letters, digits, `_` or `-`) to have it reused; anything else is replaced with a random UUID. Server log lines for the request carry the same ID.
+
 ---
 
 ## 1. Authentication & Session

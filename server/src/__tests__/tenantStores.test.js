@@ -49,6 +49,7 @@ describe.each([undefined, null, ''])('connectionId = %p', (missing) => {
         ['dashboard remove', () => dashboardStore.remove(missing, new ObjectId().toString())],
         ['dashboard refresh', () => dashboardStore.refresh(missing, new ObjectId().toString())],
         ['dashboard share', () => dashboardStore.share(missing, new ObjectId().toString())],
+        ['dashboard unshare', () => dashboardStore.unshare(missing, new ObjectId().toString())],
     ])('%s throws TenantRequiredError and touches nothing', async (_label, call) => {
         await expect(call()).rejects.toBeInstanceOf(TenantRequiredError);
         expect(coll.find).not.toHaveBeenCalled();
@@ -144,6 +145,54 @@ describe('queries are filtered by the caller', () => {
         coll.findOne.mockResolvedValue({ _id: id, shareToken: existing });
         await expect(dashboardStore.share('tenant-a', id.toString())).resolves.toEqual({ shareToken: existing });
         expect(coll.updateOne).not.toHaveBeenCalled();
+    });
+
+    test("unshare is tenant-filtered and returns false for another tenant's pin", async () => {
+        const id = new ObjectId();
+        await expect(dashboardStore.unshare('tenant-a', id.toString())).resolves.toBe(false);
+        expect(coll.updateOne).toHaveBeenCalledWith(
+            { _id: id, connectionId: 'tenant-a' },
+            { $unset: { shareToken: '' } }
+        );
+    });
+
+    test('unshare with an invalid id is "not found" without a DB call', async () => {
+        await expect(dashboardStore.unshare('tenant-a', 'not-an-id')).resolves.toBe(false);
+        expect(coll.updateOne).not.toHaveBeenCalled();
+    });
+
+    test('after unshare, the old token no longer resolves', async () => {
+        // Small stateful fake: one pin document, honouring the filters the store sends.
+        const id = new ObjectId();
+        const doc = { _id: id, connectionId: 'tenant-a', name: 'pin' };
+        const matches = (filter) => Object.entries(filter).every(([k, v]) =>
+            (v instanceof ObjectId ? v.equals(doc[k]) : doc[k] === v));
+        coll.findOne.mockImplementation(async (filter) => (matches(filter) ? { ...doc } : null));
+        coll.updateOne.mockImplementation(async (filter, update) => {
+            if (!matches(filter)) return { matchedCount: 0 };
+            Object.assign(doc, update.$set || {});
+            Object.keys(update.$unset || {}).forEach((k) => delete doc[k]);
+            return { matchedCount: 1 };
+        });
+
+        const { shareToken } = await dashboardStore.share('tenant-a', id.toString());
+        await expect(dashboardStore.getShared(shareToken)).resolves.toMatchObject({ name: 'pin' });
+
+        await expect(dashboardStore.unshare('tenant-b', id.toString())).resolves.toBe(false);
+        await expect(dashboardStore.getShared(shareToken)).resolves.toMatchObject({ name: 'pin' });
+
+        await expect(dashboardStore.unshare('tenant-a', id.toString())).resolves.toBe(true);
+        await expect(dashboardStore.getShared(shareToken)).resolves.toBeNull();
+    });
+
+    test('list exposes a shared flag but never the share token', async () => {
+        coll.cursor.toArray.mockResolvedValue([
+            { _id: new ObjectId(), connectionId: 'tenant-a', shareToken: 'c'.repeat(32) },
+            { _id: new ObjectId(), connectionId: 'tenant-a' },
+        ]);
+        const pins = await dashboardStore.list('tenant-a');
+        expect(pins.map((p) => p.shared)).toEqual([true, false]);
+        expect(pins.every((p) => !('shareToken' in p))).toBe(true);
     });
 
     test('share with an invalid id is "not found" without a DB call', async () => {

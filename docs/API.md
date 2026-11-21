@@ -463,7 +463,7 @@ Suggests workspace scopes by keyword-scoring the collections against the questio
 ## 9. Dashboard API & Public Sharing
 
 ### GET `/api/dashboard`
-Returns all pinned dashboard widgets for the current authenticated user.
+Returns all pinned dashboard widgets for the current authenticated user. Each pin carries `shared: boolean` (whether it has a live public link); the share token itself is never listed and is only returned by `POST /api/dashboard/:id/share`.
 
 ### POST `/api/dashboard/pin`
 Pins a query and its chart visualization to the dashboard. Body: `{ query, pipeline, collection, chartType?, name?, results?, scope? }`. The pipeline is checked by the safety guard before it is stored; an unsafe pipeline returns **422** `safety_violation` (or `scope_violation`).
@@ -475,7 +475,7 @@ Re-runs the pinned MQL aggregation pipeline against the user's live database poo
 Deletes a dashboard pin.
 
 ### POST `/api/dashboard/:id/share`
-Makes a pin publicly shareable. Creates a secret, random 32-character share token for the pin, or returns the existing one if the pin was already shared. Returns **400** for a malformed pin ID and **404** if the pin does not belong to the current connection. Deleting the pin revokes its link.
+Makes a pin publicly shareable. Creates a secret, random 32-character share token for the pin, or returns the existing one if the pin was already shared. Returns **400** for a malformed pin ID and **404** if the pin does not belong to the current connection. Deleting the pin, or `DELETE /api/dashboard/:id/share`, revokes its link.
 
 **Success Response (HTTP 200)**:
 ```json
@@ -483,6 +483,14 @@ Makes a pin publicly shareable. Creates a secret, random 32-character share toke
 ```
 
 The client builds the public link as `${origin}/shared/<shareToken>`.
+
+### DELETE `/api/dashboard/:id/share`
+Revokes a pin's public link without deleting the pin. The old token stops resolving immediately (`GET /api/dashboard/shared/:token` returns **404**); sharing the pin again issues a new token. Returns **400** for a malformed pin ID and **404** if the pin does not belong to the current connection. Revoking a pin that is not currently shared succeeds.
+
+**Success Response (HTTP 200)**:
+```json
+{ "success": true, "message": "Share link revoked" }
+```
 
 ### GET `/api/dashboard/shared/:token` *(Public Endpoint - No Auth Required)*
 Fetches a read-only, sanitized dashboard widget for public sharing, by its share token. Only pins explicitly shared via `POST /api/dashboard/:id/share` are reachable; a pin's ObjectId does not work here. Excludes internal credentials, connection URIs and the share token. A malformed or unknown token returns **404**.

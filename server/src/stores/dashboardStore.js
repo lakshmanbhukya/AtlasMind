@@ -48,9 +48,14 @@ async function initializeIndexes() {
     }
 }
 
+/**
+ * List a tenant's pins. The share token itself is never listed (it only goes
+ * to the client from share()); each pin carries a `shared` flag instead.
+ */
 async function list(connectionId) {
     requireTenant(connectionId, 'listing dashboard pins');
-    return pinsCollection().find({ connectionId }).sort({ pinnedAt: -1 }).toArray();
+    const pins = await pinsCollection().find({ connectionId }).sort({ pinnedAt: -1 }).toArray();
+    return pins.map(({ shareToken, ...pinDoc }) => ({ ...pinDoc, shared: Boolean(shareToken) }));
 }
 
 /**
@@ -142,6 +147,18 @@ async function share(connectionId, id) {
 }
 
 /**
+ * Revoke a pin's public link. Sharing the pin again issues a new token.
+ * @returns {Promise<boolean>} false when the pin does not exist for this tenant
+ */
+async function unshare(connectionId, id) {
+    requireTenant(connectionId, 'unsharing a dashboard pin');
+    const _id = toObjectId(id);
+    if (!_id) return false;
+    const result = await pinsCollection().updateOne({ _id, connectionId }, { $unset: { shareToken: '' } });
+    return result.matchedCount > 0;
+}
+
+/**
  * Public, unauthenticated view of a shared pin (display fields only).
  * Only pins explicitly shared via share() are reachable, by their secret token.
  */
@@ -151,6 +168,6 @@ async function getShared(token) {
 }
 
 module.exports = {
-    list, pin, remove, refresh, share, getShared, initializeIndexes,
+    list, pin, remove, refresh, share, unshare, getShared, initializeIndexes,
     PUBLIC_PROJECTION, SHARE_TOKEN_PATTERN,
 };

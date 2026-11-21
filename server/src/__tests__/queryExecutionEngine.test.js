@@ -245,6 +245,45 @@ describe('QueryExecutionEngine Interface Tests', () => {
             });
         });
 
+        test('a save question lets the prompt allow a final $merge and stages it for approval (F25)', async () => {
+            mockGenerateMQL.mockResolvedValueOnce({
+                pipeline: [
+                    { $group: { _id: '$status', total: { $sum: '$amount' } } },
+                    { $merge: { into: 'revenue_summary' } },
+                ],
+                collection: 'orders',
+                chartType: 'table',
+                explanation: 'Save totals by status',
+            });
+
+            const outcome = await QueryExecutionEngine.executeNaturalLanguageQuery({
+                connectionId: testConnectionId,
+                text: 'save total amount by status into a new collection called revenue_summary',
+            });
+
+            expect(mockGenerateMQL.mock.calls[0][4]).toMatchObject({ allowWriteStage: true });
+            expect(outcome.type).toBe('approval_required');
+            expect(outcome.data.approval).toMatchObject({ writeStage: '$merge', targetCollection: 'revenue_summary' });
+            expect(outcome.data.aiMessage).toContain('write to your collection "revenue_summary"');
+            expect(mockExecutePipeline).not.toHaveBeenCalled();
+        });
+
+        test('a read question does not allow a write stage in the prompt (F25)', async () => {
+            mockGenerateMQL.mockResolvedValueOnce({
+                pipeline: [{ $group: { _id: '$status', total: { $sum: '$amount' } } }],
+                collection: 'orders',
+                chartType: 'bar',
+                explanation: 'Totals by status',
+            });
+
+            await QueryExecutionEngine.executeNaturalLanguageQuery({
+                connectionId: testConnectionId,
+                text: 'total amount by status',
+            });
+
+            expect(mockGenerateMQL.mock.calls[0][4]).toMatchObject({ allowWriteStage: false });
+        });
+
         test('approval details list the fields written before a $merge', async () => {
             mockGenerateMQL.mockResolvedValueOnce({
                 pipeline: [
@@ -662,6 +701,7 @@ describe('QueryExecutionEngine Interface Tests', () => {
             expect(outcome.type).toBe('success');
             expect(outcome.data.success).toBe(true);
             expect(outcome.data.safetyStatus).toBe('write-executed');
+            expect(outcome.data.aiMessage).toContain('"archived_orders"');
             expect(mockApprovalTokensCollection.insertOne).toHaveBeenCalledTimes(1);
             expect(mockExecutePipeline).toHaveBeenCalledWith(
                 mockUserDb,

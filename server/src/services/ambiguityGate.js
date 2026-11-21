@@ -13,7 +13,7 @@
  *  6. Pass enriched query to LLM with isClarificationPass:true.
  */
 
-const { DEFAULT_VAGUE_TERMS, IDIOMATIC_COLLOCATIONS, extractNumericFields, hasWriteIntent, toLabel } = require('./ambiguity/vagueTerms');
+const { DEFAULT_VAGUE_TERMS, IDIOMATIC_COLLOCATIONS, extractNumericFields, hasWriteIntent, hasSaveIntent, toLabel } = require('./ambiguity/vagueTerms');
 const { analyzeAmbiguity, checkDeterministicAmbiguity, detectHyphenatedCompound, detectInlineProximityBinding, queryAlreadyNamesSpecificField } = require('./ambiguity/analysis');
 const { buildEnrichedQuery, validateClarifications, validateModelClarification } = require('./ambiguity/clarifications');
 const { getAmbiguityMetrics, recordAmbiguityMetric, resetAmbiguityMetrics } = require('./ambiguity/metrics');
@@ -30,6 +30,7 @@ const { decide, recordGeneration, reviewModelQuestions } = require('./ambiguity/
  */
 const internals = {
     hasWriteIntent,
+    hasSaveIntent,
     checkDeterministicAmbiguity,
     analyzeAmbiguity,
     validateModelClarification,

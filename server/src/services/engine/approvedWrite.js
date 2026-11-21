@@ -155,7 +155,7 @@ async function runApprovedWrite(params) {
         data: {
             success: true,
             naturalLanguage: query,
-            aiMessage: `✅ Transaction Authorized: Successfully executed approved write/update operation on database collection "${collection}".`,
+            aiMessage: `✅ Transaction Authorized: Successfully executed the approved write to collection "${(verdict.kind === 'needs_approval' && verdict.write?.targetCollection) || collection}".`,
             pipeline,
             mql: pipeline,
             collection,

@@ -188,12 +188,12 @@ Returned when a query references collections outside the active workspace:
 ```
 
 #### E. Mutating Write Interception Response (HTTP 200)
-Returned when a query specifies a database write, deletion, or modification:
+Returned when a query specifies a database write, deletion, or modification. The model only generates a write stage when the question asks to save results into a collection (e.g. "save total revenue by region into a new collection called revenue_summary"): it then appends one final `$merge` (or `$out`). Questions that ask to delete, update or drop data get a read-only refusal with an empty `pipeline` instead:
 ```json
 {
   "success": true,
   "naturalLanguage": "Delete inactive customers",
-  "aiMessage": "⚠️ Database Write Intercepted: This action will modify your collection \"customers\". Review and approve to execute.",
+  "aiMessage": "⚠️ Database Write Intercepted: This action will write to your collection \"customers_archive\". To execute this change, review and approve it.",
   "safetyStatus": "approval-required",
   "safetyBlocked": false,
   "approvalToken": "eyJhbGciOiJIUzI1NiIsIn...",

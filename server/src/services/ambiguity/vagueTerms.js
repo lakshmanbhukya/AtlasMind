@@ -105,7 +105,29 @@ function getFieldMetadata(numericFields) {
  */
 function hasWriteIntent(queryText) {
     if (!queryText || typeof queryText !== 'string') return false;
-    return WRITE_INTENT_PATTERNS.some((pattern) => pattern.test(queryText));
+    return WRITE_INTENT_PATTERNS.some((pattern) => pattern.test(queryText)) || hasSaveIntent(queryText);
+}
+
+/**
+ * Save-intent patterns: the user asks to persist results into a collection.
+ * Kept narrow on purpose; only these questions let the prompt allow one final
+ * $out/$merge stage (which the safety guard still stages for approval).
+ * @type {RegExp[]}
+ */
+const SAVE_INTENT_PATTERNS = [
+    /\b(?:save|store|write|persist|export|output|merge)\b[^.?!]*\b(?:into|to|as)\s+(?:(?:a|an|the)\s+)?(?:new\s+)?(?:[\w.-]+\s+)?collection\b/i,
+    /\$(?:out|merge)\b/i,
+];
+
+/**
+ * Check if the query asks to save its results into a collection.
+ *
+ * @param {string} queryText
+ * @returns {boolean}
+ */
+function hasSaveIntent(queryText) {
+    if (!queryText || typeof queryText !== 'string') return false;
+    return SAVE_INTENT_PATTERNS.some((pattern) => pattern.test(queryText));
 }
 
 /**
@@ -164,6 +186,8 @@ module.exports = {
     extractNumericFields,
     getFieldMetadata,
     hasWriteIntent,
+    hasSaveIntent,
+    SAVE_INTENT_PATTERNS,
     toLabel,
     toVagueTermSet,
 };

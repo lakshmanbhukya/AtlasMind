@@ -3,7 +3,7 @@
 
 const log = require('../../utils/logger').logger.child({ module: 'ambiguityGate' });
 const { recordAmbiguityMetric } = require('./metrics');
-const { hasWriteIntent } = require('./vagueTerms');
+const { hasWriteIntent, hasSaveIntent } = require('./vagueTerms');
 const { buildEnrichedQuery, validateClarifications, validateModelClarification } = require('./clarifications');
 const { analyzeAmbiguity } = require('./analysis');
 
@@ -36,6 +36,7 @@ const { analyzeAmbiguity } = require('./analysis');
  * @property {string} queryForGeneration - the query, enriched with validated clarifications
  * @property {Array|null} clarifications - sanitized clarifications, if any
  * @property {boolean} isClarificationPass - the LLM must not ask again
+ * @property {boolean} saveIntent - the query asks to save results into a collection
  * @property {boolean} bypassed
  * @property {{ reason: string|null, matchedTerms: string[] }} diagnostics
  * @property {number} gateMs - time spent in the deterministic check
@@ -58,6 +59,7 @@ function decide({
         queryForGeneration: query,
         clarifications: null,
         isClarificationPass: bypass === true || isWriteQuery,
+        saveIntent: hasSaveIntent(query),
         bypassed: false,
         diagnostics: { reason: null, matchedTerms: [] },
         gateMs: 0,

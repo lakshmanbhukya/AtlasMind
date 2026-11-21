@@ -2,6 +2,7 @@ require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
+const helmet = require("helmet");
 const cookieParser = require("cookie-parser");
 const { connectToDatabase, closeConnection } = require("./db/connection");
 const { initializeCollection } = require("./models/UserConnection");
@@ -55,6 +56,11 @@ function isAllowedOrigin(origin) {
 if (process.env.NODE_ENV === "production") {
   app.set("trust proxy", 1);
 }
+
+// Security headers. The API only returns JSON, so helmet's defaults fit; the
+// default Cross-Origin-Resource-Policy only affects no-cors loads, and the
+// cross-site client calls the API with CORS requests, so it is unaffected.
+app.use(helmet());
 
 app.use(
   cors({

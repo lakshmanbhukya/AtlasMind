@@ -450,3 +450,13 @@ describe('Route Adapters Smoke Tests (POST /api/query and POST /api/voice)', () 
         });
     });
 });
+
+describe('security headers (full app)', () => {
+    test('GET /api/health carries helmet headers', async () => {
+        const app = require('../index');
+        const res = await request(app).get('/api/health');
+        expect(res.status).toBe(200);
+        expect(res.headers['x-content-type-options']).toBe('nosniff');
+        expect(res.headers['x-powered-by']).toBeUndefined();
+    });
+});

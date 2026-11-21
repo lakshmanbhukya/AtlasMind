@@ -1,19 +1,52 @@
 name: AtlasMind CI
 
-# Server only: test the server, then build and push the server image from main.
-# The client deploys to Netlify and has no image.
+# Server: test, then build and push the server image from main.
+# Client: lint, unit tests, build and Playwright e2e. The client deploys to
+# Netlify, so it has no image, and its job never gates the server release.
+# The `changes` job makes each test job run only when its own folder (or this
+# workflow) changed.
 on:
   push:
     branches: [ main ]
     paths:
       - 'server/**'
+      - 'client/**'
+      - '.github/workflows/ci.yml'
   pull_request:
     branches: [ main ]
     paths:
       - 'server/**'
+      - 'client/**'
+      - '.github/workflows/ci.yml'
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      server: ${{ steps.filter.outputs.server }}
+      server_src: ${{ steps.filter.outputs.server_src }}
+      client: ${{ steps.filter.outputs.client }}
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dorny/paths-filter@v3
+      id: filter
+      with:
+        filters: |
+          server:
+            - 'server/**'
+            - '.github/workflows/ci.yml'
+          server_src:
+            - 'server/**'
+          client:
+            - 'client/**'
+            - '.github/workflows/ci.yml'
+
   build-and-test-server:
+    needs: [changes]
+    if: needs.changes.outputs.server == 'true'
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -42,10 +75,48 @@ jobs:
         description: "AtlasMind server tests completed successfully on ${{ github.ref_name }}."
         color: 0x00ff00
 
-  release:
-    needs: [build-and-test-server]
+  client:
+    needs: [changes]
+    if: needs.changes.outputs.client == 'true'
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    defaults:
+      run:
+        working-directory: client
+    steps:
+    - uses: actions/checkout@v4
+    - name: Use Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '24'
+        cache: 'npm'
+        cache-dependency-path: client/package-lock.json
+    - name: Install dependencies
+      run: npm ci
+    - name: Lint
+      run: npm run lint
+    - name: Unit tests
+      run: npm test
+    - name: Build
+      run: npm run build
+    - name: Install Playwright browser
+      run: npx playwright install --with-deps chromium
+    # chat.spec.ts stubs /api, so no server is needed; Playwright starts Vite.
+    - name: E2E tests
+      run: npm run test:e2e
+    - name: Upload Playwright report
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: playwright-report
+        path: client/playwright-report
+        retention-days: 7
+
+  # Gated only on the server job (and real server changes): the client job
+  # never blocks a server image release.
+  release:
+    needs: [changes, build-and-test-server]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.server_src == 'true'
     steps:
     - uses: actions/checkout@v4
 

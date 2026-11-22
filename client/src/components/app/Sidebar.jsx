@@ -8,6 +8,7 @@ import { initials } from '../../lib/turnFormat';
 import ChartTypeIcon from './ChartTypeIcon';
 import RowMenu from './RowMenu';
 import { Menu, MenuItem, MenuSeparator } from './Menu';
+import ProviderKeyPanel from './ProviderKeyPanel';
 
 function NavItem({ icon: Icon, label, active, onClick, ...props }) {
   return (
@@ -119,7 +120,8 @@ function HistoryRow({ item, active, onSelect, onRename, onTogglePin, onDelete })
 
 /**
  * Left column: product mark + collapse, primary nav, Pinned and Recents
- * (single queries from history) with row menus, and the connection footer.
+ * (single queries from history) with row menus, who pays for Groq calls
+ * (ProviderKeyPanel), and the connection footer.
  */
 export default function Sidebar({
   onCollapse,
@@ -136,6 +138,9 @@ export default function Sidebar({
   onDeleteHistory,
   connectionMeta,
   onLogout,
+  keyFormOpen = false,
+  onKeyFormOpenChange,
+  onKeySaved,
 }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -258,6 +263,13 @@ export default function Sidebar({
           )}
         </section>
       </div>
+
+      <ProviderKeyPanel
+        connectionId={connectionMeta?.connectionId}
+        formOpen={keyFormOpen}
+        onFormOpenChange={onKeyFormOpenChange}
+        onKeySaved={onKeySaved}
+      />
 
       <div className="relative h-16 shrink-0 px-3 border-t border-vg-line-soft flex items-center gap-3">
         <span aria-hidden="true" className="w-8 h-8 shrink-0 rounded-full bg-[var(--vg-avatar)] flex items-center justify-center text-[12px] font-semibold">

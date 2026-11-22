@@ -6,6 +6,7 @@ import {
     responseToTurn,
     historyToTurns,
     errorTurn,
+    providerErrorFields,
     blockedBodyFromError,
     questionOf,
     answerableClarificationId,
@@ -115,6 +116,107 @@ describe('failed request → turn', () => {
     it('a network failure uses the transport message', () => {
         expect(errorTurn({ message: 'Network Error' }, at).content).toBe('Network Error');
         expect(errorTurn({}, at).content).toBe('Failed to process your query. Please try again.');
+    });
+});
+
+describe('provider (Groq) failures → error turn', () => {
+    it('managed_allowance_exhausted: title, reset time, "Use your own Groq key", and Retry stays', () => {
+        const err = httpError(429, fixture('allowance-exhausted-429'));
+        const turn = errorTurn(err, { ...at, question: 'q' });
+        expect(turn).toMatchObject({
+            kind: 'error',
+            errorCode: 'managed_allowance_exhausted',
+            payer: 'managed',
+            title: 'AtlasMind allowance used up',
+            content: fixture('allowance-exhausted-429').error.message,
+            resetAt: '2026-11-14T00:00:00.000Z',
+            actions: ['enterKey'],
+            naturalLanguage: 'q',
+        });
+    });
+
+    it('provider_key_invalid: update or switch for a personal key, operator text only for the managed key', () => {
+        const personal = errorTurn(httpError(422, fixture('provider-key-invalid-422')), { ...at, question: 'q' });
+        expect(personal).toMatchObject({ errorCode: 'provider_key_invalid', payer: 'personal', actions: ['updateKey', 'useManaged'] });
+
+        const managedBody = { success: false, error: { code: 'provider_key_invalid', message: 'The AtlasMind Groq key was rejected. Please contact the operator.', payer: 'managed' } };
+        const managed = errorTurn(httpError(422, managedBody), { ...at, question: 'q' });
+        expect(managed).toMatchObject({ payer: 'managed', content: managedBody.error.message });
+        expect(managed.actions).toBeUndefined();
+    });
+
+    it('provider_rate_limited: Retry waits until retryAfterSeconds from the turn time', () => {
+        const turn = errorTurn(httpError(429, fixture('provider-rate-limited-429')), { ...at, question: 'q' });
+        expect(turn).toMatchObject({ errorCode: 'provider_rate_limited', retryAt: NOW + 12_000 });
+        expect(turn.actions).toBeUndefined();
+    });
+
+    it('settings_changed: offers Resend', () => {
+        const turn = errorTurn(httpError(409, fixture('settings-changed-409')), { ...at, question: 'q' });
+        expect(turn).toMatchObject({ errorCode: 'settings_changed', retryLabel: 'Resend', title: 'Groq settings changed' });
+    });
+
+    it.each(['provider_model_unavailable', 'provider_unavailable', 'managed_accounting_unavailable', 'reconnect_required', 'origin_not_allowed'])(
+        '%s: a plain message with a title and no actions',
+        (code) => {
+            const turn = errorTurn(httpError(503, { success: false, error: { code, message: 'Server text' } }), { ...at, question: 'q' });
+            expect(turn).toMatchObject({ errorCode: code, content: 'Server text' });
+            expect(turn.title).toEqual(expect.any(String));
+            expect(turn.actions).toBeUndefined();
+        }
+    );
+
+    it('a provider code without a message uses the fallback, not the transport text', () => {
+        const fields = providerErrorFields(httpError(429, { success: false, error: { code: 'managed_allowance_exhausted' } }));
+        expect(fields.content).toMatch(/AtlasMind allowance for today is used up/);
+    });
+
+    it('other errors get no provider fields (too_many_requests stays as it was)', () => {
+        expect(providerErrorFields(httpError(429, { success: false, error: { code: 'too_many_requests', message: 'Slow down' } }))).toEqual({});
+        expect(providerErrorFields({ message: 'Network Error' })).toEqual({});
+        expect(providerErrorFields(httpError(400, { success: false, error: { code: 'toString', message: 'x' } }))).toEqual({});
+    });
+
+    it('voice: the allowance turn keeps its actions but has no Retry question', () => {
+        const state = run([
+            { type: 'asked', source: 'voice' },
+            { type: 'failed', error: httpError(429, fixture('allowance-exhausted-429')), source: 'voice', ids: { user: 'u1', assistant: 'a1' }, now: NOW },
+        ]);
+        expect(state.turns[0]).toMatchObject({ kind: 'error', isVoice: true, actions: ['enterKey'] });
+        expect(state.turns[0].naturalLanguage).toBeUndefined();
+    });
+});
+
+describe('error turn actions and voice resend', () => {
+    it('actionsResolved marks only that error turn', () => {
+        const state = run([
+            ask('q', 1),
+            { type: 'failed', error: httpError(429, fixture('allowance-exhausted-429')), source: 'text', question: 'q', ids: { assistant: 'a1' }, now: NOW },
+            { type: 'actionsResolved', turnId: 'a1' },
+            { type: 'actionsResolved', turnId: 'u1' },
+        ]);
+        expect(state.turns[1]).toMatchObject({ kind: 'error', actionsResolved: true, actions: ['enterKey'], naturalLanguage: 'q' });
+        expect(state.turns[0].actionsResolved).toBeUndefined();
+    });
+
+    it('actionsResolved for an unknown turn leaves the turns as they were', () => {
+        const before = run([ask('q', 1)]);
+        const after = conversationReducer(before, { type: 'actionsResolved', turnId: 'nope' });
+        expect(after.turns).toEqual(before.turns);
+    });
+
+    it('a voice settings_changed offers Resend of the recording', () => {
+        const state = run([
+            { type: 'asked', source: 'voice' },
+            { type: 'failed', error: httpError(409, fixture('settings-changed-409')), source: 'voice', ids: { user: 'u1', assistant: 'a1' }, now: NOW },
+        ]);
+        expect(state.turns[0]).toMatchObject({ kind: 'error', isVoice: true, resendAudio: true, retryLabel: 'Resend' });
+        expect(state.turns[0].naturalLanguage).toBeUndefined();
+    });
+
+    it('other voice failures get no resendAudio', () => {
+        const turn = errorTurn(httpError(429, fixture('allowance-exhausted-429')), { ...at, source: 'voice' });
+        expect(turn.resendAudio).toBeUndefined();
     });
 });
 

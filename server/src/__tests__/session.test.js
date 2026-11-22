@@ -11,6 +11,7 @@ const {
     SessionError,
     issueSession,
     readSession,
+    readSessionClaims,
     signApprovalToken,
     verifyApprovalToken,
 } = require('../auth/session');
@@ -28,7 +29,11 @@ function appWithSession() {
         issueSession(res, req.params.id);
         res.json({ ok: true });
     });
-    app.get('/whoami', requireAuth, (req, res) => res.json({ connectionId: req.connectionId }));
+    app.get('/whoami', requireAuth, (req, res) => res.json({
+        connectionId: req.connectionId,
+        sessionId: req.sessionId,
+        expiresAt: req.sessionExpiresAt,
+    }));
     return app;
 }
 
@@ -78,6 +83,39 @@ describe('session cookie', () => {
         process.env.JWT_SECRET = 'rotated-secret-value-for-this-test-123';
         const token = jwt.sign({ connectionId: 'c' }, 'rotated-secret-value-for-this-test-123');
         expect(readSession({ cookies: { [COOKIE_NAME]: token } })).toBe('c');
+    });
+});
+
+describe('session id (sid)', () => {
+    const cookieOf = (login) => login.headers['set-cookie'][0].split(';')[0];
+
+    test('new cookies carry a random sid that requireAuth exposes', async () => {
+        const app = appWithSession();
+        const a = cookieOf(await request(app).post('/login/shared-conn'));
+        const b = cookieOf(await request(app).post('/login/shared-conn'));
+
+        const meA = await request(app).get('/whoami').set('Cookie', a);
+        const meB = await request(app).get('/whoami').set('Cookie', b);
+        expect(meA.body.sessionId).toMatch(/^[0-9a-f-]{36}$/);
+        expect(meA.body.sessionId).not.toBe(meB.body.sessionId);
+        expect(meA.body.connectionId).toBe(meB.body.connectionId);
+        expect(new Date(meA.body.expiresAt).getTime()).toBeGreaterThan(Date.now() + 6 * 24 * 3600 * 1000);
+    });
+
+    test('old cookies without sid still authenticate, with sessionId null', async () => {
+        const token = jwt.sign({ connectionId: 'old' }, process.env.JWT_SECRET, { expiresIn: '7d' });
+        const me = await request(appWithSession()).get('/whoami').set('Cookie', `${COOKIE_NAME}=${token}`);
+        expect(me.status).toBe(200);
+        expect(me.body).toMatchObject({ connectionId: 'old', sessionId: null });
+    });
+
+    test('readSession still returns the connectionId string; readSessionClaims returns all claims', () => {
+        const token = jwt.sign({ connectionId: 'c', sid: 's-1' }, process.env.JWT_SECRET, { expiresIn: '7d' });
+        const req = { cookies: { [COOKIE_NAME]: token } };
+        expect(readSession(req)).toBe('c');
+        const claims = readSessionClaims(req);
+        expect(claims).toMatchObject({ connectionId: 'c', sid: 's-1' });
+        expect(claims.expiresAt).toBeInstanceOf(Date);
     });
 });
 

@@ -4,9 +4,12 @@ const express = require('express');
 const request = require('supertest');
 
 // Mock groqService transcribeAudio and generateMQL
+const mockProvider = { payer: 'managed', client: {}, allowedModels: ['openai/gpt-oss-120b'], defaultModel: 'openai/gpt-oss-120b' };
+const mockResolveProvider = jest.fn(async () => mockProvider);
 jest.mock('../services/groqService', () => ({
     transcribeAudio: jest.fn(),
     generateMQL: jest.fn(),
+    resolveProvider: (...args) => mockResolveProvider(...args),
 }));
 
 // Mock QueryExecutionEngine
@@ -458,6 +461,133 @@ describe('security headers (full app)', () => {
         expect(res.status).toBe(200);
         expect(res.headers['x-content-type-options']).toBe('nosniff');
         expect(res.headers['x-powered-by']).toBeUndefined();
+    });
+});
+
+describe('payer checks before any Groq call', () => {
+    const { ProviderError } = jest.requireActual('../services/engineErrors');
+    let app;
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        app = express();
+        app.use(express.json());
+        app.use((req, _res, next) => {
+            req.connectionId = 'payer-conn';
+            req.sessionId = 'sid-1';
+            next();
+        });
+        app.use('/api/query', queryRouter);
+        app.use('/api/voice', voiceRouter);
+    });
+
+    const settingsChanged = () => new ProviderError('settings_changed', 'Your Groq settings changed in another tab.', 409, { payer: 'managed' });
+
+    test('POST /api/query passes sessionId and expectedPayer, and the provider to the engine', async () => {
+        mockExecuteNaturalLanguageQuery.mockResolvedValueOnce({ type: 'success', data: { success: true } });
+        await request(app).post('/api/query').send({ text: 'q', expectedPayer: 'managed' });
+        expect(mockResolveProvider).toHaveBeenCalledWith({ connectionId: 'payer-conn', sessionId: 'sid-1', expectedPayer: 'managed' });
+        expect(mockExecuteNaturalLanguageQuery.mock.calls[0][0].provider).toBe(mockProvider);
+    });
+
+    test('settings_changed on POST /api/query answers 409 without running the engine', async () => {
+        mockResolveProvider.mockRejectedValueOnce(settingsChanged());
+        const res = await request(app).post('/api/query').send({ text: 'q', expectedPayer: 'personal' });
+        expect(res.status).toBe(409);
+        expect(res.body.error).toMatchObject({ code: 'settings_changed', payer: 'managed' });
+        expect(mockExecuteNaturalLanguageQuery).not.toHaveBeenCalled();
+    });
+
+    test('settings_changed on POST /api/voice makes no Whisper call', async () => {
+        mockResolveProvider.mockRejectedValueOnce(settingsChanged());
+        const res = await request(app)
+            .post('/api/voice')
+            .field('expectedPayer', 'personal')
+            .attach('audio', Buffer.from('fake audio data'), 'speech.webm');
+        expect(res.status).toBe(409);
+        expect(res.body.error.code).toBe('settings_changed');
+        expect(mockResolveProvider.mock.calls[0][0].expectedPayer).toBe('personal');
+        expect(transcribeAudio).not.toHaveBeenCalled();
+        expect(mockExecuteNaturalLanguageQuery).not.toHaveBeenCalled();
+    });
+
+    test('voice uses one provider for Whisper and the text stage', async () => {
+        transcribeAudio.mockResolvedValueOnce({ text: 'show orders', language: 'en', duration: 2 });
+        mockExecuteNaturalLanguageQuery.mockResolvedValueOnce({ type: 'success', data: { success: true } });
+        await request(app).post('/api/voice').attach('audio', Buffer.from('fake audio data'), 'speech.webm');
+        expect(transcribeAudio.mock.calls[0][2]).toBe(mockProvider);
+        expect(mockExecuteNaturalLanguageQuery.mock.calls[0][0].provider).toBe(mockProvider);
+    });
+});
+
+describe('the same provider error body over JSON, voice and the stream', () => {
+    const { ProviderError } = jest.requireActual('../services/engineErrors');
+    const { errorResult } = jest.requireActual('../routes/engineHttp');
+    let app;
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        app = express();
+        app.use(express.json());
+        app.use((req, _res, next) => { req.connectionId = 'payer-conn'; req.sessionId = 'sid-1'; next(); });
+        app.use('/api/query', queryRouter);
+        app.use('/api/voice', voiceRouter);
+    });
+
+    const exhausted = () => new ProviderError('managed_allowance_exhausted', 'The AtlasMind allowance for today is used up.', 429,
+        { payer: 'managed', resetAt: '2026-11-23T00:00:00.000Z' });
+    const rateLimited = () => new ProviderError('provider_rate_limited', 'Your Groq key hit its rate limit.', 429,
+        { payer: 'personal', retryAfterSeconds: 42 });
+
+    test.each([
+        ['managed_allowance_exhausted', exhausted, { resetAt: '2026-11-23T00:00:00.000Z', payer: 'managed' }],
+        ['provider_rate_limited', rateLimited, { retryAfterSeconds: 42, payer: 'personal' }],
+    ])('%s: POST /api/query and POST /api/voice answer 429 with the same body', async (code, make, extra) => {
+        const expected = { success: false, error: { code, message: make().message, ...extra } };
+
+        mockExecuteNaturalLanguageQuery.mockRejectedValueOnce(make());
+        const json = await request(app).post('/api/query').send({ text: 'q' });
+        expect(json.status).toBe(429);
+        expect(json.body).toEqual(expected);
+
+        transcribeAudio.mockRejectedValueOnce(make());
+        const voice = await request(app).post('/api/voice').attach('audio', Buffer.from('fake audio data'), 'speech.webm');
+        expect(voice.status).toBe(429);
+        expect(voice.body).toEqual(expected);
+
+        expect(errorResult(make(), 'query_error', 'x')).toEqual({ status: 429, body: expected });
+    });
+
+    test('voice over 5 MB on the managed allowance is refused before any Groq call', async () => {
+        const res = await request(app)
+            .post('/api/voice')
+            .attach('audio', Buffer.alloc(5 * 1024 * 1024 + 1), 'speech.webm');
+        expect(res.status).toBe(400);
+        expect(res.body.error).toEqual({ code: 'upload_error', message: 'Recordings over 5 MB need your own Groq key.' });
+        expect(transcribeAudio).not.toHaveBeenCalled();
+        expect(mockExecuteNaturalLanguageQuery).not.toHaveBeenCalled();
+    });
+
+    test('a personal key may upload more than 5 MB', async () => {
+        const personalProvider = { ...mockProvider, payer: 'personal' };
+        mockResolveProvider.mockResolvedValueOnce(personalProvider);
+        transcribeAudio.mockResolvedValueOnce({ text: 'show orders', language: 'en', duration: 2 });
+        mockExecuteNaturalLanguageQuery.mockResolvedValueOnce({ type: 'success', data: { success: true } });
+        const res = await request(app)
+            .post('/api/voice')
+            .attach('audio', Buffer.alloc(5 * 1024 * 1024 + 1), 'speech.webm');
+        expect(res.status).toBe(200);
+        expect(transcribeAudio.mock.calls[0][2]).toBe(personalProvider);
+    });
+});
+
+describe('origin check (full app)', () => {
+    const app = require('../index');
+
+    test('a foreign Origin gets 403 on a state-changing request', async () => {
+        const res = await request(app).post('/api/query').set('Origin', 'https://evil.example').send({ text: 'q' });
+        expect(res.status).toBe(403);
+        expect(res.body.error.code).toBe('origin_not_allowed');
     });
 });
 

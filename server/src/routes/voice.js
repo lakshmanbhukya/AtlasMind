@@ -1,12 +1,15 @@
 // @ts-check
 const express = require('express');
 const multer = require('multer');
-const { transcribeAudio } = require('../services/groqService');
+const { transcribeAudio, resolveProvider } = require('../services/groqService');
 const { QueryExecutionEngine } = require('../services/queryExecutionEngine');
-const { sendOutcome, sendError } = require('./engineHttp');
+const { sendOutcome, sendError, logPipelineError } = require('./engineHttp');
 const { forRequest } = require('../utils/logger');
 
 const router = express.Router();
+
+/** Largest upload the managed allowance accepts; personal keys keep multer's 25 MB limit. */
+const MANAGED_MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 
 // Note: requireAuth middleware is applied at index.js level.
 // req.connectionId is guaranteed to be set here.
@@ -79,10 +82,25 @@ router.post('/', upload.single('audio'), async (req, res) => {
         }
         const { collections } = parsed;
 
-        forRequest(req).info({ sizeBytes: size }, 'Transcribing audio');
+        // One payer for both Whisper and the text stage; 409 settings_changed before any Groq call.
+        const provider = await resolveProvider({
+            connectionId,
+            sessionId: req.sessionId,
+            expectedPayer: req.body?.expectedPayer,
+        });
+
+        // The managed allowance budgets 60 s of audio per call; longer uploads need a personal key.
+        if (provider.payer === 'managed' && size > MANAGED_MAX_UPLOAD_BYTES) {
+            return res.status(400).json({
+                success: false,
+                error: { code: 'upload_error', message: 'Recordings over 5 MB need your own Groq key.' },
+            });
+        }
+
+        forRequest(req).info({ sizeBytes: size, payer: provider.payer }, 'Transcribing audio');
 
         // Step 1: Transcribe audio → text
-        const transcription = await transcribeAudio(buffer, originalname);
+        const transcription = await transcribeAudio(buffer, originalname, provider);
         const queryText = transcription.text?.trim();
 
         if (!queryText) {
@@ -104,6 +122,7 @@ router.post('/', upload.single('audio'), async (req, res) => {
             collections,
             workspaceId,
             source: 'voice',
+            provider,
         });
 
         // Step 3: Attach voice transcription metadata for client compatibility
@@ -126,7 +145,7 @@ router.post('/', upload.single('audio'), async (req, res) => {
 
         return sendOutcome(res, outcome, voiceData);
     } catch (error) {
-        forRequest(req).error({ err: error }, 'Voice pipeline error');
+        logPipelineError(forRequest(req), error, 'Voice pipeline error');
         if (error instanceof multer.MulterError) {
             return res.status(400).json({
                 success: false,

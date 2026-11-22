@@ -28,6 +28,7 @@ export default function ChatThread({
   onQuerySuccess,
   onPinAdded,
   scope,
+  onRequestKeyEntry,
 }) {
   const {
     messages,
@@ -35,12 +36,16 @@ export default function ChatThread({
     pendingStage,
     selectedModel,
     setSelectedModel,
+    models,
+    provider,
     sendMessage,
     sendVoiceMessage,
+    canResendVoice,
+    resendVoice,
+    resolveTurnActions,
     approveWrite,
     discardApproval,
-  } = useChat(highlightedMessageId, onQuerySuccess);
-  const { isRecording, startRecording, stopRecording, cancelRecording, error: voiceError } = useVoice();
+  } = useChat(highlightedMessageId, onQuerySuccess, connectionMeta?.connectionId);
   const [draft, setDraft] = useState(null);
   const endRef = useRef(null);
 
@@ -82,6 +87,43 @@ export default function ChatThread({
 
   const ask = useCallback((text) => sendMessage(text, buildScopeOptions()), [sendMessage, buildScopeOptions]);
 
+  // A recording that reaches the 60 s limit is sent as if Send was pressed.
+  const sendRecording = useCallback(
+    (blob) => sendVoiceMessage(blob, buildScopeOptions()),
+    [sendVoiceMessage, buildScopeOptions]
+  );
+  const { isRecording, startRecording, stopRecording, cancelRecording, error: voiceError } = useVoice({ onLimit: sendRecording });
+
+  // Error turn actions for Groq provider failures; Retry (or Resend) re-asks afterwards.
+  // A carried-out action hides that turn's actions; a cancelled key form leaves them.
+  const { setMode: setProviderMode, refresh: refreshProvider } = provider;
+  const currentPayer = provider.settings?.mode;
+  const handleProviderAction = useCallback(
+    async (action, turnId) => {
+      if (action === 'enterKey' || action === 'updateKey') {
+        onRequestKeyEntry?.({ onSaved: () => resolveTurnActions(turnId) });
+      } else if (action === 'useManaged') {
+        try {
+          await setProviderMode('managed');
+          resolveTurnActions(turnId);
+        } catch (err) {
+          if (import.meta.env.DEV) console.warn('Could not switch to the AtlasMind allowance:', err?.message);
+          refreshProvider();
+        }
+      }
+    },
+    [onRequestKeyEntry, setProviderMode, refreshProvider, resolveTurnActions]
+  );
+
+  // Retry re-asks a text question; Resend sends a kept recording again (hidden once it is gone).
+  const retryFor = (msg) => {
+    if (msg.naturalLanguage) {
+      return () => sendMessage(msg.naturalLanguage, { ...buildScopeOptions(), ...(msg.retryOptions || {}), skipUserMessage: true });
+    }
+    if (msg.resendAudio && canResendVoice(msg.id)) return () => resendVoice(msg.id);
+    return undefined;
+  };
+
   const handleClarify = (msg) => (clarifications) =>
     sendMessage(questionOf(msg), { ...buildScopeOptions(), clarifications, skipUserMessage: true });
   const handleBypass = (msg) => () =>
@@ -107,7 +149,7 @@ export default function ChatThread({
   const voiceSend = async () => {
     const blob = await stopRecording();
     if (!blob) return;
-    await sendVoiceMessage(blob, buildScopeOptions());
+    await sendRecording(blob);
   };
 
   // The newest clarification is the only one still answerable.
@@ -136,7 +178,7 @@ export default function ChatThread({
         onSend: voiceSend,
       }}
       scope={scope}
-      model={{ value: selectedModel, onChange: setSelectedModel }}
+      model={{ value: selectedModel, onChange: setSelectedModel, options: models }}
     />
   );
 
@@ -183,7 +225,9 @@ export default function ChatThread({
           <ErrorTurn
             message={msg}
             disabled={busy}
-            onRetry={msg.naturalLanguage ? () => sendMessage(msg.naturalLanguage, { ...buildScopeOptions(), ...(msg.retryOptions || {}), skipUserMessage: true }) : undefined}
+            currentPayer={currentPayer}
+            onAction={(action) => handleProviderAction(action, msg.id)}
+            onRetry={retryFor(msg)}
           />
         );
       default:

@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { getSession, logout as apiLogout } from '../services/api';
+import { PROVIDER_SETTINGS_KEY } from './useProviderSettings';
 
 /**
  * useAuth — manages sessionstate via the httpOnly JWT cookie.
@@ -10,11 +12,19 @@ import { getSession, logout as apiLogout } from '../services/api';
  * - isLoading: true during the initial auth check
  * - logout(): POSTs to /api/auth/logout, clears state
  * - refetch(): re-runs the auth check (call after successful connect)
+ *
+ * Logout and reconnect drop the cached provider settings: a personal Groq key
+ * belongs to one sign-in, so the next one must not show (or send) its mode.
  */
 export function useAuth() {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [connectionMeta, setConnectionMeta] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
+    const queryClient = useQueryClient();
+    const clearProviderSettings = useCallback(
+        () => queryClient.removeQueries({ queryKey: [PROVIDER_SETTINGS_KEY] }),
+        [queryClient]
+    );
 
     const checkSession = useCallback(async () => {
         setIsLoading(true);
@@ -51,15 +61,21 @@ export function useAuth() {
         } catch {
             // Ignore logout errors — clear state regardless
         }
+        clearProviderSettings();
         setIsAuthenticated(false);
         setConnectionMeta(null);
-    }, []);
+    }, [clearProviderSettings]);
+
+    const refetch = useCallback(() => {
+        clearProviderSettings();
+        return checkSession();
+    }, [clearProviderSettings, checkSession]);
 
     return {
         isAuthenticated,
         connectionMeta,
         isLoading,
         logout,
-        refetch: checkSession,
+        refetch,
     };
 }

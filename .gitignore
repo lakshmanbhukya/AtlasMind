@@ -11,3 +11,8 @@ docs/AMBIGUITY_RESEARCH_EVALUATION.md
 
 # Installed agent skills lock
 skills-lock.json
+
+# Internal planning and agent notes (kept locally, never published)
+groq-byok-plan.md
+groq-byok-prepr-plan.md
+AGENTS.md

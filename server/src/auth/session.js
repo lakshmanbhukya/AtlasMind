@@ -8,7 +8,8 @@ const jwt = require('jsonwebtoken');
  * Session: everything about AtlasMind's two kinds of signed token.
  *
  * - Session cookie (`am_token`, 7 days): proves which connected DB a browser
- *   is using. There are no user accounts; a session is a connectionId.
+ *   is using. There are no user accounts; a session is a connectionId plus a
+ *   per-sign-in `sid` (personal provider keys are scoped to the sid).
  * - Write Approval Token (10 minutes, single use via its jti): carries a
  *   staged write pipeline for human-in-the-loop approval.
  *
@@ -48,9 +49,13 @@ function cookieOptions() {
     };
 }
 
-/** Sign a session for a connectionId and set it as the session cookie. */
+/**
+ * Sign a session for a connectionId and set it as the session cookie.
+ * Each sign-in gets its own random `sid`, so two people who connect the same
+ * database (and so share a connectionId) still have separate sessions.
+ */
 function issueSession(res, connectionId) {
-    const token = jwt.sign({ connectionId }, secret(), { expiresIn: SESSION_TTL });
+    const token = jwt.sign({ connectionId, sid: crypto.randomUUID() }, secret(), { expiresIn: SESSION_TTL });
     res.cookie(COOKIE_NAME, token, { ...cookieOptions(), maxAge: SESSION_MAX_AGE_MS });
     return token;
 }
@@ -66,14 +71,34 @@ function clearSession(res) {
  * @throws {SessionError} 'unauthenticated' (no cookie) or 'session_expired' (invalid/expired)
  */
 function readSession(req) {
+    return readSessionClaims(req).connectionId;
+}
+
+/**
+ * @typedef {object} SessionClaims
+ * @property {string} connectionId
+ * @property {string|null} sid - null for cookies issued before sessions carried one
+ * @property {Date} expiresAt - the JWT `exp`
+ */
+
+/**
+ * Read and verify the session cookie, returning all of its claims.
+ * @returns {SessionClaims}
+ * @throws {SessionError} 'unauthenticated' (no cookie) or 'session_expired' (invalid/expired)
+ */
+function readSessionClaims(req) {
     const token = req.cookies && req.cookies[COOKIE_NAME];
     if (!token) {
         throw new SessionError('unauthenticated', 'No session found. Please connect your database.');
     }
     try {
-        const payload = /** @type {{ connectionId?: unknown }} */ (jwt.verify(token, secret()));
+        const payload = /** @type {{ connectionId?: unknown, sid?: unknown, exp?: unknown }} */ (jwt.verify(token, secret()));
         if (!payload || typeof payload.connectionId !== 'string') throw new Error('malformed session');
-        return payload.connectionId;
+        const sid = typeof payload.sid === 'string' && payload.sid.length > 0 ? payload.sid : null;
+        const expiresAt = typeof payload.exp === 'number'
+            ? new Date(payload.exp * 1000)
+            : new Date(Date.now() + SESSION_MAX_AGE_MS);
+        return { connectionId: payload.connectionId, sid, expiresAt };
     } catch {
         throw new SessionError('session_expired', 'Session expired. Please reconnect.');
     }
@@ -110,6 +135,7 @@ module.exports = {
     issueSession,
     clearSession,
     readSession,
+    readSessionClaims,
     signApprovalToken,
     verifyApprovalToken,
 };

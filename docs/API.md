@@ -4,6 +4,8 @@ AtlasMind exposes a cookie-authenticated REST API for database connection manage
 
 **Base Path**: `/api`
 
+**Origin check**: a non-GET request to `/api/*` that carries an `Origin` header must come from an allowed origin (`CORS_ALLOWED_ORIGINS`, plus `http://localhost:5173` and `http://127.0.0.1:5173` outside production), otherwise 403 `origin_not_allowed`. Requests without an `Origin` header (curl, server-to-server) are not affected. Production cookies are `SameSite=None`, so this is what stops another site from spending a session's Groq budget.
+
 **Request IDs**: every response carries an `X-Request-Id` header (exposed to the browser through CORS). Send your own `x-request-id` (1 to 64 letters, digits, `_` or `-`) to have it reused; anything else is replaced with a random UUID. Server log lines for the request carry the same ID.
 
 ---
@@ -83,7 +85,7 @@ Validates the current session cookie and returns active connection metadata.
 ```
 
 ### POST `/api/auth/logout`
-Clears the `am_token` session cookie.
+Clears the `am_token` session cookie. When the cookie still verifies, the sign-in's personal Groq key (section 11) is revoked as well. A missing or expired cookie still returns 200.
 
 **Success Response (HTTP 200)**:
 ```json
@@ -128,6 +130,8 @@ The primary query execution endpoint. Implements dual-pass ambiguity detection, 
   "workspaceId": "66f4..."
 }
 ```
+
+**Who pays** (`expectedPayer`, optional): `"managed"` or `"personal"`, the payer the client showed when the question was sent (section 11). If it no longer matches this sign-in's stored mode (it was changed in another tab), the server answers 409 `settings_changed` before any Groq call. Without the field the stored mode is used. Managed requests for a model outside `MANAGED_MODELS` run on the managed default model.
 
 **Scope resolution** (Effective Scope): a non-empty `collections` array wins (unknown names are rejected, or dropped when `dropMissing` or a `workspaceId` is set). Otherwise `workspaceId` restricts the query to that workspace's collections; collections that no longer exist are dropped. With neither, every user collection is in scope. An unknown workspace (`workspace_not_found`) or one with no remaining collections (`workspace_empty`) is an error, never a widening to all collections.
 
@@ -300,7 +304,8 @@ data: {"status":200,"body":{"success":true,"aiMessage":"...","pipeline":[...]}}
 - `progress` events report the stage the engine has reached: `scope`, `schema`, `ambiguity`, `generating`, `safety`, `executing`, in that order. A query that stops early (a clarification, a safety block) sends only the stages it reached. Progress is stage-level only; there is no token streaming.
 - Exactly one `result` event ends the stream. Once the stream has started the HTTP status is always 200, so `result.status` carries the status `POST /api/query` would have returned, and `result.body` is that response's envelope: 200 for an answer, clarification, approval or scope-expansion response, 422 with `safetyBlock` for a safety block, and the engine error's status and `{ success: false, error: { code, message } }` otherwise.
 - A `: ping` comment is sent every 15 seconds while the stream is open. Clients ignore comment lines.
-- Errors raised before the stream starts (401 from `requireAuth`, 429 from the rate limiter) are ordinary JSON responses, not event streams. Check `Content-Type` before parsing.
+- Errors raised before the stream starts (401 from `requireAuth`, 429 from the rate limiter, 403 `origin_not_allowed`) are ordinary JSON responses, not event streams. Check `Content-Type` before parsing.
+- A provider error (`settings_changed`, `managed_allowance_exhausted`, `provider_rate_limited`, …; section 10) has the same body whether it arrives as plain JSON, inside the `result` event, or from `POST /api/voice`.
 - If the client disconnects, the server stops writing; the query itself still runs to completion.
 
 ---
@@ -434,6 +439,9 @@ Accepts `multipart/form-data` audio recordings and performs Whisper Large v3 Tur
 - `clarifications` (optional): JSON string of validated clarification answers.
 - `collections` (optional): JSON array string of scoped collection names, e.g. `["orders"]`. Anything that is not a JSON array returns 400 `validation_error`.
 - `workspaceId` (optional): Saved workspace to scope the query to (same rules as `/api/query`).
+- `expectedPayer` (optional): `managed` or `personal`, as on `/api/query`. One payer covers both the transcription and the query.
+
+**Size limits**: uploads are capped at 25 MB. On the AtlasMind allowance (managed key) a recording over 5 MB is refused with 400 `upload_error` ("Recordings over 5 MB need your own Groq key.") before any Groq call. The client stops recording at 60 seconds.
 
 **Ambiguity Response**:
 If the transcribed speech is ambiguous, returns `{ success: true, needsClarification: true, transcript: "...", questions: [...] }`.
@@ -573,12 +581,86 @@ Common Error Codes:
 - `expired_token` (401), `forbidden` (403), `token_already_used` (409): Write approval failures (see section 4).
 - `safety_violation` (422): Unsafe stage or operator (`$function`, `$where`, system collection, restricted stage). On `POST /api/query` and `/api/voice` the body also carries `safetyBlock` (see section 3, E2). An approvable write (a single final `$out`/`$merge`) is not a 422 there: it returns the approval response (E).
 - `scope_violation` (422): Dashboard pin/refresh only. The stored pipeline references a collection outside its scope. `POST /api/query` never returns this code: an out-of-scope collection is the HTTP 200 scope-expansion response (`safetyStatus: "scope-insufficient"`, section 3, D).
-- `rate_limited` (429): The upstream LLM is rate limited; retry shortly.
+- `rate_limited` (429): The upstream LLM is rate limited; retry shortly. Only reachable without a provider (in-process evaluation code); HTTP routes report `provider_rate_limited`.
+- `too_many_requests` (429): AtlasMind's own request limiters (`llmLimiter`, the auth limiter, and 10 Groq key checks per hour per sign-in).
 - `execution_error` / `query_error` / `voice_pipeline_error` (500): Unexpected failure while running the query.
+- `upload_error` (400): Voice upload rejected (over 25 MB, or over 5 MB on the AtlasMind allowance).
+- `origin_not_allowed` (403): A non-GET request from an origin that is not allowed (see the top of this document).
+- `invalid_json` (400): The request body is not valid JSON. Nothing from the body is logged or echoed back.
+
+**Provider (Groq) errors.** These carry `payer` (`"managed"` for the AtlasMind allowance, `"personal"` for the user's own key) and, when known, `retryAfterSeconds` or `resetAt`:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "managed_allowance_exhausted",
+    "message": "The AtlasMind allowance for today is used up. Use your own Groq key, or try again after the reset.",
+    "payer": "managed",
+    "resetAt": "2026-11-23T00:00:00.000Z"
+  }
+}
+```
+
+| Code | Status | Meaning |
+| --- | --- | --- |
+| `settings_changed` | 409 | `expectedPayer` does not match the stored mode. Refetch `GET /api/provider-settings` and resend. No Groq call was made. |
+| `provider_key_invalid` | 422 | Groq rejected the key. With `payer: "personal"`, update the key or switch to the allowance. With `payer: "managed"`, the operator's `GROQ_API_KEY` is wrong. Never retried and never falls back to another key. |
+| `provider_model_unavailable` | 422 | The model is not available for this key. Pick another model. |
+| `managed_allowance_exhausted` | 429 | Today's AtlasMind allowance (per connection or for the whole installation) is used up. `resetAt` is the next UTC midnight. |
+| `provider_rate_limited` | 429 | Groq rate-limited the key. `retryAfterSeconds` is included when Groq sent `retry-after`. |
+| `provider_unavailable` | 502 / 503 | Groq could not be reached or returned a 5xx (502), or the server has no `GROQ_API_KEY` for managed traffic (503). |
+| `managed_accounting_unavailable` | 503 | The allowance ledger could not be read in `enforce` mode. Personal-key requests still work. |
+| `reconnect_required` | 409 | A session from before personal keys existed tried to use one. Connect again. |
+| `session_revoked` | 401 | A key was saved after the sign-in was logged out. |
+| `provider_key_missing` | 400 | `PATCH /api/provider-settings` to `personal` without a stored key. |
+
+A provider error never signs the user out.
 
 Upstream SDK or driver status codes are never forwarded: anything that is not one of the codes above is reported as a 500.
 
 `POST /api/query` does not accept evaluation switches (`evalOptions`); they are only available to in-process evaluation code through an `ExperimentConfig`.
+
+---
+
+## 11. Groq Provider Settings (who pays)
+
+*(Protected; responses carry `Cache-Control: no-store`.)*
+
+Every connection starts on the **AtlasMind allowance**: the server's own `GROQ_API_KEY`, with a daily token and voice budget per connection and for the whole installation (see `docs/DEPLOYMENT.md`). A user can store **their own Groq key** for the current sign-in instead. The key is encrypted on the server, lasts as long as the session cookie (7 days), and is revoked on logout. It is never returned, logged or included in an error.
+
+### GET `/api/provider-settings`
+
+```json
+{
+  "success": true,
+  "mode": "managed",
+  "hasKey": false,
+  "keyLast4": null,
+  "keyExpiresAt": null,
+  "managedAllowance": {
+    "tokensRemaining": 18400,
+    "audioSecondsRemaining": 540,
+    "resetAt": "2026-11-23T00:00:00.000Z",
+    "mode": "enforce"
+  },
+  "allowedModels": ["openai/gpt-oss-120b", "openai/gpt-oss-20b"]
+}
+```
+
+- `mode`: `managed` (AtlasMind allowance) or `personal` (own key). `keyLast4` and `keyExpiresAt` describe a stored key.
+- `managedAllowance` is shown in both modes. Each remainder is the smaller of the connection's and the installation's. Both are `null` when the ledger cannot be read, or when `mode` is `off` (no metering).
+- `allowedModels`: the models the client offers. In managed mode this is `MANAGED_MODELS`, and the server enforces it (any other model runs on the managed default). In personal mode it is every client model, but the server does not enforce it: a request paid by the user's own key may name any Groq model ID, and if Groq rejects that model the request falls back once to the default model.
+- `requiresReconnectForPersonal: true`: the session cookie predates personal keys. It keeps managed access; connect again to store a key.
+
+### PUT `/api/provider-settings/key`
+Body: `{ "apiKey": "gsk_..." }`. Checks the key with Groq's model list (no tokens used, no user data sent), stores it and switches to `personal`. Returns the new settings. An invalid key returns 422 `provider_key_invalid` and leaves the previous settings unchanged; a malformed one returns 400 `validation_error`. Limited to 10 checks per hour per sign-in (`too_many_requests`).
+
+### PATCH `/api/provider-settings`
+Body: `{ "mode": "managed" | "personal" }`. `personal` needs a stored key (`provider_key_missing`). Returns the new settings.
+
+### DELETE `/api/provider-settings/key`
+Removes the key and switches to `managed` in one update. Returns the new settings.
 
 ---
 

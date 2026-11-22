@@ -24,6 +24,32 @@ Set environment variables:
 - ENCRYPTION_KEY=64_hex_chars
 - Optional: `LOG_LEVEL` (`fatal`, `error`, `warn`, `info`, `debug`, `trace` or `silent`; default `info`)
 
+### Groq allowance (managed key)
+
+`GROQ_API_KEY` pays for every connection that has not stored its own Groq key (the "AtlasMind allowance"). A free Groq key gives about 200K tokens a day, and one question costs about 3–6K, so the allowance is metered per UTC day. The window resets at UTC midnight (05:30 IST). All of these settings are optional; the defaults are shown:
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `GROQ_ALLOWANCE_MODE` | `enforce` | `enforce` refuses managed calls past a limit (429 `managed_allowance_exhausted`). `observe` records usage and never refuses. `off` skips accounting entirely. |
+| `GROQ_GLOBAL_DAILY_TOKENS` | `160000` | Tokens per day for the whole installation (about 80% of Groq's daily limit, leaving room for retries and development use of the same key). |
+| `GROQ_CONNECTION_DAILY_TOKENS` | `25000` | Tokens per day per connection (about 5–6 questions). |
+| `GROQ_GLOBAL_DAILY_AUDIO_SECONDS` | `3600` | Voice seconds per day for the installation. |
+| `GROQ_CONNECTION_DAILY_AUDIO_SECONDS` | `600` | Voice seconds per day per connection. |
+| `MANAGED_MODELS` | `openai/gpt-oss-120b,openai/gpt-oss-20b` | Models managed traffic may use. Any other model falls back to `openai/gpt-oss-120b` when it is listed, otherwise to the first entry. Personal keys may use every client model. |
+
+- Without `GROQ_API_KEY`, managed requests fail with 503 `provider_unavailable`; users with their own key still work.
+- In `enforce` mode, if the ledger (`groq_allowance` in the central DB) cannot be read, managed requests get 503 `managed_accounting_unavailable`.
+- Each settled managed call logs one `Managed Groq usage` line with `{ payer, unit, estimate, actual, model }` (no question text, no keys). Use a week of these lines to tune the limits.
+- Groq also has per-minute limits per model; check the Groq console for the chosen models.
+
+### Central collections added for Groq keys
+
+Both are created on startup with their indexes; no migration is needed.
+
+- `provider_credentials`: one document per sign-in (`connectionId` + session `sid`) holding the encrypted personal key (AES-256-GCM, `ENCRYPTION_KEY`). A TTL index removes it when the session cookie expires; logout leaves a tombstone that the TTL removes later.- `groq_allowance`: one document per UTC day with installation and per-connection usage, removed by a TTL index 8 days after the day ends.
+
+Session cookies issued before this release have no `sid`. They keep working on the AtlasMind allowance; to store a personal key, the user disconnects and connects again.
+
 The server logs one JSON object per line to stdout (pino), which Render's log view shows as is. Each request gets an `X-Request-Id` response header (an incoming `x-request-id` of up to 64 letters, digits, `_` or `-` is reused), and its "request completed" line carries the same ID as `req.id`, plus `connectionId` once the session is known. `/api/health` hits are not logged.
 
 ## One-off migrations
@@ -80,6 +106,7 @@ CORS behavior in current server implementation:
 
 - Credentials enabled
 - In production, requests are allowed only from origins listed in CORS_ALLOWED_ORIGINS
+- `CORS_ALLOWED_ORIGINS` also gates every non-GET `/api/*` request that carries an `Origin` header: any other origin gets 403 `origin_not_allowed`, in development too (where `http://localhost:5173` and `http://127.0.0.1:5173` are always allowed). Requests without `Origin` (curl, health checks) are unaffected. Add every frontend origin, including Netlify preview URLs you use, or their questions will be refused.
 
 If you need multiple allowed origins, separate them with commas:
 
@@ -93,6 +120,7 @@ For stricter production posture, restrict origin allow-list explicitly before go
 2. Netlify frontend loads and can call backend.
 3. Connect flow sets cookie and /api/auth/me returns success.
 4. Query, schema, voice, and dashboard routes work with authenticated session.
+5. The sidebar shows the AtlasMind allowance, and it goes down after a question. Saving a personal Groq key switches the sidebar to "Your Groq key"; after disconnecting, that sign-in's `provider_credentials` document is a tombstone (`revoked: true`, no key).
 
 ---
 

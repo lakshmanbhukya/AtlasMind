@@ -6,3 +6,4 @@ uploads
 .git
 coverage
 *.md
+test-support

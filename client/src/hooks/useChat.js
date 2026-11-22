@@ -1,7 +1,9 @@
-import { useState, useCallback, useEffect, useReducer, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
 import { streamQuery, sendVoice, approveWriteQuery, fetchQueryHistory } from '../services/api';
 import { DEFAULT_MODEL_ID } from '../lib/models';
+import { modelsFor, pickModel } from '../lib/providerSettings';
 import { conversationReducer, initialConversation, userTurn } from '../lib/conversation';
+import { useProviderSettings } from './useProviderSettings';
 
 /**
  * Chat state: the Conversation module's reducer plus the requests that feed it.
@@ -11,16 +13,30 @@ import { conversationReducer, initialConversation, userTurn } from '../lib/conve
  *
  * `selectedQueryId` replays a history item; `onQuerySuccess` fires after a successful
  * text query, voice query and approved write (the history list refreshes on it).
+ *
+ * Who pays comes from the provider settings of `connectionId`: each question sends the
+ * payer the user sees as `expectedPayer`, the model list is limited to `allowedModels`,
+ * and the settings are refetched after every query or voice response (success or not),
+ * so the allowance counter moves and a `settings_changed` reply picks up the new mode.
  */
-export function useChat(selectedQueryId, onQuerySuccess) {
+export function useChat(selectedQueryId, onQuerySuccess, connectionId) {
     const [{ turns, pending, pendingStage }, dispatch] = useReducer(conversationReducer, initialConversation);
-    const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL_ID);
+    const [chosenModel, setSelectedModel] = useState(DEFAULT_MODEL_ID);
+    const provider = useProviderSettings(connectionId);
+    const { expectedPayer, refresh: refreshProvider } = provider;
+    const allowedModels = provider.settings?.allowedModels;
+    const models = useMemo(() => modelsFor(allowedModels), [allowedModels]);
+    const selectedModel = pickModel(chosenModel, models);
 
     const counter = useRef(0);
+    // The last failed recording, for Resend after a voice `settings_changed`. Kept out of
+    // reducer state (a Blob is not chat data) and gone after a reload.
+    const failedRecording = useRef(null);
     const newId = useCallback(() => `t${Date.now()}-${(counter.current += 1)}`, []);
 
     // A history item was opened: replay it as one question and its answer.
     useEffect(() => {
+        failedRecording.current = null;
         if (!selectedQueryId) {
             dispatch({ type: 'cleared' });
             return;
@@ -62,6 +78,7 @@ export function useChat(selectedQueryId, onQuerySuccess) {
                         ...(options.bypassAmbiguity !== undefined ? { bypassAmbiguity: options.bypassAmbiguity } : {}),
                         ...(options.clarifications !== undefined ? { clarifications: options.clarifications } : {}),
                         ...(options.workspaceId !== undefined ? { workspaceId: options.workspaceId } : {}),
+                        ...(expectedPayer ? { expectedPayer } : {}),
                     },
                     (stage) => dispatch({ type: 'progressed', stage })
                 );
@@ -77,9 +94,11 @@ export function useChat(selectedQueryId, onQuerySuccess) {
                     ids: { assistant: newId() },
                     now: Date.now(),
                 });
+            } finally {
+                refreshProvider();
             }
         },
-        [pending, newId, selectedModel, onQuerySuccess]
+        [pending, newId, selectedModel, expectedPayer, refreshProvider, onQuerySuccess]
     );
 
     /** Transcribe a recording and run it, with the same request scope as a text question. */
@@ -89,15 +108,35 @@ export function useChat(selectedQueryId, onQuerySuccess) {
             dispatch({ type: 'asked', source: 'voice' });
             const ids = { user: newId(), assistant: newId() };
             try {
-                const body = await sendVoice(audioBlob, selectedModel, scopeOptions);
+                const body = await sendVoice(audioBlob, selectedModel, { ...scopeOptions, ...(expectedPayer ? { expectedPayer } : {}) });
+                failedRecording.current = null;
                 dispatch({ type: 'answered', source: 'voice', body, ids, now: Date.now() });
                 onQuerySuccess?.();
             } catch (error) {
+                failedRecording.current = { turnId: ids.assistant, blob: audioBlob, scopeOptions };
                 dispatch({ type: 'failed', source: 'voice', error, ids, now: Date.now() });
+            } finally {
+                refreshProvider();
             }
         },
-        [pending, newId, selectedModel, onQuerySuccess]
+        [pending, newId, selectedModel, expectedPayer, refreshProvider, onQuerySuccess]
     );
+
+    /** Whether the recording behind error turn `turnId` can still be sent again. */
+    const canResendVoice = useCallback((turnId) => failedRecording.current?.turnId === turnId, []);
+
+    /** Send the recording behind error turn `turnId` again (Resend after `settings_changed`). */
+    const resendVoice = useCallback(
+        (turnId) => {
+            const rec = failedRecording.current;
+            if (!rec || rec.turnId !== turnId) return undefined;
+            return sendVoiceMessage(rec.blob, rec.scopeOptions);
+        },
+        [sendVoiceMessage]
+    );
+
+    /** An error turn's provider action (switch payer, save a key) was carried out: hide its actions. */
+    const resolveTurnActions = useCallback((turnId) => dispatch({ type: 'actionsResolved', turnId }), []);
 
     /** Human-in-the-loop: run a staged write with its approval token. */
     const approveWrite = useCallback(
@@ -124,8 +163,13 @@ export function useChat(selectedQueryId, onQuerySuccess) {
         pendingStage,
         selectedModel,
         setSelectedModel,
+        models,
+        provider,
         sendMessage,
         sendVoiceMessage,
+        canResendVoice,
+        resendVoice,
+        resolveTurnActions,
         approveWrite,
         discardApproval,
     };

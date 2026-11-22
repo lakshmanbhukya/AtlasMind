@@ -15,6 +15,8 @@ const SYSTEM_COLLECTIONS = Object.freeze([
     'user_connections',
     'workspaces',
     'approval_tokens',
+    'provider_credentials',
+    'groq_allowance',
     'system.views',
 ]);
 

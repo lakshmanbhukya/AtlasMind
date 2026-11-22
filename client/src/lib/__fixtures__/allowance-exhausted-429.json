@@ -1,0 +1,1 @@
+{"success":false,"error":{"code":"managed_allowance_exhausted","message":"The AtlasMind allowance for today is used up. Use your own Groq key, or try again after the reset.","payer":"managed","resetAt":"2026-11-14T00:00:00.000Z"}}

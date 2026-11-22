@@ -12,15 +12,32 @@ const fixture = (name: string) =>
 
 type Reply = { status?: number; body: unknown };
 
+type ProviderStub = {
+  /** GET /api/provider-settings until a PUT, PATCH or DELETE changes it (default: managed). */
+  settings?: unknown;
+  /** Settings a PUT /key, PATCH { mode } and DELETE /key switch to. */
+  personal?: unknown;
+  managed?: unknown;
+  /** Replies to POST /api/voice, in order. */
+  voiceReplies?: Reply[];
+};
+
 /**
  * Stub every /api call. `queryReplies` answers text questions in order, on POST /api/query/stream
  * (as an SSE stream: progress events, then one `result` carrying the reply's status and body)
  * or on POST /api/query. The request bodies are recorded so tests can assert what the client sent.
+ * Provider settings are a small state machine over the fixtures (`provider`).
  */
-async function stubApi(page: Page, queryReplies: Reply[], approveReply?: Reply) {
+async function stubApi(page: Page, queryReplies: Reply[], approveReply?: Reply, provider: ProviderStub = {}) {
   const queryBodies: Record<string, unknown>[] = [];
   const approveBodies: Record<string, unknown>[] = [];
+  const settingsBodies: { key: string; body: unknown }[] = [];
+  const voiceRequests: string[] = [];
   const replies = [...queryReplies];
+  const voiceReplies = [...(provider.voiceReplies ?? [])];
+  const personal = provider.personal ?? fixture('provider-settings-personal');
+  const managed = provider.managed ?? fixture('provider-settings-managed');
+  let settings = provider.settings ?? managed;
 
   await page.route('**/api/**', async (route) => {
     const req = route.request();
@@ -39,12 +56,33 @@ async function stubApi(page: Page, queryReplies: Reply[], approveReply?: Reply) 
         return json(200, { success: true, data: [] });
       case 'GET query/history':
         return json(200, fixture('history'));
+      case 'GET provider-settings':
+        return json(200, settings);
+      case 'PUT provider-settings/key':
+        settingsBodies.push({ key, body: req.postDataJSON() });
+        settings = personal;
+        return json(200, settings);
+      case 'PATCH provider-settings': {
+        const body = req.postDataJSON();
+        settingsBodies.push({ key, body });
+        settings = body.mode === 'personal' ? personal : managed;
+        return json(200, settings);
+      }
+      case 'DELETE provider-settings/key':
+        settingsBodies.push({ key, body: null });
+        settings = managed;
+        return json(200, settings);
       case 'POST query':
       case 'POST query/stream': {
         queryBodies.push(req.postDataJSON());
         const next = replies.shift() ?? { status: 500, body: { success: false, error: { code: 'test_no_reply', message: 'No stubbed reply left' } } };
         if (key === 'POST query') return json(next.status ?? 200, next.body);
         return route.fulfill({ status: 200, contentType: 'text/event-stream', body: sseStream({ status: next.status ?? 200, body: next.body }) });
+      }
+      case 'POST voice': {
+        voiceRequests.push(req.postData() ?? '');
+        const next = voiceReplies.shift() ?? { status: 500, body: { success: false, error: { code: 'test_no_reply', message: 'No stubbed voice reply left' } } };
+        return json(next.status ?? 200, next.body);
       }
       case 'POST query/approve':
         approveBodies.push(req.postDataJSON());
@@ -54,7 +92,7 @@ async function stubApi(page: Page, queryReplies: Reply[], approveReply?: Reply) 
     }
   });
 
-  return { queryBodies, approveBodies };
+  return { queryBodies, approveBodies, settingsBodies, voiceRequests };
 }
 
 /**
@@ -241,5 +279,220 @@ test.describe('Chat thread', () => {
     await expect(answer).toHaveClass(/ring-2/);
     await expect(answer.getByText('Read-only verified')).toBeVisible();
     await expect(page.locator(`#msg-user-${item.id}`)).toContainText(item.query);
+  });
+});
+
+/** A fake microphone and MediaRecorder: Start records, Send yields a small webm blob. */
+async function fakeMicrophone(page: Page) {
+  await page.addInitScript({
+    content: `(() => {
+      const stream = { getTracks: () => [{ stop() {} }] };
+      Object.defineProperty(navigator, 'mediaDevices', {
+        configurable: true,
+        value: { getUserMedia: async () => stream },
+      });
+      class FakeRecorder {
+        static isTypeSupported() { return true; }
+        constructor(s) { this.stream = s; this.state = 'inactive'; }
+        start() { this.state = 'recording'; }
+        stop() {
+          this.state = 'inactive';
+          this.ondataavailable && this.ondataavailable({ data: new Blob(['fake-audio'], { type: 'audio/webm' }) });
+          this.onstop && this.onstop();
+        }
+      }
+      window.MediaRecorder = FakeRecorder;
+    })();`,
+  });
+}
+
+test.describe('Groq payer', () => {
+  const payerPanel = (page: Page) => page.getByRole('region', { name: 'Groq usage' });
+
+  test('allowance exhausted: save your own key, then the retry is paid by it', async ({ page }) => {
+    const { queryBodies, settingsBodies } = await stubApi(
+      page,
+      [{ status: 429, body: fixture('allowance-exhausted-429') }, { body: fixture('answer') }],
+      undefined,
+      { settings: fixture('provider-settings-exhausted') }
+    );
+    await openApp(page);
+    await expect(payerPanel(page).getByTestId('payer-title')).toHaveText('AtlasMind allowance');
+    await ask(page, 'Total revenue by region');
+
+    await expect(conversation(page).getByText('AtlasMind allowance used up')).toBeVisible();
+    await expect(conversation(page).getByText(/Resets at \d{2}:\d{2}/)).toBeVisible();
+    expect(queryBodies[0]).toMatchObject({ text: 'Total revenue by region', expectedPayer: 'managed' });
+
+    await conversation(page).getByRole('button', { name: 'Use your own Groq key' }).click();
+    const keyInput = payerPanel(page).getByLabel('Groq API key');
+    await expect(keyInput).toBeFocused();
+    await expect(keyInput).toHaveAttribute('type', 'password');
+    await keyInput.fill('gsk_test_SECRET');
+    await payerPanel(page).getByRole('button', { name: 'Save and use key' }).click();
+
+    await expect(payerPanel(page).getByTestId('payer-title')).toHaveText('Your Groq key (…CRET)');
+    await expect(payerPanel(page).getByLabel('Groq API key')).toHaveCount(0);
+    expect(settingsBodies).toEqual([{ key: 'PUT provider-settings/key', body: { apiKey: 'gsk_test_SECRET' } }]);
+
+    await conversation(page).getByRole('button', { name: 'Retry' }).click();
+    await expect(conversation(page).getByText('Read-only verified')).toBeVisible();
+    expect(queryBodies[1]).toMatchObject({ text: 'Total revenue by region', expectedPayer: 'personal' });
+    await expect(userBubbles(page)).toHaveCount(1);
+    // The key never lands in browser storage.
+    const stored = await page.evaluate(() => JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage }));
+    expect(stored).not.toContain('gsk_test_SECRET');
+  });
+
+  test('invalid personal key: switch to the AtlasMind allowance, then retry', async ({ page }) => {
+    const { queryBodies, settingsBodies } = await stubApi(
+      page,
+      [{ status: 422, body: fixture('provider-key-invalid-422') }, { body: fixture('answer') }],
+      undefined,
+      { settings: fixture('provider-settings-personal') }
+    );
+    await openApp(page);
+    await expect(payerPanel(page).getByTestId('payer-title')).toHaveText('Your Groq key (…CRET)');
+    await ask(page, 'Total revenue by region');
+
+    await expect(conversation(page).getByText('Groq key rejected')).toBeVisible();
+    await expect(conversation(page).getByRole('button', { name: 'Update key' })).toBeVisible();
+    expect(queryBodies[0]).toMatchObject({ expectedPayer: 'personal' });
+
+    await conversation(page).getByRole('button', { name: 'Switch to AtlasMind allowance' }).click();
+    await expect(payerPanel(page).getByTestId('payer-title')).toHaveText('AtlasMind allowance');
+    expect(settingsBodies).toEqual([{ key: 'PATCH provider-settings', body: { mode: 'managed' } }]);
+
+    await conversation(page).getByRole('button', { name: 'Retry' }).click();
+    await expect(conversation(page).getByText('Read-only verified')).toBeVisible();
+    expect(queryBodies[1]).toMatchObject({ text: 'Total revenue by region', expectedPayer: 'managed' });
+  });
+
+  test('removing the key asks first, then switches to the AtlasMind allowance', async ({ page }) => {
+    const { settingsBodies } = await stubApi(page, [], undefined, { settings: fixture('provider-settings-personal') });
+    await openApp(page);
+
+    await payerPanel(page).getByRole('button', { name: 'Remove key' }).click();
+    expect(settingsBodies).toHaveLength(0);
+    await payerPanel(page).getByRole('button', { name: 'Remove and switch' }).click();
+    await expect(payerPanel(page).getByTestId('payer-title')).toHaveText('AtlasMind allowance');
+    expect(settingsBodies).toEqual([{ key: 'DELETE provider-settings/key', body: null }]);
+  });
+
+  test('managed models only, and a reconnect note on an old cookie', async ({ page }) => {
+    await stubApi(page, [], undefined, { settings: fixture('provider-settings-legacy') });
+    await openApp(page);
+
+    await expect(payerPanel(page).getByText(/connect your database again to use your own Groq key/)).toBeVisible();
+    await expect(payerPanel(page).getByRole('button', { name: 'Use your own Groq key' })).toHaveCount(0);
+    await page.getByRole('button', { name: /Model:/ }).click();
+    const menu = page.getByRole('menu', { name: 'Model' });
+    await expect(menu.getByRole('menuitemradio')).toHaveCount(2);
+    await expect(menu.getByText('Groq Compound')).toHaveCount(0);
+  });
+
+  test('error turn actions hide once used; a cancelled key form keeps them; Retry stays', async ({ page }) => {
+    const { settingsBodies } = await stubApi(
+      page,
+      [{ status: 422, body: fixture('provider-key-invalid-422') }],
+      undefined,
+      { settings: fixture('provider-settings-personal') }
+    );
+    await openApp(page);
+    await ask(page, 'Total revenue by region');
+    const updateKey = conversation(page).getByRole('button', { name: 'Update key' });
+    await expect(updateKey).toBeVisible();
+
+    // Cancel: nothing changed, so the actions stay.
+    await updateKey.click();
+    await payerPanel(page).getByRole('button', { name: 'Cancel' }).click();
+    await expect(updateKey).toBeVisible();
+    await expect(conversation(page).getByRole('button', { name: 'Switch to AtlasMind allowance' })).toBeVisible();
+
+    // Save a new key: still personal, but this turn's actions are done.
+    await updateKey.click();
+    await payerPanel(page).getByLabel('Groq API key').fill('gsk_test_SECRET');
+    await payerPanel(page).getByRole('button', { name: 'Save and use key' }).click();
+    await expect(payerPanel(page).getByLabel('Groq API key')).toHaveCount(0);
+    expect(settingsBodies).toEqual([{ key: 'PUT provider-settings/key', body: { apiKey: 'gsk_test_SECRET' } }]);
+    await expect(updateKey).toHaveCount(0);
+    await expect(conversation(page).getByRole('button', { name: 'Switch to AtlasMind allowance' })).toHaveCount(0);
+    await expect(conversation(page).getByRole('button', { name: 'Retry' })).toBeVisible();
+  });
+
+  test('a payer change from the sidebar hides the turn actions too', async ({ page }) => {
+    await stubApi(page, [{ status: 422, body: fixture('provider-key-invalid-422') }], undefined, {
+      settings: fixture('provider-settings-personal'),
+    });
+    await openApp(page);
+    await ask(page, 'Total revenue by region');
+    await expect(conversation(page).getByRole('button', { name: 'Update key' })).toBeVisible();
+
+    await payerPanel(page).getByRole('button', { name: 'Use AtlasMind allowance' }).click();
+    await expect(payerPanel(page).getByTestId('payer-title')).toHaveText('AtlasMind allowance');
+    await expect(conversation(page).getByRole('button', { name: 'Update key' })).toHaveCount(0);
+    await expect(conversation(page).getByRole('button', { name: 'Retry' })).toBeVisible();
+  });
+
+  test('voice settings_changed: Resend sends the same recording again', async ({ page }) => {
+    await fakeMicrophone(page);
+    const { voiceRequests } = await stubApi(page, [], undefined, {
+      settings: fixture('provider-settings-personal'),
+      voiceReplies: [{ status: 409, body: fixture('settings-changed-409') }, { body: fixture('voice-answer') }],
+    });
+    await openApp(page);
+
+    await page.getByRole('button', { name: 'Start voice question' }).click();
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(conversation(page).getByText('Groq settings changed', { exact: true })).toBeVisible();
+    const resend = conversation(page).getByRole('button', { name: 'Resend' });
+    await expect(resend).toBeVisible();
+
+    await resend.click();
+    await expect(conversation(page).getByText('Read-only verified')).toBeVisible();
+    expect(voiceRequests).toHaveLength(2);
+    // Same audio both times (the multipart boundary differs, the recording does not).
+    expect(voiceRequests[0]).toContain('fake-audio');
+    expect(voiceRequests[1]).toContain('fake-audio');
+  });
+
+  test('provider_rate_limited: Retry counts down, then re-enables', async ({ page }) => {
+    test.setTimeout(45_000);
+    const { queryBodies } = await stubApi(
+      page,
+      [{ status: 429, body: fixture('provider-rate-limited-429') }, { body: fixture('answer') }],
+      undefined,
+      { settings: fixture('provider-settings-personal') }
+    );
+    await openApp(page);
+    await ask(page, 'Total revenue by region');
+
+    const wait = conversation(page).getByRole('button', { name: /Try again in \d+ s/ });
+    await expect(wait).toBeVisible();
+    await expect(wait).toBeDisabled();
+    const retry = conversation(page).getByRole('button', { name: 'Retry' });
+    await expect(retry).toBeEnabled({ timeout: 20_000 });
+    await retry.click();
+    await expect(conversation(page).getByText('Read-only verified')).toBeVisible();
+    expect(queryBodies).toHaveLength(2);
+  });
+
+  test('phone width: "Use your own Groq key" opens the drawer and the key form', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await stubApi(page, [{ status: 429, body: fixture('allowance-exhausted-429') }], undefined, {
+      settings: fixture('provider-settings-exhausted'),
+    });
+    await openApp(page);
+    await expect(payerPanel(page)).not.toBeInViewport();
+    await ask(page, 'Total revenue by region');
+
+    await conversation(page).getByRole('button', { name: 'Use your own Groq key' }).click();
+    const keyInput = payerPanel(page).getByLabel('Groq API key');
+    await expect(keyInput).toBeVisible();
+    await expect(keyInput).toBeInViewport();
+    await expect(keyInput).toBeFocused();
+    await expect(payerPanel(page).getByRole('button', { name: 'Save and use key' })).toBeInViewport();
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(overflow).toBeLessThanOrEqual(0);
   });
 });

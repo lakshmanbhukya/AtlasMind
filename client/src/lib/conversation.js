@@ -10,6 +10,11 @@ import { apiErrorMessage } from './apiError';
  * A turn is `{ id, role: 'user' | 'assistant', timestamp, content, ... }`. Assistant
  * turns carry `kind`, which picks the card that draws them:
  * 'answer' | 'clarification' | 'scope' | 'approval' | 'blocked' | 'error'.
+ *
+ * An error turn for a Groq provider failure (`managed_allowance_exhausted`,
+ * `provider_key_invalid`, …) also carries `errorCode`, `payer`, a `title`, and what it
+ * offers: `actions` ('enterKey' | 'updateKey' | 'useManaged'), `resetAt`, `retryAt`
+ * (epoch ms before which Retry waits) and `retryLabel`.
  */
 
 /** @typedef {'text' | 'voice'} Source */
@@ -99,12 +104,113 @@ export function blockedBodyFromError(err) {
 
 /**
  * An error turn. A text error keeps its question and retry options so it can be
- * retried; a voice error has no question, so it shows no Retry.
+ * retried; a voice error has no question, so it shows no Retry, except a voice
+ * `settings_changed`, which gets `resendAudio` (useChat keeps that recording and
+ * sends it again).
  */
 export function errorTurn(err, { id, timestamp, source = 'text', question = '', retryOptions = {} }) {
-    const base = { id, role: 'assistant', timestamp, kind: 'error', content: apiErrorMessage(err, ERROR_FALLBACK[source]) };
-    if (source === 'voice') return { ...base, isVoice: true };
+    const base = {
+        id,
+        role: 'assistant',
+        timestamp,
+        kind: 'error',
+        content: apiErrorMessage(err, ERROR_FALLBACK[source]),
+        ...providerErrorFields(err, { now: timestamp instanceof Date ? timestamp.getTime() : Date.parse(timestamp) || 0 }),
+    };
+    if (source === 'voice') {
+        return { ...base, isVoice: true, ...(base.errorCode === 'settings_changed' ? { resendAudio: true } : {}) };
+    }
     return { ...base, naturalLanguage: question, retryOptions: { ...retryOptions, skipUserMessage: true } };
+}
+
+// ─── Provider (Groq) failures ────────────────────────────────────────────────
+
+/**
+ * Error codes about who pays for Groq calls (server `ProviderError` and the provider
+ * settings routes). Each gets a title and the actions its card offers; the message
+ * is the server's own (these are written for users), with a fallback here.
+ */
+const PROVIDER_ERRORS = {
+    managed_allowance_exhausted: {
+        title: 'AtlasMind allowance used up',
+        fallback: 'The AtlasMind allowance for today is used up. Use your own Groq key, or try again after the reset.',
+    },
+    provider_key_invalid: {
+        title: 'Groq key rejected',
+        fallback: 'Groq rejected the API key.',
+    },
+    provider_rate_limited: {
+        title: 'Groq rate limit reached',
+        fallback: 'The language model is rate limited. Please try again shortly.',
+    },
+    settings_changed: {
+        title: 'Groq settings changed',
+        fallback: 'Your Groq settings changed in another tab. Review them and send again.',
+    },
+    provider_model_unavailable: {
+        title: 'Model unavailable',
+        fallback: 'That model is not available right now. Pick another model.',
+    },
+    provider_unavailable: {
+        title: 'Language model unavailable',
+        fallback: 'The language model is unavailable right now. Please try again.',
+    },
+    managed_accounting_unavailable: {
+        title: 'Allowance check unavailable',
+        fallback: 'The AtlasMind allowance cannot be checked right now. Please try again, or use your own Groq key.',
+    },
+    reconnect_required: {
+        title: 'Sign in again',
+        fallback: 'Sign in to your database again to use your own Groq key.',
+    },
+    origin_not_allowed: {
+        title: 'Request refused',
+        fallback: 'This page is not allowed to call the AtlasMind server.',
+    },
+};
+
+/** The server's error object (`{ code, message, payer?, retryAfterSeconds?, resetAt? }`) of a failed request. */
+const errorBodyOf = (err) => {
+    const e = err?.response?.data?.error;
+    return e && typeof e === 'object' ? e : null;
+};
+
+/**
+ * The extra fields of an error turn for a provider failure; `{}` for any other error.
+ * `now` (epoch ms) turns `retryAfterSeconds` into `retryAt`.
+ */
+export function providerErrorFields(err, { now = 0 } = {}) {
+    const e = errorBodyOf(err);
+    const known = e && Object.hasOwn(PROVIDER_ERRORS, e.code) ? PROVIDER_ERRORS[e.code] : null;
+    if (!known) return {};
+    const fields = {
+        errorCode: e.code,
+        title: known.title,
+        content: e.message || known.fallback,
+        ...(e.payer === 'managed' || e.payer === 'personal' ? { payer: e.payer } : {}),
+    };
+    switch (e.code) {
+        case 'managed_allowance_exhausted':
+            fields.actions = ['enterKey'];
+            if (typeof e.resetAt === 'string') fields.resetAt = e.resetAt;
+            break;
+        case 'provider_key_invalid':
+            // Only the user's own key can be fixed here; a rejected managed key is the operator's.
+            if (e.payer === 'personal') fields.actions = ['updateKey', 'useManaged'];
+            break;
+        case 'provider_rate_limited':
+            if (typeof e.retryAfterSeconds === 'number' && e.retryAfterSeconds > 0) {
+                fields.retryAt = now + e.retryAfterSeconds * 1000;
+            }
+            break;
+        case 'settings_changed':
+            // useChat refetches the settings after every response, so a resend uses the new payer.
+            fields.retryLabel = 'Resend';
+            break;
+        default:
+            break;
+    }
+    return fields;
 }
 
 // ─── History item → turns ────────────────────────────────────────────────────
@@ -149,6 +255,7 @@ const updateTurn = (turns, id, update) => turns.map((t) => (t.id === id ? { ...t
  * - `failed { error, source, question?, retryOptions?, ids: { assistant, user? }, now }`
  * - `approveStarted` / `approved { turnId, body }` / `approveFailed { turnId, error }`
  * - `discarded { turnId }`
+ * - `actionsResolved { turnId }`: an error turn's provider action was carried out
  *
  * @param {ConversationState} state
  * @returns {ConversationState}
@@ -235,6 +342,12 @@ export function conversationReducer(state, action) {
             return {
                 ...state,
                 turns: updateTurn(state.turns, action.turnId, () => ({ approvalToken: null, approvalDiscarded: true })),
+            };
+
+        case 'actionsResolved':
+            return {
+                ...state,
+                turns: updateTurn(state.turns, action.turnId, (t) => (t.kind === 'error' ? { actionsResolved: true } : {})),
             };
 
         default:

@@ -20,6 +20,10 @@ const {
 } = require("./services/cleanupService");
 const { requireAuth } = require("./middleware/auth");
 const dashboardStore = require("./stores/dashboardStore");
+const providerCredentialStore = require("./stores/providerCredentialStore");
+const allowanceStore = require("./stores/allowanceStore");
+const { originCheck } = require("./middleware/originCheck");
+const { errorHandler } = require("./middleware/errorHandler");
 const { generalLimiter, authLimiter, llmLimiter } = require("./middleware/rateLimiter");
 const { cleanupPool, getPoolSize } = require("./services/userDbPool");
 
@@ -33,6 +37,7 @@ const connectionsRoutes = require("./routes/connections");
 const workspaceRoutes = require("./routes/workspaces");
 const scopeSuggestRoutes = require("./routes/scopeSuggest");
 const sharedDashboardRoutes = require("./routes/sharedDashboard");
+const providerSettingsRoutes = require("./routes/providerSettings");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -102,6 +107,10 @@ app.use(
 // cross-site client calls the API with CORS requests, so it is unaffected.
 app.use(helmet());
 
+// Reject state-changing /api requests from a foreign Origin (403) before CORS,
+// so a cross-site page can't spend the managed Groq allowance with the cookie.
+app.use("/api/", originCheck);
+
 app.use(
   cors({
     origin: function (origin, callback) {
@@ -154,6 +163,7 @@ app.use("/api/schema", requireAuth, schemaRoutes);
 app.use("/api/dashboard", requireAuth, dashboardRoutes);
 app.use("/api/workspaces", requireAuth, workspaceRoutes);
 app.use("/api/scope", requireAuth, scopeSuggestRoutes);
+app.use("/api/provider-settings", requireAuth, providerSettingsRoutes);
 
 // ---------------------------------------------------------------------------
 // Error handlers
@@ -165,19 +175,7 @@ app.use((_req, res) => {
   });
 });
 
-app.use((err, req, res, _next) => {
-  (req.log || logger).error({ err }, "Unhandled error");
-  res.status(err.statusCode || 500).json({
-    success: false,
-    error: {
-      code: err.code || "internal_error",
-      message:
-        process.env.NODE_ENV === "production"
-          ? "Internal server error"
-          : err.message,
-    },
-  });
-});
+app.use(errorHandler);
 
 // ---------------------------------------------------------------------------
 // Start server
@@ -189,6 +187,8 @@ async function startServer() {
     await initializeWorkspaceCollection();
     await initializeCleanupIndexes();
     await dashboardStore.initializeIndexes();
+    await providerCredentialStore.initializeIndexes();
+    await allowanceStore.initializeIndexes();
     startCleanupCron();
 
     const server = app.listen(PORT, () => {

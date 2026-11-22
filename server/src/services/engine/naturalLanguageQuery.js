@@ -50,6 +50,7 @@ async function runNaturalLanguageQuery(params) {
         source = 'query',
         experiment: experimentInput,
         onProgress,
+        provider,
     } = params;
 
     // Input validation
@@ -241,6 +242,8 @@ async function runNaturalLanguageQuery(params) {
         scopedCollections: isRestrictedScope ? effectiveScope : [],
         ...(evalOpts.temperature !== undefined ? { temperature: evalOpts.temperature } : {}),
         ...(evalOpts.llm ? { llm: evalOpts.llm } : {}),
+        // Who pays (groqService.resolveProvider), passed in-process by the route.
+        ...(provider ? { provider } : {}),
     };
 
     const tLlmStart = hrNow();

@@ -64,4 +64,21 @@ function sendError(res, error, fallbackCode, fallbackMessage) {
     return res.status(status).json(body);
 }
 
-module.exports = { sendOutcome, sendError, outcomeStatus, errorResult };
+/**
+ * Log a pipeline failure. A ProviderError below 500 (allowance used up, key
+ * rejected, Groq rate limit, stale payer) is an expected answer the user can
+ * act on, so it is a `warn` with its code and payer and no stack. Everything
+ * else, including provider outages, stays an `error` with the full `err`.
+ * @param {import('pino').Logger} log
+ * @param {any} error
+ * @param {string} message
+ */
+function logPipelineError(log, error, message) {
+    if (error instanceof ProviderError && error.statusCode < 500) {
+        log.warn({ code: error.code, status: error.statusCode, payer: error.payer }, message);
+        return;
+    }
+    log.error({ err: error }, message);
+}
+
+module.exports = { sendOutcome, sendError, outcomeStatus, errorResult, logPipelineError };

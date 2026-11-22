@@ -3,7 +3,7 @@ const express = require('express');
 const multer = require('multer');
 const { transcribeAudio, resolveProvider } = require('../services/groqService');
 const { QueryExecutionEngine } = require('../services/queryExecutionEngine');
-const { sendOutcome, sendError } = require('./engineHttp');
+const { sendOutcome, sendError, logPipelineError } = require('./engineHttp');
 const { forRequest } = require('../utils/logger');
 
 const router = express.Router();
@@ -145,7 +145,7 @@ router.post('/', upload.single('audio'), async (req, res) => {
 
         return sendOutcome(res, outcome, voiceData);
     } catch (error) {
-        forRequest(req).error({ err: error }, 'Voice pipeline error');
+        logPipelineError(forRequest(req), error, 'Voice pipeline error');
         if (error instanceof multer.MulterError) {
             return res.status(400).json({
                 success: false,

@@ -3,7 +3,7 @@ const express = require('express');
 const { QueryExecutionEngine } = require('../services/queryExecutionEngine');
 const { resolveProvider } = require('../services/groqService');
 const queryHistoryStore = require('../stores/queryHistoryStore');
-const { sendOutcome, sendError, outcomeStatus, errorResult } = require('./engineHttp');
+const { sendOutcome, sendError, outcomeStatus, errorResult, logPipelineError } = require('./engineHttp');
 const { forRequest } = require('../utils/logger');
 
 const router = express.Router();
@@ -53,7 +53,7 @@ router.post('/', async (req, res) => {
 
         return sendOutcome(res, outcome);
     } catch (error) {
-        forRequest(req).error({ err: error }, 'Query pipeline error');
+        logPipelineError(forRequest(req), error, 'Query pipeline error');
         return sendError(res, error, 'query_error', 'Failed to process query');
     }
 });
@@ -127,7 +127,7 @@ router.post('/stream', async (req, res) => {
         });
         result = { status: outcomeStatus(outcome), body: outcome.data };
     } catch (error) {
-        forRequest(req).error({ err: error }, 'Query pipeline error');
+        logPipelineError(forRequest(req), error, 'Query pipeline error');
         result = errorResult(error, 'query_error', 'Failed to process query');
     }
 

@@ -23,6 +23,7 @@ const dashboardStore = require("./stores/dashboardStore");
 const providerCredentialStore = require("./stores/providerCredentialStore");
 const allowanceStore = require("./stores/allowanceStore");
 const { originCheck } = require("./middleware/originCheck");
+const { errorHandler } = require("./middleware/errorHandler");
 const { generalLimiter, authLimiter, llmLimiter } = require("./middleware/rateLimiter");
 const { cleanupPool, getPoolSize } = require("./services/userDbPool");
 
@@ -174,19 +175,7 @@ app.use((_req, res) => {
   });
 });
 
-app.use((err, req, res, _next) => {
-  (req.log || logger).error({ err }, "Unhandled error");
-  res.status(err.statusCode || 500).json({
-    success: false,
-    error: {
-      code: err.code || "internal_error",
-      message:
-        process.env.NODE_ENV === "production"
-          ? "Internal server error"
-          : err.message,
-    },
-  });
-});
+app.use(errorHandler);
 
 // ---------------------------------------------------------------------------
 // Start server

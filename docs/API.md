@@ -586,6 +586,7 @@ Common Error Codes:
 - `execution_error` / `query_error` / `voice_pipeline_error` (500): Unexpected failure while running the query.
 - `upload_error` (400): Voice upload rejected (over 25 MB, or over 5 MB on the AtlasMind allowance).
 - `origin_not_allowed` (403): A non-GET request from an origin that is not allowed (see the top of this document).
+- `invalid_json` (400): The request body is not valid JSON. Nothing from the body is logged or echoed back.
 
 **Provider (Groq) errors.** These carry `payer` (`"managed"` for the AtlasMind allowance, `"personal"` for the user's own key) and, when known, `retryAfterSeconds` or `resetAt`:
 

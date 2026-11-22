@@ -94,11 +94,11 @@ The Chrome extension's network log reports SSE responses as 503; a direct `fetch
   - A recording that hits 60 s is sent automatically, without a confirmation.
   - The client sends no `expectedPayer` until the settings have loaded, or when they fail to load. The server then uses the stored mode.
   - `AGENTS.md` is untracked in the working tree and was not committed.
+- **Closed after the security review (2026-11-22):** the review found no exploitable key or connection-string exposure. Two follow-ups are done. A malformed JSON body (for example on `PUT /key`) now gets a fixed 400 `invalid_json`, and nothing from the body is logged (`middleware/errorHandler.js`, plus `err.body` redaction). Expected `ProviderError`s below 500 are logged at `warn` without a stack (`logPipelineError`).
 - **Closed in step 5:** the manual §11 check; error-turn actions now hide once used (or when the payer changes); a voice `settings_changed` offers Resend with the same recording; the personal client is evicted on key delete and logout.
 - **New (5):**
   - Personal-client eviction happens only in the process that handled the request (harmless; see `docs/DEPLOYMENT.md`).
   - Token counts in the sidebar stay rounded ("14K"); voice is shown in exact seconds.
-  - An exhausted allowance is logged as `ERROR Query pipeline error` with a stack trace, although it's an expected 429. Consider logging `ProviderError`s at `warn` without the stack.
   - Unrelated to BYOK: count and quantity charts are labelled as money ("Total $150").
 - `settle` is awaited in the `finally`, so each managed attempt costs one extra ledger write after the Groq call. A store outage there is only logged and the estimate stays charged.
 - `GET /api/provider-settings` reads the ledger on every call. The client doesn't poll it: `useChat` invalidates it once after each query or voice response, and the query has a 30 s `staleTime`.

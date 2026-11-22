@@ -114,49 +114,28 @@ export default function Composer({
   onSubmit,
   busy = false,
   draft,
-  onDraftConsumed,
+  onDraftChange,
+  textareaRef,
   voice,
   scope,
   model,
 }) {
-  const [value, setValue] = useState('');
-  const taRef = useRef(null);
   const placement = variant === 'hero' ? 'bottom' : 'top';
   const recording = Boolean(voice?.isRecording);
   const elapsed = useElapsed(recording);
 
-  // External drafts ("Edit question") land in the textarea: adopt during render, focus after commit.
-  const [adoptedDraft, setAdoptedDraft] = useState(null);
-  if (draft != null && draft !== adoptedDraft) {
-    setAdoptedDraft(draft);
-    setValue(draft);
-  } else if (draft == null && adoptedDraft != null) {
-    setAdoptedDraft(null);
-  }
-  useEffect(() => {
-    if (draft == null) return;
-    onDraftConsumed?.();
-    requestAnimationFrame(() => {
-      const ta = taRef.current;
-      if (ta) {
-        ta.focus();
-        ta.setSelectionRange(ta.value.length, ta.value.length);
-      }
-    });
-  }, [draft, onDraftConsumed]);
-
   useLayoutEffect(() => {
-    const ta = taRef.current;
+    const ta = textareaRef.current;
     if (!ta) return;
     ta.style.height = 'auto';
     ta.style.height = `${Math.min(ta.scrollHeight, 208)}px`;
-  }, [value, recording]);
+  }, [draft, recording, textareaRef]);
 
-  const canSend = value.trim().length > 0 && !busy;
+  const canSend = draft.trim().length > 0 && !busy;
   const submit = () => {
     if (!canSend) return;
-    onSubmit(value.trim());
-    setValue('');
+    onSubmit(draft.trim());
+    onDraftChange('');
   };
 
   const selected = scope?.selectedCollections || [];
@@ -198,10 +177,10 @@ export default function Composer({
           <label className="block px-5 pt-4">
             <span className="sr-only">Question</span>
             <textarea
-              ref={taRef}
+              ref={textareaRef}
               rows={variant === 'hero' ? 2 : 1}
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
+              value={draft}
+              onChange={(e) => onDraftChange(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                   e.preventDefault();

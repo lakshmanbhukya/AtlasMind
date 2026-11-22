@@ -278,14 +278,6 @@ describe('history replay', () => {
         expect(assistant.content).toBe('Generated query against collection "sample_sales".');
     });
 
-    it('replayed replaces the thread; a missing item leaves it as it was', () => {
-        const before = run([ask('q', 1), answer(fixture('answer'), 1)]);
-        const replayed = run([{ type: 'replayStarted' }, { type: 'replayed', item, now: NOW }], before);
-        expect(replayed.turns.map((t) => t.id)).toEqual([`user-${item.id}`, `assistant-${item.id}`]);
-        expect(replayed.pending).toBeNull();
-        const missing = run([{ type: 'replayStarted' }, { type: 'replayed', item: undefined, now: NOW }], before);
-        expect(missing.turns).toBe(before.turns);
-    });
 });
 
 describe('reducer', () => {

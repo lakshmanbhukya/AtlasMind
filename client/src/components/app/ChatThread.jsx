@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useChat } from '../../hooks/useChat';
+import { DEFAULT_MODEL_ID } from '../../lib/models';
 import { useVoice } from '../../hooks/useVoice';
 import { pinToDashboard } from '../../services/api';
 import { questionOf, answerableClarificationId, pendingLabel } from '../../lib/conversation';
@@ -21,21 +22,50 @@ const HIGHLIGHT = ['ring-2', 'ring-vg-accent', 'ring-offset-8', 'ring-offset-vg-
  * The conversation: empty-state home, or the turn list with a docked composer.
  * Follow-ups stack in the current session thread; a history item replays as one turn.
  */
-export default function ChatThread({
+export default function ChatThread(props) {
+  const [chosenModel, setSelectedModel] = useState(DEFAULT_MODEL_ID);
+  const [drafts, setDrafts] = useState(() => new Map());
+  const historyId = props.selectedHistoryItem?.id ?? null;
+  const updateDraft = (text) => {
+    setDrafts((previous) => {
+      const next = new Map(previous);
+      if (text) next.set(historyId, text);
+      else next.delete(historyId);
+      return next;
+    });
+  };
+
+  return (
+    <Conversation
+      key={historyId}
+      {...props}
+      chosenModel={chosenModel}
+      setSelectedModel={setSelectedModel}
+      draft={drafts.get(historyId) ?? ''}
+      onDraftChange={updateDraft}
+    />
+  );
+}
+
+function Conversation({
+  draft,
+  onDraftChange,
+  chosenModel,
+  setSelectedModel,
   connectionMeta,
   schema,
-  highlightedMessageId,
+  selectedHistoryItem,
   onQuerySuccess,
   onPinAdded,
   scope,
   onRequestKeyEntry,
 }) {
+  const highlightedMessageId = selectedHistoryItem?.id;
   const {
     messages,
     pending,
     pendingStage,
     selectedModel,
-    setSelectedModel,
     models,
     provider,
     sendMessage,
@@ -45,8 +75,8 @@ export default function ChatThread({
     resolveTurnActions,
     approveWrite,
     discardApproval,
-  } = useChat(highlightedMessageId, onQuerySuccess, connectionMeta?.connectionId);
-  const [draft, setDraft] = useState(null);
+  } = useChat(selectedHistoryItem, onQuerySuccess, connectionMeta?.connectionId, chosenModel);
+  const textareaRef = useRef(null);
   const endRef = useRef(null);
 
   const busy = pending !== null;
@@ -168,7 +198,8 @@ export default function ChatThread({
       onSubmit={ask}
       busy={busy}
       draft={draft}
-      onDraftConsumed={() => setDraft(null)}
+      onDraftChange={onDraftChange}
+      textareaRef={textareaRef}
       voice={{
         isRecording,
         isProcessing: voicePending,
@@ -192,6 +223,17 @@ export default function ChatThread({
       />
     );
   }
+
+  const editQuestion = (text) => {
+    onDraftChange(text);
+    requestAnimationFrame(() => {
+      const textarea = textareaRef.current;
+      if (textarea) {
+        textarea.focus();
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+      }
+    });
+  };
 
   const renderAssistant = (msg) => {
     switch (msg.kind) {
@@ -219,7 +261,7 @@ export default function ChatThread({
           />
         );
       case 'blocked':
-        return <BlockedTurn message={msg} onEditQuestion={setDraft} />;
+        return <BlockedTurn message={msg} onEditQuestion={editQuestion} />;
       case 'error':
         return (
           <ErrorTurn

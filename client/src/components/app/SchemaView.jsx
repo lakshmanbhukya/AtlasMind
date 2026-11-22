@@ -13,7 +13,7 @@ function formatSample(sample) {
 }
 
 /** Schema explorer: every collection with its document count and sampled fields. */
-export default function SchemaView({ schema, isLoading, error, onRefresh, dbName }) {
+export default function SchemaView({ schema, isLoading, isRefreshing, error, onRefresh, dbName }) {
   const [q, setQ] = useState('');
   const [open, setOpen] = useState({});
   const collections = useMemo(() => schema?.collections || [], [schema]);
@@ -32,8 +32,8 @@ export default function SchemaView({ schema, isLoading, error, onRefresh, dbName
             <Database size={19} className="text-vg-text-2" aria-hidden="true" />
             Schema explorer
           </h1>
-          <TurnButton variant="outline" onClick={onRefresh} disabled={isLoading}>
-            <RefreshCw size={15} className={cn('text-vg-text-2', isLoading && 'animate-spin')} aria-hidden="true" />
+          <TurnButton variant="outline" onClick={onRefresh} disabled={isLoading || isRefreshing}>
+            <RefreshCw size={15} className={cn('text-vg-text-2', (isLoading || isRefreshing) && 'animate-spin')} aria-hidden="true" />
             Refresh schema
           </TurnButton>
         </div>

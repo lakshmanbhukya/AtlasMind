@@ -93,7 +93,7 @@ function HistoryRow({ item, active, onSelect, onRename, onTogglePin, onDelete })
     >
       <button
         type="button"
-        onClick={() => onSelect(item.id)}
+        onClick={() => onSelect(item)}
         aria-current={active ? 'true' : undefined}
         title={item.query}
         className={cn('h-full flex-1 min-w-0 pl-3 pr-9 rounded-lg text-left truncate', focusRing)}

@@ -27,7 +27,7 @@ export default function AppShell({
   onNewQuery,
   history,
   historyLoading,
-  highlightedMessageId,
+  selectedHistoryItem,
   onSelectHistory,
   onRenameHistory,
   onTogglePin,
@@ -77,7 +77,7 @@ export default function AppShell({
     if (isMobile) closeDrawer();
   };
 
-  const { schema, isLoading: schemaLoading, error: schemaError, refreshSchema } = schemaState;
+  const { schema, isLoading: schemaLoading, isRefreshing, error: schemaError, refreshSchema } = schemaState;
   const collectionCount = Array.isArray(schema?.collections) ? schema.collections.length : undefined;
   const scopeWithDialog = { ...scope, collections: schema?.collections || [], onManageWorkspaces: () => setWorkspacesOpen(true) };
 
@@ -104,7 +104,7 @@ export default function AppShell({
             onOpenWorkspaces={afterNav(() => setWorkspacesOpen(true))}
             history={history}
             historyLoading={historyLoading}
-            activeHistoryId={activeView === 'chat' ? highlightedMessageId : null}
+            activeHistoryId={activeView === 'chat' ? selectedHistoryItem?.id : null}
             onSelectHistory={afterNav(onSelectHistory)}
             onRenameHistory={onRenameHistory}
             onTogglePin={onTogglePin}
@@ -134,7 +134,7 @@ export default function AppShell({
           </ErrorBoundary>
         ) : activeView === 'schema' ? (
           <ErrorBoundary label="Schema explorer">
-            <SchemaView schema={schema} isLoading={schemaLoading} error={schemaError} onRefresh={refreshSchema} dbName={connectionMeta?.dbName} />
+            <SchemaView schema={schema} isLoading={schemaLoading} isRefreshing={isRefreshing} error={schemaError} onRefresh={refreshSchema} dbName={connectionMeta?.dbName} />
           </ErrorBoundary>
         ) : (
           <ErrorBoundary label="Chat">
@@ -142,7 +142,7 @@ export default function AppShell({
               key={chatKey}
               connectionMeta={connectionMeta}
               schema={schema}
-              highlightedMessageId={highlightedMessageId}
+              selectedHistoryItem={selectedHistoryItem}
               onQuerySuccess={onQuerySuccess}
               onPinAdded={onPinAdded}
               scope={scopeWithDialog}

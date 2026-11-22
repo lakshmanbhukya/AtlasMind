@@ -268,28 +268,83 @@ test.describe('Chat thread', () => {
     await expect(userBubbles(page)).toHaveCount(1);
   });
 
-  test('history replay renders the stored answer and highlights it', async ({ page }) => {
-    await stubApi(page, []);
-    const item = fixture('history').data[0];
+  test('history selection replays locally and a sidebar refresh preserves follow-ups', async ({ page }) => {
+    await stubApi(page, [{ body: fixture('answer') }]);
+    const first = fixture('history').data[0];
+    const second = { ...first, id: 'second', query: 'Second saved question' };
+    let reads = 0;
+    await page.route('**/api/query/history', (route) => {
+      reads++;
+      return route.fulfill({ json: { data: [first, second] } });
+    });
+    await page.route('**/api/query/history/second', (route) => route.fulfill({ json: { success: true } }));
     await openApp(page);
-
-    await page.getByRole('button', { name: item.query }).first().click();
-    const answer = page.locator(`#msg-assistant-${item.id}`);
-    await expect(answer).toBeVisible();
+    const row = (name: string) => page.getByRole('button', { name, exact: true });
+    await expect(row(first.query)).toBeVisible();
+    const initialReads = reads;
+    const composer = page.getByRole('textbox', { name: 'Question' });
+    await row(first.query).click();
+    await composer.fill('Draft for the first question');
+    await row(second.query).click();
+    await expect(composer).toHaveValue('');
+    await composer.fill('Follow up');
+    await row(first.query).click();
+    await expect(composer).toHaveValue('Draft for the first question');
+    await row(second.query).click();
+    await expect(composer).toHaveValue('Follow up');
+    const answer = page.locator('#msg-assistant-second');
     await expect(answer).toHaveClass(/ring-2/);
     await expect(answer.getByText('Read-only verified')).toBeVisible();
-    await expect(page.locator(`#msg-user-${item.id}`)).toContainText(item.query);
+    expect(reads).toBe(initialReads);
+
+    await composer.press('Enter');
+    await expect(composer).toHaveValue('');
+    await expect.poll(() => reads).toBeGreaterThan(initialReads);
+    await expect(userBubbles(page)).toHaveCount(2);
+    await row('New query').click();
+    await expect(answer).toHaveCount(0);
+    await row(second.query).click();
+    await row('Options for ' + second.query).click();
+    await page.getByRole('menuitem', { name: 'Delete' }).click();
+    await expect(answer).toHaveCount(0);
+    await expect(row(second.query)).toHaveCount(0);
+  });
+
+  test('schema refresh keeps the previous schema on failure and retries with fresh fields', async ({ page }) => {
+    await stubApi(page, []);
+    let attempts = 0;
+    const schema = fixture('schema');
+    schema.data.collections[0].fields.push({ name: 'new_field', type: 'string' });
+    await page.route('**/api/schema/refresh', (route) => {
+      attempts++;
+      return attempts === 1
+        ? route.fulfill({ status: 500, json: { success: false } })
+        : route.fulfill({ json: schema });
+    });
+    await openApp(page);
+    await page.getByRole('button', { name: 'Schema explorer' }).click();
+    await page.getByRole('button', { name: /sample_sales/ }).click();
+    const refresh = page.getByRole('button', { name: 'Refresh schema' });
+    await refresh.click();
+    await expect(page.getByRole('alert')).toBeVisible();
+    await expect(page.getByRole('cell', { name: 'region' })).toBeVisible();
+    await refresh.click();
+    await expect(page.getByRole('cell', { name: 'new_field' })).toBeVisible();
+    await expect(page.getByRole('alert')).toHaveCount(0);
+    expect(attempts).toBe(2);
   });
 });
 
 /** A fake microphone and MediaRecorder: Start records, Send yields a small webm blob. */
-async function fakeMicrophone(page: Page) {
+async function fakeMicrophone(page: Page, deferPermission = false) {
   await page.addInitScript({
     content: `(() => {
-      const stream = { getTracks: () => [{ stop() {} }] };
+      window.stoppedTracks = 0;
+      const stream = { getTracks: () => [{ stop() { window.stoppedTracks++; } }] };
+      const permission = new Promise(resolve => { window.grantMicrophone = () => resolve(stream); });
       Object.defineProperty(navigator, 'mediaDevices', {
         configurable: true,
-        value: { getUserMedia: async () => stream },
+        value: { getUserMedia: async () => ${deferPermission} ? permission : stream },
       });
       class FakeRecorder {
         static isTypeSupported() { return true; }
@@ -305,6 +360,36 @@ async function fakeMicrophone(page: Page) {
     })();`,
   });
 }
+
+for (const deferPermission of [false, true]) {
+  test(`leaving chat releases the microphone with permission ${deferPermission ? 'pending' : 'granted'}`, async ({ page }) => {
+    await fakeMicrophone(page, deferPermission);
+    const { voiceRequests } = await stubApi(page, []);
+    await openApp(page);
+    await page.clock.install();
+    await page.getByRole('button', { name: 'Start voice question' }).click();
+    if (!deferPermission) await expect(page.getByRole('button', { name: 'Cancel', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Schema explorer' }).click();
+    await expect(page.getByRole('button', { name: 'Refresh schema' })).toBeVisible();
+    await page.evaluate(() => (window as unknown as { grantMicrophone(): void }).grantMicrophone());
+    await expect.poll(() => page.evaluate(() => (window as unknown as { stoppedTracks: number }).stoppedTracks)).toBe(1);
+    await page.clock.fastForward(61_000);
+    expect(voiceRequests).toHaveLength(0);
+  });
+}
+
+test('voice limit sends once and releases the microphone', async ({ page }) => {
+  await fakeMicrophone(page);
+  const { voiceRequests } = await stubApi(page, [], undefined, { voiceReplies: [{ body: fixture('voice-answer') }] });
+  await openApp(page);
+  await page.clock.install();
+  await page.getByRole('button', { name: 'Start voice question' }).click();
+  await expect(page.getByRole('button', { name: 'Cancel', exact: true })).toBeVisible();
+  await page.clock.fastForward(60_000);
+  await expect(conversation(page).getByText('Read-only verified')).toBeVisible();
+  expect(voiceRequests).toHaveLength(1);
+  expect(await page.evaluate(() => (window as unknown as { stoppedTracks: number }).stoppedTracks)).toBe(1);
+});
 
 test.describe('Groq payer', () => {
   const payerPanel = (page: Page) => page.getByRole('region', { name: 'Groq usage' });

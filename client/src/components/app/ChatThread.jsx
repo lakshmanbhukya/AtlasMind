@@ -28,6 +28,7 @@ export default function ChatThread({
   onQuerySuccess,
   onPinAdded,
   scope,
+  onRequestKeyEntry,
 }) {
   const {
     messages,
@@ -35,12 +36,13 @@ export default function ChatThread({
     pendingStage,
     selectedModel,
     setSelectedModel,
+    models,
+    provider,
     sendMessage,
     sendVoiceMessage,
     approveWrite,
     discardApproval,
-  } = useChat(highlightedMessageId, onQuerySuccess);
-  const { isRecording, startRecording, stopRecording, cancelRecording, error: voiceError } = useVoice();
+  } = useChat(highlightedMessageId, onQuerySuccess, connectionMeta?.connectionId);
   const [draft, setDraft] = useState(null);
   const endRef = useRef(null);
 
@@ -82,6 +84,31 @@ export default function ChatThread({
 
   const ask = useCallback((text) => sendMessage(text, buildScopeOptions()), [sendMessage, buildScopeOptions]);
 
+  // A recording that reaches the 60 s limit is sent as if Send was pressed.
+  const sendRecording = useCallback(
+    (blob) => sendVoiceMessage(blob, buildScopeOptions()),
+    [sendVoiceMessage, buildScopeOptions]
+  );
+  const { isRecording, startRecording, stopRecording, cancelRecording, error: voiceError } = useVoice({ onLimit: sendRecording });
+
+  // Error turn actions for Groq provider failures; Retry (or Resend) re-asks afterwards.
+  const { setMode: setProviderMode, refresh: refreshProvider } = provider;
+  const handleProviderAction = useCallback(
+    async (action) => {
+      if (action === 'enterKey' || action === 'updateKey') {
+        onRequestKeyEntry?.();
+      } else if (action === 'useManaged') {
+        try {
+          await setProviderMode('managed');
+        } catch (err) {
+          if (import.meta.env.DEV) console.warn('Could not switch to the AtlasMind allowance:', err?.message);
+          refreshProvider();
+        }
+      }
+    },
+    [onRequestKeyEntry, setProviderMode, refreshProvider]
+  );
+
   const handleClarify = (msg) => (clarifications) =>
     sendMessage(questionOf(msg), { ...buildScopeOptions(), clarifications, skipUserMessage: true });
   const handleBypass = (msg) => () =>
@@ -107,7 +134,7 @@ export default function ChatThread({
   const voiceSend = async () => {
     const blob = await stopRecording();
     if (!blob) return;
-    await sendVoiceMessage(blob, buildScopeOptions());
+    await sendRecording(blob);
   };
 
   // The newest clarification is the only one still answerable.
@@ -136,7 +163,7 @@ export default function ChatThread({
         onSend: voiceSend,
       }}
       scope={scope}
-      model={{ value: selectedModel, onChange: setSelectedModel }}
+      model={{ value: selectedModel, onChange: setSelectedModel, options: models }}
     />
   );
 
@@ -183,6 +210,7 @@ export default function ChatThread({
           <ErrorTurn
             message={msg}
             disabled={busy}
+            onAction={handleProviderAction}
             onRetry={msg.naturalLanguage ? () => sendMessage(msg.naturalLanguage, { ...buildScopeOptions(), ...(msg.retryOptions || {}), skipUserMessage: true }) : undefined}
           />
         );

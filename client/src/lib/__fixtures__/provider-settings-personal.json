@@ -1,0 +1,1 @@
+{"success":true,"mode":"personal","hasKey":true,"keyLast4":"CRET","keyExpiresAt":"2026-11-20T08:00:00.000Z","managedAllowance":{"tokensRemaining":18400,"audioSecondsRemaining":540,"resetAt":"2026-11-14T00:00:00.000Z","mode":"enforce"},"allowedModels":["openai/gpt-oss-120b","openai/gpt-oss-20b","groq/compound","qwen/qwen3.8-27b","qwen/qwen3.6-27b"]}

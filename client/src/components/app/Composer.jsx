@@ -4,6 +4,9 @@ import { cn } from '../../lib/utils';
 import { focusRing } from '../ui/vg/primitives';
 import { Menu, MenuItem, MenuLabel } from './Menu';
 import { ScopePicker, ModelPicker } from './ComposerPickers';
+import { MAX_RECORDING_SECONDS } from '../../hooks/useVoice';
+
+const clock = (secs) => `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
 
 const WAVE = [6, 10, 16, 9, 20, 13, 7, 18, 24, 12, 8, 15, 22, 10, 6, 14, 19, 9, 12, 7, 17, 11, 6, 13];
 
@@ -176,7 +179,10 @@ export default function Composer({
             <span className="w-2 h-2 rounded-full bg-vg-red animate-pulse motion-reduce:animate-none" aria-hidden="true" />
             <span className="text-[14px] text-vg-text">Listening</span>
             <span className="font-code text-[12.5px] text-vg-text-3 tabular-nums">
-              {String(Math.floor(elapsed / 60)).padStart(1, '0')}:{String(elapsed % 60).padStart(2, '0')}
+              {clock(Math.min(elapsed, MAX_RECORDING_SECONDS))}
+              <span className="sr-only"> of </span>
+              <span aria-hidden="true"> / </span>
+              {clock(MAX_RECORDING_SECONDS)}
             </span>
             <div aria-hidden="true" className="flex-1 h-8 flex items-center gap-[3px] overflow-hidden">
               {WAVE.map((h, i) => (
@@ -286,7 +292,7 @@ export default function Composer({
           ) : (
             <span />
           )}
-          {model && <ModelPicker value={model.value} onChange={model.onChange} placement={placement} />}
+          {model && <ModelPicker value={model.value} onChange={model.onChange} models={model.options} placement={placement} />}
         </div>
       )}
     </div>

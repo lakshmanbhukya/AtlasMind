@@ -44,12 +44,20 @@ export default function AppShell({
   const [desktopOpen, setDesktopOpen] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [workspacesOpen, setWorkspacesOpen] = useState(false);
+  const [keyFormOpen, setKeyFormOpen] = useState(false);
 
   const sidebarVisible = isMobile ? drawerOpen : desktopOpen;
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
   const toggleSidebar = () => (isMobile ? setDrawerOpen((o) => !o) : setDesktopOpen((o) => !o));
 
   useDismiss(isMobile && drawerOpen, closeDrawer, { outside: false });
+
+  // A chat turn ("Use your own Groq key", "Update key") opens the key form in the sidebar.
+  const requestKeyEntry = useCallback(() => {
+    if (isMobile) setDrawerOpen(true);
+    else setDesktopOpen(true);
+    setKeyFormOpen(true);
+  }, [isMobile]);
 
   // On phones, any sidebar navigation closes the drawer.
   const afterNav = (fn) => (...args) => {
@@ -91,6 +99,8 @@ export default function AppShell({
             onDeleteHistory={onDeleteHistory}
             connectionMeta={connectionMeta}
             onLogout={onLogout}
+            keyFormOpen={keyFormOpen}
+            onKeyFormOpenChange={setKeyFormOpen}
           />
         </ErrorBoundary>
       </div>
@@ -123,6 +133,7 @@ export default function AppShell({
               onQuerySuccess={onQuerySuccess}
               onPinAdded={onPinAdded}
               scope={scopeWithDialog}
+              onRequestKeyEntry={requestKeyEntry}
             />
           </ErrorBoundary>
         )}

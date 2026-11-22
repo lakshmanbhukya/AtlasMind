@@ -47,7 +47,8 @@ export async function listDatabases(connectionString) {
 /**
  * Send a natural language query → MQL → execute → visualize.
  * @param {{ text: string, model?: string, collections?: string[], bypassAmbiguity?: boolean,
- *           clarifications?: object, workspaceId?: string }} payload
+ *           clarifications?: object, workspaceId?: string, expectedPayer?: 'managed' | 'personal' }} payload
+ *   `expectedPayer` is the payer the user saw; the server answers 409 settings_changed when it no longer matches.
  * @returns {Promise<object>} { aiMessage, pipeline, results, chartType, ... }
  */
 export async function sendQuery(payload) {
@@ -109,7 +110,8 @@ export async function approveWriteQuery(approvalToken) {
  * Send audio blob for speech-to-query.
  * @param {Blob} audioBlob
  * @param {string} [model]
- * @param {{ collections?: string[], workspaceId?: string }} [scopeOptions] - same scope as sendQuery
+ * @param {{ collections?: string[], workspaceId?: string, expectedPayer?: 'managed' | 'personal' }} [scopeOptions]
+ *   same scope as sendQuery, plus the payer the user saw (409 settings_changed when it no longer matches)
  * @returns {Promise<object>}
  */
 export async function sendVoice(audioBlob, model, scopeOptions = {}) {
@@ -124,6 +126,9 @@ export async function sendVoice(audioBlob, model, scopeOptions = {}) {
     }
     if (scopeOptions.workspaceId) {
         formData.append('workspaceId', scopeOptions.workspaceId);
+    }
+    if (scopeOptions.expectedPayer) {
+        formData.append('expectedPayer', scopeOptions.expectedPayer);
     }
     const { data } = await api.post('voice', formData, {
         headers: { 'Content-Type': undefined },
@@ -275,6 +280,46 @@ export async function updateWorkspace(id, updateData) {
 export async function deleteWorkspace(id) {
     const { data } = await api.delete(`workspaces/${id}`);
     return data.data || data;
+}
+
+// ─── Provider settings (who pays for Groq calls) ────────────────────────────
+
+/**
+ * This sign-in's Groq settings. Never contains the key itself.
+ * @returns {Promise<{ mode: 'managed' | 'personal', hasKey: boolean, keyLast4: string | null,
+ *   keyExpiresAt: string | null, allowedModels: string[], requiresReconnectForPersonal?: boolean,
+ *   managedAllowance: { tokensRemaining: number | null, audioSecondsRemaining: number | null,
+ *   resetAt: string, mode: 'enforce' | 'observe' | 'off' } }>}
+ */
+export async function getProviderSettings() {
+    const { data } = await api.get('provider-settings');
+    return data;
+}
+
+/**
+ * Validate and store a personal Groq key for this sign-in, and switch to it.
+ * An invalid key rejects with 422 `provider_key_invalid` and leaves the settings unchanged.
+ * @param {string} apiKey
+ * @returns {Promise<object>} the new settings (as getProviderSettings)
+ */
+export async function saveProviderKey(apiKey) {
+    const { data } = await api.put('provider-settings/key', { apiKey });
+    return data;
+}
+
+/**
+ * @param {'managed' | 'personal'} mode - `personal` needs a stored key
+ * @returns {Promise<object>} the new settings
+ */
+export async function setProviderMode(mode) {
+    const { data } = await api.patch('provider-settings', { mode });
+    return data;
+}
+
+/** Remove the personal key and switch back to the AtlasMind allowance. @returns {Promise<object>} the new settings */
+export async function deleteProviderKey() {
+    const { data } = await api.delete('provider-settings/key');
+    return data;
 }
 
 // ─── Auth / connection API ──────────────────────────────────────────────────

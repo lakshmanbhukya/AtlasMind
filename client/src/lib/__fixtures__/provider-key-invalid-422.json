@@ -1,0 +1,1 @@
+{"success":false,"error":{"code":"provider_key_invalid","message":"Your Groq API key was rejected. Update the key or switch to the AtlasMind allowance.","payer":"personal"}}

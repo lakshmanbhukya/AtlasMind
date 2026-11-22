@@ -100,11 +100,12 @@ export function ScopePicker({
   );
 }
 
-/** "GPT OSS 120B ⌄" */
-export function ModelPicker({ value, onChange, placement = 'top' }) {
+/** "GPT OSS 120B ⌄". `models` is the list the current payer may use (default: all). */
+export function ModelPicker({ value, onChange, models = AVAILABLE_MODELS, placement = 'top' }) {
   const [open, setOpen] = useState(false);
   const btnRef = useRef(null);
-  const current = AVAILABLE_MODELS.find((m) => m.id === value) || AVAILABLE_MODELS[0];
+  const list = models.length > 0 ? models : AVAILABLE_MODELS;
+  const current = list.find((m) => m.id === value) || list[0];
 
   return (
     <div className="relative shrink-0">
@@ -127,7 +128,7 @@ export function ModelPicker({ value, onChange, placement = 'top' }) {
         label="Model"
         className={cn('right-0 w-[280px]', placement === 'top' ? 'bottom-10' : 'top-10')}
       >
-        {AVAILABLE_MODELS.map((m) => {
+        {list.map((m) => {
           const on = m.id === current.id;
           return (
             <MenuItem
@@ -141,10 +142,12 @@ export function ModelPicker({ value, onChange, placement = 'top' }) {
               hint={on ? <Check size={14} className="text-vg-accent" aria-hidden="true" /> : null}
             >
               <span className="block">{m.name}</span>
-              <span className="flex gap-2 text-[12px] text-vg-text-3">
-                <span>{m.vendor}</span>
-                <span className="text-vg-text-2">{m.speed}</span>
-              </span>
+              {(m.vendor || m.speed) && (
+                <span className="flex gap-2 text-[12px] text-vg-text-3">
+                  <span>{m.vendor}</span>
+                  <span className="text-vg-text-2">{m.speed}</span>
+                </span>
+              )}
             </MenuItem>
           );
         })}

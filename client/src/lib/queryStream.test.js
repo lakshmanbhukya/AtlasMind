@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { readQueryStream } from './queryStream';
-import { blockedBodyFromError } from './conversation';
+import { blockedBodyFromError, errorTurn } from './conversation';
 import { apiErrorMessage } from './apiError';
 import { sseEvent, sseStream, STAGES } from './__fixtures__/sse';
 
@@ -52,6 +52,23 @@ describe('readQueryStream', () => {
         const body = { success: false, error: { code: 'too_many_requests', message: 'Slow down' } };
         const err = await readQueryStream(json(429, body)).catch((e) => e);
         expect(err.response).toEqual({ status: 429, data: body });
+    });
+
+    it('a provider error has the same body before the stream (JSON) and inside it (result event)', async () => {
+        const body = fixture('allowance-exhausted-429');
+        const inStream = await readQueryStream(streamed([sseEvent('result', { status: 429, body })])).catch((e) => e);
+        const preStream = await readQueryStream(json(429, body)).catch((e) => e);
+        expect(inStream.response).toEqual({ status: 429, data: body });
+        expect(preStream.response).toEqual(inStream.response);
+        const at = { id: 'a1', timestamp: new Date(0), question: 'q' };
+        expect(errorTurn(inStream, at)).toEqual(errorTurn(preStream, at));
+        expect(errorTurn(inStream, at)).toMatchObject({ errorCode: 'managed_allowance_exhausted', resetAt: body.error.resetAt });
+    });
+
+    it('keeps retryAfterSeconds of a streamed provider_rate_limited', async () => {
+        const body = fixture('provider-rate-limited-429');
+        const err = await readQueryStream(streamed([sseStream({ status: 429, body, stages: ['scope', 'generating'] })])).catch((e) => e);
+        expect(err.response.data.error).toMatchObject({ code: 'provider_rate_limited', retryAfterSeconds: 12, payer: 'personal' });
     });
 
     it('rejects with a readable error when the stream ends without a result', async () => {

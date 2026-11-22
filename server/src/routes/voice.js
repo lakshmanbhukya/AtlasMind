@@ -1,7 +1,7 @@
 // @ts-check
 const express = require('express');
 const multer = require('multer');
-const { transcribeAudio } = require('../services/groqService');
+const { transcribeAudio, resolveProvider } = require('../services/groqService');
 const { QueryExecutionEngine } = require('../services/queryExecutionEngine');
 const { sendOutcome, sendError } = require('./engineHttp');
 const { forRequest } = require('../utils/logger');
@@ -79,10 +79,17 @@ router.post('/', upload.single('audio'), async (req, res) => {
         }
         const { collections } = parsed;
 
-        forRequest(req).info({ sizeBytes: size }, 'Transcribing audio');
+        // One payer for both Whisper and the text stage; 409 settings_changed before any Groq call.
+        const provider = await resolveProvider({
+            connectionId,
+            sessionId: req.sessionId,
+            expectedPayer: req.body?.expectedPayer,
+        });
+
+        forRequest(req).info({ sizeBytes: size, payer: provider.payer }, 'Transcribing audio');
 
         // Step 1: Transcribe audio → text
-        const transcription = await transcribeAudio(buffer, originalname);
+        const transcription = await transcribeAudio(buffer, originalname, provider);
         const queryText = transcription.text?.trim();
 
         if (!queryText) {
@@ -104,6 +111,7 @@ router.post('/', upload.single('audio'), async (req, res) => {
             collections,
             workspaceId,
             source: 'voice',
+            provider,
         });
 
         // Step 3: Attach voice transcription metadata for client compatibility

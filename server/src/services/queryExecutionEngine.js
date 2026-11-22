@@ -60,6 +60,8 @@ class QueryExecutionEngine {
      * @param {object} [inputParams] - Input params if context was provided as 1st arg
      *   Optional `onProgress(stage)` receives 'scope', 'schema', 'ambiguity', 'generating',
      *   'safety' and 'executing' as the query reaches each stage (route-supplied).
+     *   Optional `provider` (groqService.resolveProvider) says who pays for the Groq call;
+     *   like onProgress it is route-supplied, never read from a request body.
      * @returns {Promise<QueryOutcome>}
      */
     static async executeNaturalLanguageQuery(contextOrParams, inputParams) {

@@ -4,9 +4,12 @@ const express = require('express');
 const request = require('supertest');
 
 // Mock groqService transcribeAudio and generateMQL
+const mockProvider = { payer: 'managed', client: {}, allowedModels: ['openai/gpt-oss-120b'], defaultModel: 'openai/gpt-oss-120b' };
+const mockResolveProvider = jest.fn(async () => mockProvider);
 jest.mock('../services/groqService', () => ({
     transcribeAudio: jest.fn(),
     generateMQL: jest.fn(),
+    resolveProvider: (...args) => mockResolveProvider(...args),
 }));
 
 // Mock QueryExecutionEngine
@@ -458,6 +461,72 @@ describe('security headers (full app)', () => {
         expect(res.status).toBe(200);
         expect(res.headers['x-content-type-options']).toBe('nosniff');
         expect(res.headers['x-powered-by']).toBeUndefined();
+    });
+});
+
+describe('payer checks before any Groq call', () => {
+    const { ProviderError } = jest.requireActual('../services/engineErrors');
+    let app;
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        app = express();
+        app.use(express.json());
+        app.use((req, _res, next) => {
+            req.connectionId = 'payer-conn';
+            req.sessionId = 'sid-1';
+            next();
+        });
+        app.use('/api/query', queryRouter);
+        app.use('/api/voice', voiceRouter);
+    });
+
+    const settingsChanged = () => new ProviderError('settings_changed', 'Your Groq settings changed in another tab.', 409, { payer: 'managed' });
+
+    test('POST /api/query passes sessionId and expectedPayer, and the provider to the engine', async () => {
+        mockExecuteNaturalLanguageQuery.mockResolvedValueOnce({ type: 'success', data: { success: true } });
+        await request(app).post('/api/query').send({ text: 'q', expectedPayer: 'managed' });
+        expect(mockResolveProvider).toHaveBeenCalledWith({ connectionId: 'payer-conn', sessionId: 'sid-1', expectedPayer: 'managed' });
+        expect(mockExecuteNaturalLanguageQuery.mock.calls[0][0].provider).toBe(mockProvider);
+    });
+
+    test('settings_changed on POST /api/query answers 409 without running the engine', async () => {
+        mockResolveProvider.mockRejectedValueOnce(settingsChanged());
+        const res = await request(app).post('/api/query').send({ text: 'q', expectedPayer: 'personal' });
+        expect(res.status).toBe(409);
+        expect(res.body.error).toMatchObject({ code: 'settings_changed', payer: 'managed' });
+        expect(mockExecuteNaturalLanguageQuery).not.toHaveBeenCalled();
+    });
+
+    test('settings_changed on POST /api/voice makes no Whisper call', async () => {
+        mockResolveProvider.mockRejectedValueOnce(settingsChanged());
+        const res = await request(app)
+            .post('/api/voice')
+            .field('expectedPayer', 'personal')
+            .attach('audio', Buffer.from('fake audio data'), 'speech.webm');
+        expect(res.status).toBe(409);
+        expect(res.body.error.code).toBe('settings_changed');
+        expect(mockResolveProvider.mock.calls[0][0].expectedPayer).toBe('personal');
+        expect(transcribeAudio).not.toHaveBeenCalled();
+        expect(mockExecuteNaturalLanguageQuery).not.toHaveBeenCalled();
+    });
+
+    test('voice uses one provider for Whisper and the text stage', async () => {
+        transcribeAudio.mockResolvedValueOnce({ text: 'show orders', language: 'en', duration: 2 });
+        mockExecuteNaturalLanguageQuery.mockResolvedValueOnce({ type: 'success', data: { success: true } });
+        await request(app).post('/api/voice').attach('audio', Buffer.from('fake audio data'), 'speech.webm');
+        expect(transcribeAudio.mock.calls[0][2]).toBe(mockProvider);
+        expect(mockExecuteNaturalLanguageQuery.mock.calls[0][0].provider).toBe(mockProvider);
+    });
+});
+
+describe('origin check (full app)', () => {
+    const app = require('../index');
+
+    test('a foreign Origin gets 403 on a state-changing request', async () => {
+        const res = await request(app).post('/api/query').set('Origin', 'https://evil.example').send({ text: 'q' });
+        expect(res.status).toBe(403);
+        expect(res.body.error.code).toBe('origin_not_allowed');
     });
 });
 

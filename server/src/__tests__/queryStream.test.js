@@ -14,6 +14,11 @@ jest.mock('../services/queryExecutionEngine', () => ({
     },
 }));
 jest.mock('../db/connection', () => ({ getDb: jest.fn() }));
+const mockProvider = { payer: 'managed', client: {}, allowedModels: ['openai/gpt-oss-120b'], defaultModel: 'openai/gpt-oss-120b' };
+const mockResolveProvider = jest.fn(async () => mockProvider);
+jest.mock('../services/groqService', () => ({
+    resolveProvider: (...args) => mockResolveProvider(...args),
+}));
 
 const queryRouter = require('../routes/query');
 

@@ -1,6 +1,7 @@
 // @ts-check
 const express = require('express');
 const { QueryExecutionEngine } = require('../services/queryExecutionEngine');
+const { resolveProvider } = require('../services/groqService');
 const queryHistoryStore = require('../stores/queryHistoryStore');
 const { sendOutcome, sendError, outcomeStatus, errorResult } = require('./engineHttp');
 const { forRequest } = require('../utils/logger');
@@ -28,8 +29,12 @@ router.post('/', async (req, res) => {
             clarifications,
             bypassAmbiguity,
             isEdit,
+            expectedPayer,
         } = req.body;
         const connectionId = req.connectionId;
+
+        // Resolved once per request; 409 settings_changed before any Groq call.
+        const provider = await resolveProvider({ connectionId, sessionId: req.sessionId, expectedPayer });
 
         const outcome = await QueryExecutionEngine.executeNaturalLanguageQuery({
             connectionId,
@@ -43,6 +48,7 @@ router.post('/', async (req, res) => {
             isEdit,
             // Never forward an ExperimentConfig from a request body.
             source: 'query',
+            provider,
         });
 
         return sendOutcome(res, outcome);
@@ -75,6 +81,7 @@ router.post('/stream', async (req, res) => {
         clarifications,
         bypassAmbiguity,
         isEdit,
+        expectedPayer,
     } = req.body || {};
     const connectionId = req.connectionId;
 
@@ -102,6 +109,7 @@ router.post('/stream', async (req, res) => {
 
     let result;
     try {
+        const provider = await resolveProvider({ connectionId, sessionId: req.sessionId, expectedPayer });
         const outcome = await QueryExecutionEngine.executeNaturalLanguageQuery({
             connectionId,
             text,
@@ -114,6 +122,7 @@ router.post('/stream', async (req, res) => {
             isEdit,
             // Never forward an ExperimentConfig from a request body.
             source: 'query',
+            provider,
             onProgress: (stage) => send('progress', { stage }),
         });
         result = { status: outcomeStatus(outcome), body: outcome.data };

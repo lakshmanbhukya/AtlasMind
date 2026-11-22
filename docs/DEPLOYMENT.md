@@ -46,9 +46,7 @@ Set environment variables:
 
 Both are created on startup with their indexes; no migration is needed.
 
-- `provider_credentials`: one document per sign-in (`connectionId` + session `sid`) holding the encrypted personal key (AES-256-GCM, `ENCRYPTION_KEY`). A TTL index removes it when the session cookie expires; logout leaves a tombstone that the TTL removes later.
-  - Each server process caches one Groq client per sign-in for personal keys. Removing a key or logging out drops that cache entry only in the process that handled the request. With several instances this is harmless: every request reads and decrypts the stored key again, so a removed or revoked key is never used, and the stale entry is replaced or evicted later.
-- `groq_allowance`: one document per UTC day with installation and per-connection usage, removed by a TTL index 8 days after the day ends.
+- `provider_credentials`: one document per sign-in (`connectionId` + session `sid`) holding the encrypted personal key (AES-256-GCM, `ENCRYPTION_KEY`). A TTL index removes it when the session cookie expires; logout leaves a tombstone that the TTL removes later.- `groq_allowance`: one document per UTC day with installation and per-connection usage, removed by a TTL index 8 days after the day ends.
 
 Session cookies issued before this release have no `sid`. They keep working on the AtlasMind allowance; to store a personal key, the user disconnects and connects again.
 

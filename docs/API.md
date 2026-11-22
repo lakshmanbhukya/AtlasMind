@@ -441,7 +441,7 @@ Accepts `multipart/form-data` audio recordings and performs Whisper Large v3 Tur
 - `workspaceId` (optional): Saved workspace to scope the query to (same rules as `/api/query`).
 - `expectedPayer` (optional): `managed` or `personal`, as on `/api/query`. One payer covers both the transcription and the query.
 
-**Size limits**: uploads are capped at 25 MB. On the AtlasMind allowance (managed key) a recording over 5 MB is refused with 400 `upload_error` ("Recordings over 5 MB need your own Groq key.") before any Groq call. Each managed voice question reserves 60 seconds of the voice allowance and is settled at Whisper's reported duration (minimum 10 seconds); the client stops recording at 60 seconds.
+**Size limits**: uploads are capped at 25 MB. On the AtlasMind allowance (managed key) a recording over 5 MB is refused with 400 `upload_error` ("Recordings over 5 MB need your own Groq key.") before any Groq call. The client stops recording at 60 seconds.
 
 **Ambiguity Response**:
 If the transcribed speech is ambiguous, returns `{ success: true, needsClarification: true, transcript: "...", questions: [...] }`.

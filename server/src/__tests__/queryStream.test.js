@@ -4,7 +4,7 @@ const express = require('express');
 const request = require('supertest');
 
 const mockExecuteNaturalLanguageQuery = jest.fn();
-const { ScopeError, RateLimitError } = jest.requireActual('../services/engineErrors');
+const { ScopeError, RateLimitError, ProviderError } = jest.requireActual('../services/engineErrors');
 
 jest.mock('../services/queryExecutionEngine', () => ({
     ...jest.requireActual('../services/queryExecutionEngine'),
@@ -131,6 +131,31 @@ describe('POST /api/query/stream', () => {
         mockExecuteNaturalLanguageQuery.mockRejectedValueOnce(new RateLimitError('Too many requests'));
         const limited = parseEvents((await streamRequest(app)).body);
         expect(limited[0].data.status).toBe(429);
+    });
+
+    test('provider errors arrive in the result event with the same body as POST /', async () => {
+        const exhausted = new ProviderError('managed_allowance_exhausted', 'The AtlasMind allowance for today is used up.', 429,
+            { payer: 'managed', resetAt: '2026-11-23T00:00:00.000Z' });
+        mockExecuteNaturalLanguageQuery.mockRejectedValueOnce(exhausted);
+        const [a] = parseEvents((await streamRequest(app)).body);
+        expect(a).toEqual({ event: 'result', data: { status: 429, body: { success: false, error: {
+            code: 'managed_allowance_exhausted', message: exhausted.message, payer: 'managed', resetAt: '2026-11-23T00:00:00.000Z',
+        } } } });
+
+        mockExecuteNaturalLanguageQuery.mockRejectedValueOnce(new ProviderError('provider_rate_limited', 'Rate limited.', 429,
+            { payer: 'personal', retryAfterSeconds: 42 }));
+        const [b] = parseEvents((await streamRequest(app)).body);
+        expect(b.data).toEqual({ status: 429, body: { success: false, error: {
+            code: 'provider_rate_limited', message: 'Rate limited.', payer: 'personal', retryAfterSeconds: 42,
+        } } });
+    });
+
+    test('a ledger outage found while resolving the provider also arrives as the result event', async () => {
+        mockResolveProvider.mockRejectedValueOnce(new ProviderError('managed_accounting_unavailable', 'Cannot check.', 503, { payer: 'managed' }));
+        const events = parseEvents((await streamRequest(app)).body);
+        expect(events.at(-1).data.status).toBe(503);
+        expect(events.at(-1).data.body.error).toMatchObject({ code: 'managed_accounting_unavailable', payer: 'managed' });
+        expect(mockExecuteNaturalLanguageQuery).not.toHaveBeenCalled();
     });
 
     test('an unexpected error maps to 500 query_error', async () => {

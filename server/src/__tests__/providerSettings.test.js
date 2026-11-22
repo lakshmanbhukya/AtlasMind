@@ -8,7 +8,10 @@ const { Writable } = require('stream');
 const { createFakeCollection } = require('../../test-support/fakeMongo');
 
 let mockColl;
-jest.mock('../db/connection', () => ({ getDb: () => ({ collection: () => mockColl }) }));
+let mockLedger;
+jest.mock('../db/connection', () => ({
+    getDb: () => ({ collection: (name) => (name === 'groq_allowance' ? mockLedger : mockColl) }),
+}));
 jest.mock('../models/UserConnection', () => ({ getConnectionById: jest.fn() }));
 
 const groqService = require('../services/groqService');
@@ -44,6 +47,7 @@ let app;
 let validate;
 beforeEach(() => {
     mockColl = createFakeCollection({ unique: [['connectionId', 'sessionId']] });
+    mockLedger = createFakeCollection({ unique: [['_id']] });
     validate = jest.spyOn(groqService, 'validateApiKey').mockResolvedValue(undefined);
     app = buildApp();
 });
@@ -68,6 +72,36 @@ describe('GET /api/provider-settings', () => {
         expect(put.status).toBe(409);
         expect(put.body.error.code).toBe('reconnect_required');
         expect(validate).not.toHaveBeenCalled();
+    });
+
+    test('carries the managed allowance and the models the payer may pick', async () => {
+        const allowance = require('../services/allowance');
+        await allowance.createMeter('conn-1').reserveText({ promptChars: 3000, maxTokens: 0 });
+
+        const managed = await get(sessionA);
+        expect(managed.body.allowedModels).toEqual(['openai/gpt-oss-120b', 'openai/gpt-oss-20b']);
+        expect(managed.body.managedAllowance).toEqual({
+            tokensRemaining: 25000 - 1000,
+            audioSecondsRemaining: 600,
+            resetAt: expect.stringMatching(/T00:00:00\.000Z$/),
+            mode: 'enforce',
+        });
+
+        await putKey(sessionA);
+        const personal = await get(sessionA);
+        expect(personal.body.mode).toBe('personal');
+        expect(personal.body.allowedModels).toContain('groq/compound');
+        expect(personal.body.managedAllowance.tokensRemaining).toBe(24000);
+
+        const old = await get(legacy);
+        expect(old.body).toMatchObject({ allowedModels: ['openai/gpt-oss-120b', 'openai/gpt-oss-20b'], managedAllowance: { tokensRemaining: 24000 } });
+    });
+
+    test('a ledger outage still answers, with null remainders', async () => {
+        mockLedger.findOne = jest.fn().mockRejectedValue(new Error('down'));
+        const res = await get(sessionA);
+        expect(res.status).toBe(200);
+        expect(res.body.managedAllowance).toMatchObject({ tokensRemaining: null, audioSecondsRemaining: null });
     });
 
     test('requires a session', async () => {

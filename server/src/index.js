@@ -21,6 +21,7 @@ const {
 const { requireAuth } = require("./middleware/auth");
 const dashboardStore = require("./stores/dashboardStore");
 const providerCredentialStore = require("./stores/providerCredentialStore");
+const allowanceStore = require("./stores/allowanceStore");
 const { originCheck } = require("./middleware/originCheck");
 const { generalLimiter, authLimiter, llmLimiter } = require("./middleware/rateLimiter");
 const { cleanupPool, getPoolSize } = require("./services/userDbPool");
@@ -198,6 +199,7 @@ async function startServer() {
     await initializeCleanupIndexes();
     await dashboardStore.initializeIndexes();
     await providerCredentialStore.initializeIndexes();
+    await allowanceStore.initializeIndexes();
     startCleanupCron();
 
     const server = app.listen(PORT, () => {

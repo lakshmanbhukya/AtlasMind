@@ -520,6 +520,67 @@ describe('payer checks before any Groq call', () => {
     });
 });
 
+describe('the same provider error body over JSON, voice and the stream', () => {
+    const { ProviderError } = jest.requireActual('../services/engineErrors');
+    const { errorResult } = jest.requireActual('../routes/engineHttp');
+    let app;
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        app = express();
+        app.use(express.json());
+        app.use((req, _res, next) => { req.connectionId = 'payer-conn'; req.sessionId = 'sid-1'; next(); });
+        app.use('/api/query', queryRouter);
+        app.use('/api/voice', voiceRouter);
+    });
+
+    const exhausted = () => new ProviderError('managed_allowance_exhausted', 'The AtlasMind allowance for today is used up.', 429,
+        { payer: 'managed', resetAt: '2026-11-23T00:00:00.000Z' });
+    const rateLimited = () => new ProviderError('provider_rate_limited', 'Your Groq key hit its rate limit.', 429,
+        { payer: 'personal', retryAfterSeconds: 42 });
+
+    test.each([
+        ['managed_allowance_exhausted', exhausted, { resetAt: '2026-11-23T00:00:00.000Z', payer: 'managed' }],
+        ['provider_rate_limited', rateLimited, { retryAfterSeconds: 42, payer: 'personal' }],
+    ])('%s: POST /api/query and POST /api/voice answer 429 with the same body', async (code, make, extra) => {
+        const expected = { success: false, error: { code, message: make().message, ...extra } };
+
+        mockExecuteNaturalLanguageQuery.mockRejectedValueOnce(make());
+        const json = await request(app).post('/api/query').send({ text: 'q' });
+        expect(json.status).toBe(429);
+        expect(json.body).toEqual(expected);
+
+        transcribeAudio.mockRejectedValueOnce(make());
+        const voice = await request(app).post('/api/voice').attach('audio', Buffer.from('fake audio data'), 'speech.webm');
+        expect(voice.status).toBe(429);
+        expect(voice.body).toEqual(expected);
+
+        expect(errorResult(make(), 'query_error', 'x')).toEqual({ status: 429, body: expected });
+    });
+
+    test('voice over 5 MB on the managed allowance is refused before any Groq call', async () => {
+        const res = await request(app)
+            .post('/api/voice')
+            .attach('audio', Buffer.alloc(5 * 1024 * 1024 + 1), 'speech.webm');
+        expect(res.status).toBe(400);
+        expect(res.body.error).toEqual({ code: 'upload_error', message: 'Recordings over 5 MB need your own Groq key.' });
+        expect(transcribeAudio).not.toHaveBeenCalled();
+        expect(mockExecuteNaturalLanguageQuery).not.toHaveBeenCalled();
+    });
+
+    test('a personal key may upload more than 5 MB', async () => {
+        const personalProvider = { ...mockProvider, payer: 'personal' };
+        mockResolveProvider.mockResolvedValueOnce(personalProvider);
+        transcribeAudio.mockResolvedValueOnce({ text: 'show orders', language: 'en', duration: 2 });
+        mockExecuteNaturalLanguageQuery.mockResolvedValueOnce({ type: 'success', data: { success: true } });
+        const res = await request(app)
+            .post('/api/voice')
+            .attach('audio', Buffer.alloc(5 * 1024 * 1024 + 1), 'speech.webm');
+        expect(res.status).toBe(200);
+        expect(transcribeAudio.mock.calls[0][2]).toBe(personalProvider);
+    });
+});
+
 describe('origin check (full app)', () => {
     const app = require('../index');
 

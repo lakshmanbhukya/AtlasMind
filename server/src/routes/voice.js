@@ -8,6 +8,9 @@ const { forRequest } = require('../utils/logger');
 
 const router = express.Router();
 
+/** Largest upload the managed allowance accepts; personal keys keep multer's 25 MB limit. */
+const MANAGED_MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+
 // Note: requireAuth middleware is applied at index.js level.
 // req.connectionId is guaranteed to be set here.
 
@@ -85,6 +88,14 @@ router.post('/', upload.single('audio'), async (req, res) => {
             sessionId: req.sessionId,
             expectedPayer: req.body?.expectedPayer,
         });
+
+        // The managed allowance budgets 60 s of audio per call; longer uploads need a personal key.
+        if (provider.payer === 'managed' && size > MANAGED_MAX_UPLOAD_BYTES) {
+            return res.status(400).json({
+                success: false,
+                error: { code: 'upload_error', message: 'Recordings over 5 MB need your own Groq key.' },
+            });
+        }
 
         forRequest(req).info({ sizeBytes: size, payer: provider.payer }, 'Transcribing audio');
 

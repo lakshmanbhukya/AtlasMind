@@ -6,6 +6,7 @@ const { buildSystemPrompt } = require('../prompts/systemPrompt');
 const { ProviderError } = require('./engineErrors');
 const { managedModels, SUPPORTED_MODELS } = require('./providerConfig');
 const credentialStore = require('../stores/providerCredentialStore');
+const allowance = require('./allowance');
 const log = require('../utils/logger').logger.child({ module: 'groqService' });
 
 /** @type {import('groq-sdk').default|null} */
@@ -104,7 +105,8 @@ const DEFAULT_MODEL = 'openai/gpt-oss-120b';
  * @property {string[]} allowedModels - models the payer may pick; managed traffic is held to these
  * @property {string} defaultModel - used when a picked model is not allowed, and for fallbacks
  * @property {string} [connectionId]
- * @property {any} [meter] - managed allowance accounting (services/allowance.js); null for personal
+ * @property {import('./allowance').Meter|null} [meter] - managed allowance accounting (services/allowance.js);
+ *           null for personal keys and when GROQ_ALLOWANCE_MODE is off
  */
 
 /** True when an SDK error says the model is missing or not permitted for this key. */
@@ -235,7 +237,7 @@ async function resolveProvider({ connectionId, sessionId, expectedPayer }) {
         allowedModels,
         defaultModel: allowedModels.includes(DEFAULT_MODEL) ? DEFAULT_MODEL : allowedModels[0],
         connectionId,
-        meter: null,
+        meter: allowance.createMeter(connectionId),
     };
 }
 
@@ -304,6 +306,32 @@ async function generateMQL(naturalLanguage, schemaContext, fewShotExamples, mode
         { role: 'user', content: nlText },
     ];
 
+    const meter = (provider && provider.meter) || null;
+    const promptChars = systemPrompt.length + nlText.length;
+    /**
+     * One SDK attempt. A managed call reserves its estimate first (an exhausted
+     * allowance throws before Groq is called) and settles once it ends.
+     * @param {import('groq-sdk/resources/chat/completions').ChatCompletionCreateParamsNonStreaming} params
+     */
+    const metered = async (params) => {
+        if (!meter) return client.chat.completions.create(params);
+        const reservation = await meter.reserveText({ promptChars, maxTokens: params.max_tokens || maxTokens, model: params.model });
+        /** @type {import('./allowance').Outcome} */
+        let outcome = 'unknown';
+        let actual;
+        try {
+            const completion = await client.chat.completions.create(params);
+            outcome = 'ok';
+            actual = completion && completion.usage ? completion.usage.total_tokens : undefined;
+            return completion;
+        } catch (err) {
+            outcome = allowance.outcomeOf(err);
+            throw err;
+        } finally {
+            await meter.settle(reservation, { outcome, actual });
+        }
+    };
+
     const ticket = typeof llm.beforeCall === 'function'
         ? await llm.beforeCall({ model: targetModel, messages, maxTokens })
         : null;
@@ -325,10 +353,15 @@ async function generateMQL(naturalLanguage, schemaContext, fewShotExamples, mode
                 ...(jsonModeUsed ? { response_format: { type: 'json_object' } } : {}),
                 ...extraParams,
             });
-            chatCompletion = await client.chat.completions.create(createParams);
+            chatCompletion = await metered(createParams);
             break;
         } catch (err) {
             if (provider) {
+                // An exhausted allowance (or a ledger outage) is final: no retry, no fallback.
+                if (err instanceof ProviderError) {
+                    if (typeof llm.onFailure === 'function') llm.onFailure(ticket, err);
+                    throw err;
+                }
                 // A rejected key never retries, falls back, or switches to another key.
                 if (isKeyRejected(err)) {
                     if (typeof llm.onFailure === 'function') llm.onFailure(ticket, err);
@@ -367,7 +400,7 @@ async function generateMQL(naturalLanguage, schemaContext, fewShotExamples, mode
             if (targetModel !== defaultModel) {
                 log.warn({ err: provider ? { status: statusOf(err) } : err, model: targetModel, fallback: defaultModel }, 'Custom model failed, falling back to default');
                 try {
-                    chatCompletion = await client.chat.completions.create({
+                    chatCompletion = await metered({
                         messages: [
                             { role: 'system', content: systemPrompt },
                             { role: 'user', content: nlText },
@@ -498,18 +531,41 @@ async function transcribeAudio(audioBuffer, filename = 'recording.webm', provide
     const client = provider ? provider.client : getGroqClient();
     const classify = (err) => (provider ? classifyProviderError(err, provider.payer) : err);
 
-    const transcribe = async (model) => client.audio.transcriptions.create({
+    const meter = (provider && provider.meter) || null;
+
+    const call = async (model) => client.audio.transcriptions.create({
         model,
         file: await toFile(audioBuffer, filename),
         language: 'en',
         response_format: 'verbose_json',
     }, { timeout: TRANSCRIPTION_TIMEOUT_MS });
 
+    /** One Whisper attempt; a managed one is reserved first and settled by `duration`. */
+    const transcribe = async (model) => {
+        if (!meter) return call(model);
+        const reservation = await meter.reserveAudio({ model });
+        /** @type {import('./allowance').Outcome} */
+        let outcome = 'unknown';
+        let actual;
+        try {
+            const result = await call(model);
+            outcome = 'ok';
+            actual = result && typeof result.duration === 'number' ? result.duration : undefined;
+            return result;
+        } catch (err) {
+            outcome = allowance.outcomeOf(err);
+            throw err;
+        } finally {
+            await meter.settle(reservation, { outcome, actual });
+        }
+    };
+
     let transcription;
     try {
         transcription = await transcribe('whisper-large-v3-turbo');
     } catch (err) {
-        // A rejected key or a rate limit applies to both Whisper models.
+        // An exhausted allowance, a rejected key or a rate limit applies to both Whisper models.
+        if (err instanceof ProviderError) throw err;
         if (provider && (isKeyRejected(err) || statusOf(err) === 429)) throw classify(err);
         log.warn({ err: provider ? { status: statusOf(err) } : err }, 'whisper-large-v3-turbo transcription failed, trying whisper-large-v3');
         try {

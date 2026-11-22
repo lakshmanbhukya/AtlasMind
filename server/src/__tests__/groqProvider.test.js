@@ -5,6 +5,11 @@
  * allow-list, and how SDK failures are classified when a provider is passed.
  */
 
+const { createFakeCollection } = require('../../test-support/fakeMongo');
+
+let mockLedger;
+jest.mock('../db/connection', () => ({ getDb: () => ({ collection: () => mockLedger }) }));
+
 const mockGetActiveKey = jest.fn();
 jest.mock('../stores/providerCredentialStore', () => ({
     getActiveKey: (...args) => mockGetActiveKey(...args),
@@ -48,6 +53,10 @@ beforeEach(() => {
     jest.clearAllMocks();
     process.env.GROQ_API_KEY = 'gsk_managed';
     delete process.env.MANAGED_MODELS;
+    delete process.env.GROQ_ALLOWANCE_MODE;
+    delete process.env.GROQ_CONNECTION_DAILY_TOKENS;
+    delete process.env.GROQ_CONNECTION_DAILY_AUDIO_SECONDS;
+    mockLedger = createFakeCollection({ unique: [['_id']] });
     managed = fakeClient('managed');
     personal = fakeClient('personal');
     factory = jest.fn(() => personal);
@@ -201,5 +210,107 @@ describe('generateMQL with a provider', () => {
         const raw = sdkError(401);
         managed.chat.completions.create.mockRejectedValue(raw);
         await expect(generateMQL('q', 'Database: db', [])).rejects.toBe(raw);
+    });
+});
+
+describe('managed allowance on every Groq attempt', () => {
+    const ledgerDay = () => mockLedger.docs[0];
+
+    test('managed providers carry a meter; personal and off-mode providers do not', async () => {
+        expect((await resolveProvider({ connectionId: 'c', sessionId: 's' })).meter).toBeTruthy();
+        process.env.GROQ_ALLOWANCE_MODE = 'off';
+        expect((await resolveProvider({ connectionId: 'c', sessionId: 's' })).meter).toBeNull();
+        mockGetActiveKey.mockResolvedValue({ apiKey: KEY });
+        delete process.env.GROQ_ALLOWANCE_MODE;
+        expect((await resolveProvider({ connectionId: 'c', sessionId: 's' })).meter).toBeNull();
+    });
+
+    test('a finished call is charged its actual usage', async () => {
+        const provider = await resolveProvider({ connectionId: 'c', sessionId: 's' });
+        await generateMQL('show orders', 'Database: db', [], undefined, { provider });
+        expect(ledgerDay()).toMatchObject({ tokens: 15, conn: { c: { tokens: 15 } } });
+    });
+
+    test('every attempt reserves: retries and the default-model fallback', async () => {
+        jest.spyOn(global, 'setTimeout').mockImplementation((fn) => { fn(); return 0; });
+        const provider = await resolveProvider({ connectionId: 'c', sessionId: 's' });
+        const reserve = jest.spyOn(provider.meter, 'reserveText');
+        managed.chat.completions.create
+            .mockRejectedValueOnce(sdkError(503))
+            .mockRejectedValueOnce(sdkError(503))
+            .mockRejectedValueOnce(sdkError(503));
+
+        await generateMQL('q', 'Database: db', [], 'openai/gpt-oss-20b', { provider });
+        expect(managed.chat.completions.create).toHaveBeenCalledTimes(4);
+        expect(reserve).toHaveBeenCalledTimes(4);
+        expect(reserve.mock.calls.map(([r]) => r.model)).toEqual([
+            'openai/gpt-oss-20b', 'openai/gpt-oss-20b', 'openai/gpt-oss-20b', 'openai/gpt-oss-120b',
+        ]);
+        // Three 5xx keep their estimates; the successful fallback is charged its usage.
+        const estimate = reserve.mock.calls[0][0].promptChars;
+        expect(ledgerDay().tokens).toBe(3 * (Math.ceil(estimate / 3) + 2048) + 15);
+    });
+
+    test('a 401 on the managed key releases its reservation', async () => {
+        const provider = await resolveProvider({ connectionId: 'c', sessionId: 's' });
+        managed.chat.completions.create.mockRejectedValue(sdkError(401));
+        await generateMQL('q', 'Database: db', [], undefined, { provider }).catch(() => {});
+        expect(ledgerDay().tokens).toBe(0);
+    });
+
+    test('an exhausted allowance makes zero SDK calls and is not retried', async () => {
+        process.env.GROQ_CONNECTION_DAILY_TOKENS = '100';
+        const timers = jest.spyOn(global, 'setTimeout');
+        const provider = await resolveProvider({ connectionId: 'c', sessionId: 's' });
+        const onFailure = jest.fn();
+
+        const err = await generateMQL('q', 'Database: db', [], 'openai/gpt-oss-20b', { provider, llm: { onFailure } }).catch((e) => e);
+        expect(err).toBeInstanceOf(ProviderError);
+        expect(err).toMatchObject({ code: 'managed_allowance_exhausted', statusCode: 429, payer: 'managed' });
+        expect(err.resetAt).toMatch(/T00:00:00\.000Z$/);
+        expect(managed.chat.completions.create).not.toHaveBeenCalled();
+        expect(timers).not.toHaveBeenCalled();
+        expect(onFailure).toHaveBeenCalledTimes(1);
+    });
+
+    test('voice is charged even when the following text call is refused', async () => {
+        process.env.GROQ_CONNECTION_DAILY_TOKENS = '100';
+        const provider = await resolveProvider({ connectionId: 'c', sessionId: 's' });
+        await transcribeAudio(Buffer.from('abc'), 'a.webm', provider);
+        const err = await generateMQL('show orders', 'Database: db', [], undefined, { provider }).catch((e) => e);
+        expect(err.code).toBe('managed_allowance_exhausted');
+        expect(ledgerDay()).toMatchObject({ audioSeconds: 10, tokens: 0 }); // 3 s billed at the 10 s floor
+    });
+
+    test('an exhausted voice allowance skips both Whisper models', async () => {
+        process.env.GROQ_CONNECTION_DAILY_AUDIO_SECONDS = '30';
+        const provider = await resolveProvider({ connectionId: 'c', sessionId: 's' });
+        const err = await transcribeAudio(Buffer.from('abc'), 'a.webm', provider).catch((e) => e);
+        expect(err.code).toBe('managed_allowance_exhausted');
+        expect(managed.audio.transcriptions.create).not.toHaveBeenCalled();
+    });
+
+    test('each Whisper attempt reserves; a failed one keeps its estimate', async () => {
+        const provider = await resolveProvider({ connectionId: 'c', sessionId: 's' });
+        managed.audio.transcriptions.create.mockRejectedValueOnce(sdkError(500));
+        await transcribeAudio(Buffer.from('abc'), 'a.webm', provider);
+        expect(managed.audio.transcriptions.create).toHaveBeenCalledTimes(2);
+        expect(ledgerDay().audioSeconds).toBe(60 + 10);
+    });
+
+    test('personal-key calls make no ledger writes', async () => {
+        mockGetActiveKey.mockResolvedValue({ apiKey: KEY });
+        const provider = await resolveProvider({ connectionId: 'c', sessionId: 's' });
+        await transcribeAudio(Buffer.from('abc'), 'a.webm', provider);
+        await generateMQL('show orders', 'Database: db', [], undefined, { provider });
+        expect(mockLedger.docs).toHaveLength(0);
+    });
+
+    test('a ledger outage gives 503 for managed calls before any SDK call', async () => {
+        mockLedger.updateOne = jest.fn().mockRejectedValue(new Error('down'));
+        const provider = await resolveProvider({ connectionId: 'c', sessionId: 's' });
+        const err = await generateMQL('q', 'Database: db', [], undefined, { provider }).catch((e) => e);
+        expect(err).toMatchObject({ code: 'managed_accounting_unavailable', statusCode: 503 });
+        expect(managed.chat.completions.create).not.toHaveBeenCalled();
     });
 });

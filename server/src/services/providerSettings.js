@@ -3,6 +3,8 @@
 
 const credentialStore = require('../stores/providerCredentialStore');
 const groqService = require('./groqService');
+const allowance = require('./allowance');
+const { managedModels, SUPPORTED_MODELS } = require('./providerConfig');
 const { ValidationError, QueryEngineError } = require('./engineErrors');
 
 /**
@@ -36,16 +38,22 @@ function hasSession(scope) {
 }
 
 /**
+ * Who pays, the key summary, which models the payer may pick, and what is
+ * left of today's managed allowance (shown even in personal mode, so the
+ * user can see what switching back would give them).
  * @param {SessionScope} scope
  * @returns {Promise<Record<string, any>>}
  */
 async function getSettings(scope) {
+    const managedAllowance = await allowance.getRemaining(scope.connectionId);
     if (!hasSession(scope)) {
         return {
             mode: 'managed',
             hasKey: false,
             keyLast4: null,
             keyExpiresAt: null,
+            managedAllowance,
+            allowedModels: managedModels(),
             requiresReconnectForPersonal: true,
         };
     }
@@ -55,6 +63,8 @@ async function getSettings(scope) {
         hasKey: state.hasKey,
         keyLast4: state.keyLast4,
         keyExpiresAt: state.keyExpiresAt ? state.keyExpiresAt.toISOString() : null,
+        managedAllowance,
+        allowedModels: state.mode === 'personal' ? [...SUPPORTED_MODELS] : managedModels(),
     };
 }
 

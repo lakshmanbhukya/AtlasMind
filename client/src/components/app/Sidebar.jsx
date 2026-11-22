@@ -140,6 +140,7 @@ export default function Sidebar({
   onLogout,
   keyFormOpen = false,
   onKeyFormOpenChange,
+  onKeySaved,
 }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -267,6 +268,7 @@ export default function Sidebar({
         connectionId={connectionMeta?.connectionId}
         formOpen={keyFormOpen}
         onFormOpenChange={onKeyFormOpenChange}
+        onKeySaved={onKeySaved}
       />
 
       <div className="relative h-16 shrink-0 px-3 border-t border-vg-line-soft flex items-center gap-3">

@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useState } from 'react';
+import { Suspense, useCallback, useRef, useState } from 'react';
 import { lazyWithReload } from '../../lib/lazyWithReload';
 import { cn } from '../../lib/utils';
 import ErrorBoundary from '../ErrorBoundary';
@@ -53,11 +53,23 @@ export default function AppShell({
   useDismiss(isMobile && drawerOpen, closeDrawer, { outside: false });
 
   // A chat turn ("Use your own Groq key", "Update key") opens the key form in the sidebar.
-  const requestKeyEntry = useCallback(() => {
+  // `onSaved` runs once that form saves a key; closing the form any other way drops it.
+  const keySavedRef = useRef(null);
+  const requestKeyEntry = useCallback(({ onSaved } = {}) => {
+    keySavedRef.current = onSaved || null;
     if (isMobile) setDrawerOpen(true);
     else setDesktopOpen(true);
     setKeyFormOpen(true);
   }, [isMobile]);
+  const handleKeyFormOpenChange = useCallback((open) => {
+    if (!open) keySavedRef.current = null;
+    setKeyFormOpen(open);
+  }, []);
+  const handleKeySaved = useCallback(() => {
+    const onSaved = keySavedRef.current;
+    keySavedRef.current = null;
+    onSaved?.();
+  }, []);
 
   // On phones, any sidebar navigation closes the drawer.
   const afterNav = (fn) => (...args) => {
@@ -100,7 +112,8 @@ export default function AppShell({
             connectionMeta={connectionMeta}
             onLogout={onLogout}
             keyFormOpen={keyFormOpen}
-            onKeyFormOpenChange={setKeyFormOpen}
+            onKeyFormOpenChange={handleKeyFormOpenChange}
+            onKeySaved={handleKeySaved}
           />
         </ErrorBoundary>
       </div>

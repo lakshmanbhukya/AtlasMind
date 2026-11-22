@@ -224,3 +224,50 @@ describe('POST /api/auth/logout', () => {
         expect(mockColl.docs).toHaveLength(0);
     });
 });
+
+describe('personal client cache', () => {
+    // Writes go through the service, not HTTP: the key route's rate limiter is shared across this file.
+    const store = require('../stores/providerCredentialStore');
+    const providerSettings = require('../services/providerSettings');
+    const scopeA = { connectionId: 'conn-1', sessionId: 'sid-a' };
+    const storeKeyA = () => store.saveKey('conn-1', 'sid-a', { apiKey: KEY, expiresAt: new Date(Date.now() + 3600e3) });
+    const resolveA = () => groqService.resolveProvider(scopeA);
+
+    let built;
+    beforeEach(() => {
+        built = 0;
+        groqService.setPersonalClientFactory(() => ({ id: ++built }));
+    });
+    afterEach(() => groqService.setPersonalClientFactory(null));
+
+    test('is reused while the key is unchanged', async () => {
+        await storeKeyA();
+        await resolveA();
+        await resolveA();
+        expect(built).toBe(1);
+    });
+
+    test('is dropped when the key is deleted', async () => {
+        await storeKeyA();
+        await resolveA();
+        await providerSettings.deleteKey(scopeA);
+        await storeKeyA();
+        const provider = await resolveA();
+        expect(built).toBe(2);
+        expect(provider.client).toEqual({ id: 2 });
+    });
+
+    test('is dropped on logout, even when the revoke fails', async () => {
+        const forget = jest.spyOn(groqService, 'forgetPersonalClient');
+        await storeKeyA();
+        await resolveA();
+        await providerSettings.revokeSession({ connectionId: 'conn-1', sid: 'sid-a', expiresAt: new Date(Date.now() + 3600e3) });
+        expect(forget).toHaveBeenCalledWith('sid-a');
+
+        forget.mockClear();
+        jest.spyOn(store, 'revoke').mockRejectedValue(new Error('db down'));
+        await expect(providerSettings.revokeSession({ connectionId: 'conn-1', sid: 'sid-b', expiresAt: new Date() }))
+            .rejects.toThrow('db down');
+        expect(forget).toHaveBeenCalledWith('sid-b');
+    });
+});

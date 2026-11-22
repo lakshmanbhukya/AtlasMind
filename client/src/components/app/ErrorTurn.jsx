@@ -28,13 +28,19 @@ function useSecondsUntil(at) {
  * Provider failures add their own title, the reset time of the AtlasMind allowance,
  * and actions (`onAction('enterKey' | 'updateKey' | 'useManaged')`); a rate limit
  * holds Retry until `retryAt`.
+ *
+ * The actions disappear once one was carried out (`message.actionsResolved`) or once
+ * the payer changed elsewhere (`currentPayer`, from the sidebar or another tab, no
+ * longer equals the turn's `payer`). Retry stays.
  */
-export default function ErrorTurn({ message, onRetry, onAction, disabled }) {
+export default function ErrorTurn({ message, onRetry, onAction, disabled, currentPayer }) {
   const wait = useSecondsUntil(message.retryAt);
   const resetAt = formatClock(message.resetAt);
   const title = message.title || (message.isVoice ? 'Voice question failed' : 'Request failed');
-  const actions = onAction ? (message.actions || []).filter((a) => ACTION_LABELS[a]) : [];
-  const canRetry = Boolean(onRetry && message.naturalLanguage);
+  const payerChanged = Boolean(message.payer && currentPayer && currentPayer !== message.payer);
+  const showActions = onAction && !message.actionsResolved && !payerChanged;
+  const actions = showActions ? (message.actions || []).filter((a) => ACTION_LABELS[a]) : [];
+  const canRetry = Boolean(onRetry && (message.naturalLanguage || message.resendAudio));
 
   return (
     <article className="flex flex-col" aria-label={title}>

@@ -29,10 +29,14 @@ export function useChat(selectedQueryId, onQuerySuccess, connectionId) {
     const selectedModel = pickModel(chosenModel, models);
 
     const counter = useRef(0);
+    // The last failed recording, for Resend after a voice `settings_changed`. Kept out of
+    // reducer state (a Blob is not chat data) and gone after a reload.
+    const failedRecording = useRef(null);
     const newId = useCallback(() => `t${Date.now()}-${(counter.current += 1)}`, []);
 
     // A history item was opened: replay it as one question and its answer.
     useEffect(() => {
+        failedRecording.current = null;
         if (!selectedQueryId) {
             dispatch({ type: 'cleared' });
             return;
@@ -105,9 +109,11 @@ export function useChat(selectedQueryId, onQuerySuccess, connectionId) {
             const ids = { user: newId(), assistant: newId() };
             try {
                 const body = await sendVoice(audioBlob, selectedModel, { ...scopeOptions, ...(expectedPayer ? { expectedPayer } : {}) });
+                failedRecording.current = null;
                 dispatch({ type: 'answered', source: 'voice', body, ids, now: Date.now() });
                 onQuerySuccess?.();
             } catch (error) {
+                failedRecording.current = { turnId: ids.assistant, blob: audioBlob, scopeOptions };
                 dispatch({ type: 'failed', source: 'voice', error, ids, now: Date.now() });
             } finally {
                 refreshProvider();
@@ -115,6 +121,22 @@ export function useChat(selectedQueryId, onQuerySuccess, connectionId) {
         },
         [pending, newId, selectedModel, expectedPayer, refreshProvider, onQuerySuccess]
     );
+
+    /** Whether the recording behind error turn `turnId` can still be sent again. */
+    const canResendVoice = useCallback((turnId) => failedRecording.current?.turnId === turnId, []);
+
+    /** Send the recording behind error turn `turnId` again (Resend after `settings_changed`). */
+    const resendVoice = useCallback(
+        (turnId) => {
+            const rec = failedRecording.current;
+            if (!rec || rec.turnId !== turnId) return undefined;
+            return sendVoiceMessage(rec.blob, rec.scopeOptions);
+        },
+        [sendVoiceMessage]
+    );
+
+    /** An error turn's provider action (switch payer, save a key) was carried out: hide its actions. */
+    const resolveTurnActions = useCallback((turnId) => dispatch({ type: 'actionsResolved', turnId }), []);
 
     /** Human-in-the-loop: run a staged write with its approval token. */
     const approveWrite = useCallback(
@@ -145,6 +167,9 @@ export function useChat(selectedQueryId, onQuerySuccess, connectionId) {
         provider,
         sendMessage,
         sendVoiceMessage,
+        canResendVoice,
+        resendVoice,
+        resolveTurnActions,
         approveWrite,
         discardApproval,
     };

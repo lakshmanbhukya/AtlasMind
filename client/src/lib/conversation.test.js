@@ -187,6 +187,39 @@ describe('provider (Groq) failures → error turn', () => {
     });
 });
 
+describe('error turn actions and voice resend', () => {
+    it('actionsResolved marks only that error turn', () => {
+        const state = run([
+            ask('q', 1),
+            { type: 'failed', error: httpError(429, fixture('allowance-exhausted-429')), source: 'text', question: 'q', ids: { assistant: 'a1' }, now: NOW },
+            { type: 'actionsResolved', turnId: 'a1' },
+            { type: 'actionsResolved', turnId: 'u1' },
+        ]);
+        expect(state.turns[1]).toMatchObject({ kind: 'error', actionsResolved: true, actions: ['enterKey'], naturalLanguage: 'q' });
+        expect(state.turns[0].actionsResolved).toBeUndefined();
+    });
+
+    it('actionsResolved for an unknown turn leaves the turns as they were', () => {
+        const before = run([ask('q', 1)]);
+        const after = conversationReducer(before, { type: 'actionsResolved', turnId: 'nope' });
+        expect(after.turns).toEqual(before.turns);
+    });
+
+    it('a voice settings_changed offers Resend of the recording', () => {
+        const state = run([
+            { type: 'asked', source: 'voice' },
+            { type: 'failed', error: httpError(409, fixture('settings-changed-409')), source: 'voice', ids: { user: 'u1', assistant: 'a1' }, now: NOW },
+        ]);
+        expect(state.turns[0]).toMatchObject({ kind: 'error', isVoice: true, resendAudio: true, retryLabel: 'Resend' });
+        expect(state.turns[0].naturalLanguage).toBeUndefined();
+    });
+
+    it('other voice failures get no resendAudio', () => {
+        const turn = errorTurn(httpError(429, fixture('allowance-exhausted-429')), { ...at, source: 'voice' });
+        expect(turn.resendAudio).toBeUndefined();
+    });
+});
+
 describe('voice', () => {
     it('success: a voice user turn from the transcript, then the answer', () => {
         const state = run([

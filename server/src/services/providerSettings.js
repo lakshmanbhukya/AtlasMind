@@ -115,6 +115,7 @@ async function setMode(scope, mode) {
 async function deleteKey(scope) {
     if (hasSession(scope)) {
         await credentialStore.deleteKey(scope.connectionId, /** @type {string} */ (scope.sessionId));
+        groqService.forgetPersonalClient(scope.sessionId);
     }
     return getSettings(scope);
 }
@@ -125,7 +126,11 @@ async function deleteKey(scope) {
  */
 async function revokeSession(claims) {
     if (!claims.sid) return;
-    await credentialStore.revoke(claims.connectionId, claims.sid, claims.expiresAt);
+    try {
+        await credentialStore.revoke(claims.connectionId, claims.sid, claims.expiresAt);
+    } finally {
+        groqService.forgetPersonalClient(claims.sid);
+    }
 }
 
 module.exports = {

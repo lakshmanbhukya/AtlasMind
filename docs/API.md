@@ -649,7 +649,7 @@ Every connection starts on the **AtlasMind allowance**: the server's own `GROQ_A
 
 - `mode`: `managed` (AtlasMind allowance) or `personal` (own key). `keyLast4` and `keyExpiresAt` describe a stored key.
 - `managedAllowance` is shown in both modes. Each remainder is the smaller of the connection's and the installation's. Both are `null` when the ledger cannot be read, or when `mode` is `off` (no metering).
-- `allowedModels`: `MANAGED_MODELS` in managed mode, every client model in personal mode.
+- `allowedModels`: the models the client offers. In managed mode this is `MANAGED_MODELS`, and the server enforces it (any other model runs on the managed default). In personal mode it is every client model, but the server does not enforce it: a request paid by the user's own key may name any Groq model ID, and if Groq rejects that model the request falls back once to the default model.
 - `requiresReconnectForPersonal: true`: the session cookie predates personal keys. It keeps managed access; connect again to store a key.
 
 ### PUT `/api/provider-settings/key`

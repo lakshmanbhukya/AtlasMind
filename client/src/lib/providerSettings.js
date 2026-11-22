@@ -19,11 +19,15 @@ export function formatTokens(n) {
     return String(Math.max(0, Math.round(n)));
 }
 
-/** 540 → "9 min", 45 → "45 s". */
+/** 540 → "9 min", 589 → "9 min 49 s", 45 → "45 s". */
 export function formatAudioSeconds(s) {
     if (typeof s !== 'number' || !Number.isFinite(s)) return '';
-    if (s >= 60) return `${Math.floor(s / 60)} min`;
-    return `${Math.max(0, Math.round(s))} s`;
+    // Exact to the second: a short recording must visibly move the counter.
+    const total = Math.max(0, Math.floor(s));
+    const min = Math.floor(total / 60);
+    const sec = total % 60;
+    if (min === 0) return `${sec} s`;
+    return sec === 0 ? `${min} min` : `${min} min ${sec} s`;
 }
 
 /** An ISO instant as a local 24-hour clock time ("05:30"); '' when it is not a date. */

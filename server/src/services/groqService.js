@@ -190,6 +190,17 @@ function personalClientFor(sessionId, apiKey) {
 }
 
 /**
+ * Drop this sign-in's cached personal client (and the plaintext key it holds).
+ * Called on key delete and logout. Only this process's cache is affected; other
+ * instances keep theirs until replaced, which is harmless because every request
+ * reads the stored key again and a deleted or revoked key is never found.
+ * @param {string|null|undefined} sessionId
+ */
+function forgetPersonalClient(sessionId) {
+    if (typeof sessionId === 'string' && sessionId) personalClients.delete(sessionId);
+}
+
+/**
  * Decide who pays for this request's Groq calls.
  *
  * A sign-in in personal mode uses its own key (and may pick any model); every
@@ -609,5 +620,6 @@ module.exports = {
     createClient,
     setGroqClient,
     setPersonalClientFactory,
+    forgetPersonalClient,
     DEFAULT_MODEL,
 };

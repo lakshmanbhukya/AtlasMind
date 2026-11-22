@@ -10,7 +10,13 @@
  * spend.
  */
 
-/** Models the client offers (client/src/lib/models.js). Personal keys may use any of them. */
+/**
+ * Mirrors the client's model list (client/src/lib/models.js); keep the two in sync.
+ * This is what a personal sign-in is *offered* (`allowedModels`). The server does
+ * not enforce it for personal keys: a personal request may name any Groq model ID,
+ * and an unavailable one falls back once to the default. Managed traffic is held
+ * to `managedModels()`.
+ */
 const SUPPORTED_MODELS = Object.freeze([
     'openai/gpt-oss-120b',
     'openai/gpt-oss-20b',

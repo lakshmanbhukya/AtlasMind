@@ -55,6 +55,14 @@ Backend tests cover core services and route integration paths, including:
 
 Run test:coverage to inspect current coverage numbers for your branch.
 
+Most store tests use the in-memory `test-support/fakeMongo.js`. `src/__tests__/allowanceStore.mongo.test.js` runs the Groq allowance ledger and the credential store against a real MongoDB (parallel reservations against both caps, the `ensureDay` duplicate-key race, the TTL and unique indexes, logout tombstones). It is skipped unless `ALLOWANCE_TEST_MONGODB_URI` is set, so CI skips it. Point it at a development cluster; each run creates its own `atlasmind_test_<random>` database and drops it afterwards:
+
+```powershell
+$env:ALLOWANCE_TEST_MONGODB_URI='<dev cluster uri>'; npx --prefix server jest allowanceStore.mongo
+```
+
+If Node cannot resolve a `mongodb+srv` address (`querySrv ECONNREFUSED`), also set `ALLOWANCE_TEST_DNS=8.8.8.8,1.1.1.1`.
+
 Frontend tests:
 
 - Unit (Vitest, node environment): the Conversation module `src/lib/conversation.js` (server response to chat turn, reducer, selectors) and `src/lib/apiError.js`.

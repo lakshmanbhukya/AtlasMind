@@ -104,7 +104,9 @@ export function blockedBodyFromError(err) {
 
 /**
  * An error turn. A text error keeps its question and retry options so it can be
- * retried; a voice error has no question, so it shows no Retry.
+ * retried; a voice error has no question, so it shows no Retry, except a voice
+ * `settings_changed`, which gets `resendAudio` (useChat keeps that recording and
+ * sends it again).
  */
 export function errorTurn(err, { id, timestamp, source = 'text', question = '', retryOptions = {} }) {
     const base = {
@@ -115,7 +117,9 @@ export function errorTurn(err, { id, timestamp, source = 'text', question = '', 
         content: apiErrorMessage(err, ERROR_FALLBACK[source]),
         ...providerErrorFields(err, { now: timestamp instanceof Date ? timestamp.getTime() : Date.parse(timestamp) || 0 }),
     };
-    if (source === 'voice') return { ...base, isVoice: true };
+    if (source === 'voice') {
+        return { ...base, isVoice: true, ...(base.errorCode === 'settings_changed' ? { resendAudio: true } : {}) };
+    }
     return { ...base, naturalLanguage: question, retryOptions: { ...retryOptions, skipUserMessage: true } };
 }
 
@@ -251,6 +255,7 @@ const updateTurn = (turns, id, update) => turns.map((t) => (t.id === id ? { ...t
  * - `failed { error, source, question?, retryOptions?, ids: { assistant, user? }, now }`
  * - `approveStarted` / `approved { turnId, body }` / `approveFailed { turnId, error }`
  * - `discarded { turnId }`
+ * - `actionsResolved { turnId }`: an error turn's provider action was carried out
  *
  * @param {ConversationState} state
  * @returns {ConversationState}
@@ -337,6 +342,12 @@ export function conversationReducer(state, action) {
             return {
                 ...state,
                 turns: updateTurn(state.turns, action.turnId, () => ({ approvalToken: null, approvalDiscarded: true })),
+            };
+
+        case 'actionsResolved':
+            return {
+                ...state,
+                turns: updateTurn(state.turns, action.turnId, (t) => (t.kind === 'error' ? { actionsResolved: true } : {})),
             };
 
         default:

@@ -1,6 +1,6 @@
 # Groq personal keys and the AtlasMind allowance
 
-**Resume in a new session.** Work on the implementation branch `feat/groq-byok-allowances` (created from `plan/groq-byok-allowances`). Follow `CLAUDE.md` and `AGENTS.md`. Read §0 first: every step in §10 is implemented. What remains is the operator's manual check (§11, `start.bat`) and the gaps listed in §0.
+**Resume in a new session.** Work on the implementation branch `feat/groq-byok-allowances` (created from `plan/groq-byok-allowances`). Follow `CLAUDE.md` and `AGENTS.md`. Read §0 first: every step in §10 is implemented and the §11 manual check has passed. What remains is the PR and the gaps listed in §0.
 
 ## 0. Status (updated 2026-11-22)
 
@@ -9,9 +9,29 @@
 | 1. Session `sid`, credential store, logout revocation, settings routes, origin check, log redaction | Done | `2f4e71c` |
 | 2. `resolveProvider`, injection through query/stream/voice, error classification, managed model allow-list | Done (also pulled the `errorResult` change forward from step 3) | `9acec3f` |
 | 3. Allowance ledger, reserve/settle, meter wired into every Groq attempt (sessions 3A + 3B in one commit) | Done | `8744d68` |
-| 4. Client, fixtures, docs (sessions 4A + 4B in one commit) | Done, except the manual `start.bat` check | see `git log` (`feat(client): Groq key panel, payer-aware requests and provider error turns`) |
+| 4. Client, fixtures, docs (sessions 4A + 4B in one commit) | Done | `e25abc3` |
+| 5. Pre-PR gaps: evict the personal client on key delete and logout, hide used error-turn actions, voice Resend for `settings_changed`, exact voice seconds, real-MongoDB allowance suite, new Playwright cases, docs | Done | `fix(groq): close BYOK gaps before review` |
 
-At step 4 every §11 command passed on Node 24.17: server typecheck clean, `npm test` 567 of 567 tests in 39 suites, client lint clean, Vitest 73 of 73, build OK, Playwright 16 of 16. `npm --prefix server ci` failed with EPERM because a running dev server had `@parcel/watcher` loaded, so the server packages were restored with `npm install` (the lockfile did not change). The manual check with `start.bat` (real MongoDB, `GROQ_API_KEY` and a personal key) has **not** been run.
+At step 5 every §11 command passed on Node 24.17 after a clean `npm ci` of both packages (no EPERM with the dev servers stopped): server typecheck clean, `npm test` 570 passed and 11 skipped in 39 of 40 suites (the skipped suite is the real-MongoDB one), client lint clean, Vitest 77 of 77, build OK, Playwright 21 of 21.
+
+**Real MongoDB.** `server/src/__tests__/allowanceStore.mongo.test.js` (run only when `ALLOWANCE_TEST_MONGODB_URI` is set; see `docs/DEVELOPMENT.md`) passed 10 of 10 against the Atlas dev cluster: parallel reserves against both caps, `$not/$gt` on a missing field, the `ensureDay` E11000 race, `adjust`, the TTL and credential indexes, and tombstones. No test database was left behind.
+
+**Manual check (§11), done 2026-11-22** in Chrome against the dev servers with a real MongoDB, `GROQ_API_KEY` and a personal key. All 13 steps passed:
+- payer line and allowance countdown;
+- text question on the allowance (ledger `conn.<id>.tokens` 0 → 3593);
+- voice question (reserved 60 s, settled at 11 s);
+- `Managed Groq usage` log lines without question text or key;
+- key panel;
+- a question on the personal key leaves the ledger untouched;
+- a second tab changes the payer → 409 turn → Resend works;
+- invalid key → 422 with the stored key kept;
+- Remove key;
+- allowance used up (`GROQ_CONNECTION_DAILY_TOKENS=1`: "AtlasMind allowance used up", "Resets at 05:30", "Use your own Groq key" and Retry);
+- logout tombstones the credential;
+- `Cache-Control: no-store` and no key in the settings body;
+- usable at 390 px.
+
+The Chrome extension's network log reports SSE responses as 503; a direct `fetch` gets 200, so the app is fine.
 
 ### What exists now (client, step 4)
 
@@ -71,14 +91,17 @@ At step 4 every §11 command passed on Node 24.17: server typecheck clean, `npm 
 - **Decided (3B): `toEngineError` keeps the raw message** for non-provider errors. Mongo errors (for example an invalid `$group`) are useful to the user, `approvedWrite` forwards raw messages the same way, and SDK errors no longer reach it because every route passes a provider. `queryExecutionEngine.test.js` relies on this. Revisit only together with `approvedWrite`.
 - The audio reservation is a flat 60 s whatever the upload size. The client now stops recording at 60 s, but an older client or a direct API call can still upload up to 5 MB (several minutes) on the managed key. That upload is settled at its real `duration`, so one call can overshoot the remaining voice allowance once (the next reservation is then refused).
 - **New (4):**
-  - The manual `start.bat` check in §11 needs the operator's environment and has not been run.
-  - Error-turn actions ("Use your own Groq key", "Switch to AtlasMind allowance") stay on the turn after the user has acted on them. Clicking one again is harmless.
-  - A voice `settings_changed` has no Resend (there is no transcript yet), so the user records again.
   - A recording that hits 60 s is sent automatically, without a confirmation.
   - The client sends no `expectedPayer` until the settings have loaded, or when they fail to load. The server then uses the stored mode.
   - `AGENTS.md` is untracked in the working tree and was not committed.
+- **Closed in step 5:** the manual §11 check; error-turn actions now hide once used (or when the payer changes); a voice `settings_changed` offers Resend with the same recording; the personal client is evicted on key delete and logout.
+- **New (5):**
+  - Personal-client eviction happens only in the process that handled the request (harmless; see `docs/DEPLOYMENT.md`).
+  - Token counts in the sidebar stay rounded ("14K"); voice is shown in exact seconds.
+  - An exhausted allowance is logged as `ERROR Query pipeline error` with a stack trace, although it's an expected 429. Consider logging `ProviderError`s at `warn` without the stack.
+  - Unrelated to BYOK: count and quantity charts are labelled as money ("Total $150").
 - `settle` is awaited in the `finally`, so each managed attempt costs one extra ledger write after the Groq call. A store outage there is only logged and the estimate stays charged.
-- `GET /api/provider-settings` reads the ledger on every call. The client should not poll it faster than once per query response (4A invalidates it after each query or voice response).
+- `GET /api/provider-settings` reads the ledger on every call. The client doesn't poll it: `useChat` invalidates it once after each query or voice response, and the query has a 30 s `staleTime`.
 - `options.llm.onFailure` is called for every early provider exit, including an exhausted allowance and a ledger outage.
 
 ## Why
@@ -227,12 +250,12 @@ Production cookies are `SameSite=None`, so a cross-site POST to `/api/query` can
 
 ## 10. Implementation sequence
 
-Each part below is sized for one session and ends in one focused commit with all checks green. All of them are done (§0): 3A and 3B landed together in `8744d68`, and 4A and 4B together in the step 4 commit.
+Each part below is sized for one session and ends in one focused commit with all checks green. All of them are done (§0): 3A and 3B landed together in `8744d68`, and 4A and 4B together in `e25abc3`.
 
 1. ~~Session `sid`, credential store, logout revocation, settings routes, origin check, log redaction.~~ Done.
 2. ~~`resolveProvider` and its injection through query, stream and voice; error classification; managed model allow-list.~~ Done.
 
-### Session 3A: allowance ledger and service (server only)
+### Session 3A: allowance ledger and service (server only; done in `8744d68`)
 
 Commit: `feat(groq): managed allowance ledger`.
 
@@ -260,7 +283,7 @@ Commit: `feat(groq): managed allowance ledger`.
    - ledger failure gives 503 in enforce mode;
    - an unsafe connectionId throws.
 
-### Session 3B: wire the meter in (server only)
+### Session 3B: wire the meter in (server only; done in `8744d68`)
 
 Commit: `feat(groq): enforce the managed allowance on every Groq attempt`.
 
@@ -276,7 +299,7 @@ Commit: `feat(groq): enforce the managed allowance on every Groq attempt`.
    - `queryStream.test.js` and `routesSmoke.test.js`: the same error body for a pre-stream JSON 429, an in-stream `result` event and voice, using `managed_allowance_exhausted` with `resetAt` and `provider_rate_limited` with `retryAfterSeconds`; and the 5 MB managed voice rejection.
    - `providerSettings.test.js`: the new GET fields.
 
-### Session 4A: client wiring and UI
+### Session 4A: client wiring and UI (done in `e25abc3`)
 
 Commit: `feat(client): Groq key panel and payer-aware requests`.
 
@@ -293,7 +316,7 @@ Commit: `feat(client): Groq key panel and payer-aware requests`.
 5. `useVoice.js`: stop recording at 60 s. Composer: show only `AVAILABLE_MODELS` that are in `allowedModels`.
 6. Run `npm --prefix client run lint`, `npm --prefix client test` and `npm --prefix client run build`.
 
-### Session 4B: conversation mapping, fixtures, docs, full verification
+### Session 4B: conversation mapping, fixtures, docs, full verification (done in `e25abc3`, except the manual check)
 
 Commit: `feat(client): provider error turns; docs: Groq keys and allowance`.
 
@@ -341,9 +364,16 @@ Pop-Location
 
 Manual check with `start.bat`: ask a question in managed mode and watch the allowance drop; save a real personal Groq key and confirm the managed counter stops moving; log out and confirm the `provider_credentials` document is tombstoned.
 
-## Starting prompt for the next session
+## Next steps
 
-Use one prompt per session, replacing `<part>` with 3A, 3B, 4A or 4B, in that order:
+All of §10 is implemented, and the manual check, clean install and step 5 gaps are done (§0). What remains:
+
+1. Open a PR from `feat/groq-byok-allowances` to `main`, with screenshots of the key panel and the allowance error turn.
+2. After a week in production, tune the §1 limits from the `Managed Groq usage` log lines.
+
+### Prompts used
+
+Sessions 3A, 3B, 4A and 4B used this prompt, with `<part>` replaced (4A and 4B were run together):
 
 > Continue the Groq BYOK plan in groq-byok-plan.md on branch feat/groq-byok-allowances. Read §0 (status, changes from the plan, known gaps) first, then implement session `<part>` from §10 only, as one commit with the checks it lists green. Follow CLAUDE.md and AGENTS.md. When done, update §0 (status table, commit hash, new gaps) and report anything that needs the operator's environment.
 

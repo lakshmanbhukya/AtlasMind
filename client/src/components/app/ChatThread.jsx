@@ -40,6 +40,9 @@ export default function ChatThread({
     provider,
     sendMessage,
     sendVoiceMessage,
+    canResendVoice,
+    resendVoice,
+    resolveTurnActions,
     approveWrite,
     discardApproval,
   } = useChat(highlightedMessageId, onQuerySuccess, connectionMeta?.connectionId);
@@ -92,22 +95,34 @@ export default function ChatThread({
   const { isRecording, startRecording, stopRecording, cancelRecording, error: voiceError } = useVoice({ onLimit: sendRecording });
 
   // Error turn actions for Groq provider failures; Retry (or Resend) re-asks afterwards.
+  // A carried-out action hides that turn's actions; a cancelled key form leaves them.
   const { setMode: setProviderMode, refresh: refreshProvider } = provider;
+  const currentPayer = provider.settings?.mode;
   const handleProviderAction = useCallback(
-    async (action) => {
+    async (action, turnId) => {
       if (action === 'enterKey' || action === 'updateKey') {
-        onRequestKeyEntry?.();
+        onRequestKeyEntry?.({ onSaved: () => resolveTurnActions(turnId) });
       } else if (action === 'useManaged') {
         try {
           await setProviderMode('managed');
+          resolveTurnActions(turnId);
         } catch (err) {
           if (import.meta.env.DEV) console.warn('Could not switch to the AtlasMind allowance:', err?.message);
           refreshProvider();
         }
       }
     },
-    [onRequestKeyEntry, setProviderMode, refreshProvider]
+    [onRequestKeyEntry, setProviderMode, refreshProvider, resolveTurnActions]
   );
+
+  // Retry re-asks a text question; Resend sends a kept recording again (hidden once it is gone).
+  const retryFor = (msg) => {
+    if (msg.naturalLanguage) {
+      return () => sendMessage(msg.naturalLanguage, { ...buildScopeOptions(), ...(msg.retryOptions || {}), skipUserMessage: true });
+    }
+    if (msg.resendAudio && canResendVoice(msg.id)) return () => resendVoice(msg.id);
+    return undefined;
+  };
 
   const handleClarify = (msg) => (clarifications) =>
     sendMessage(questionOf(msg), { ...buildScopeOptions(), clarifications, skipUserMessage: true });
@@ -210,8 +225,9 @@ export default function ChatThread({
           <ErrorTurn
             message={msg}
             disabled={busy}
-            onAction={handleProviderAction}
-            onRetry={msg.naturalLanguage ? () => sendMessage(msg.naturalLanguage, { ...buildScopeOptions(), ...(msg.retryOptions || {}), skipUserMessage: true }) : undefined}
+            currentPayer={currentPayer}
+            onAction={(action) => handleProviderAction(action, msg.id)}
+            onRetry={retryFor(msg)}
           />
         );
       default:

@@ -31,6 +31,11 @@ describe('formatting', () => {
         expect(formatTokens(null)).toBe('');
         expect(formatAudioSeconds(540)).toBe('9 min');
         expect(formatAudioSeconds(45)).toBe('45 s');
+        expect(formatAudioSeconds(589)).toBe('9 min 49 s');
+        expect(formatAudioSeconds(600)).toBe('10 min');
+        expect(formatAudioSeconds(60.7)).toBe('1 min');
+        expect(formatAudioSeconds(0)).toBe('0 s');
+        expect(formatAudioSeconds(-3)).toBe('0 s');
     });
 
     it('a reset time is a 24-hour local clock time', () => {

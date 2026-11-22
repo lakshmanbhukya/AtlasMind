@@ -34,9 +34,10 @@ function SmallButton({ variant = 'ghost', className, children, ...props }) {
  *
  * The key form is a password field that is cleared after every submit; the key is
  * sent once, to PUT /api/provider-settings/key, and never kept in the browser.
- * `formOpen` / `onFormOpenChange` let a chat turn ("Use your own Groq key") open it.
+ * `formOpen` / `onFormOpenChange` let a chat turn ("Use your own Groq key") open it;
+ * `onKeySaved` fires after the form saved a key, before it closes.
  */
-export default function ProviderKeyPanel({ connectionId, formOpen, onFormOpenChange }) {
+export default function ProviderKeyPanel({ connectionId, formOpen, onFormOpenChange, onKeySaved }) {
   const { settings, isLoading, error, saveKey, setMode, deleteKey, isSaving } = useProviderSettings(connectionId);
   const [apiKey, setApiKey] = useState('');
   const [formError, setFormError] = useState(null);
@@ -69,6 +70,7 @@ export default function ProviderKeyPanel({ connectionId, formOpen, onFormOpenCha
     setFormError(null);
     try {
       await saveKey(key);
+      onKeySaved?.();
       onFormOpenChange(false);
     } catch (err) {
       setFormError(apiErrorMessage(err, 'Could not save the key.'));

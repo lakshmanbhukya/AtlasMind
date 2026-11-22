@@ -67,9 +67,31 @@ const llmLimiter = rateLimit({
     },
 });
 
+/**
+ * Limiter for personal-key validation (PUT /api/provider-settings/key): each
+ * attempt makes a Groq call, so a session gets 10 per hour.
+ */
+const keyValidationLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    limit: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => (req.sessionId
+        ? `sess:${req.sessionId}`
+        : req.connectionId ? `conn:${req.connectionId}` : `ip:${ipKeyGenerator(req.ip)}`),
+    message: {
+        success: false,
+        error: {
+            code: 'too_many_requests',
+            message: 'Too many key checks for this session, please try again in an hour',
+        },
+    },
+});
+
 module.exports = {
     generalLimiter,
     authLimiter,
     llmLimiter,
+    keyValidationLimiter,
     LLM_LIMIT,
 };

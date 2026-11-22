@@ -3,13 +3,30 @@
 const Groq = /** @type {typeof import('groq-sdk').default} */ (/** @type {unknown} */ (require('groq-sdk')));
 const { toFile } = require('groq-sdk');
 const { buildSystemPrompt } = require('../prompts/systemPrompt');
+const { ProviderError } = require('./engineErrors');
 const log = require('../utils/logger').logger.child({ module: 'groqService' });
 
 /** @type {import('groq-sdk').default|null} */
 let groqClient = null;
 
 /**
- * Get or create the Groq client singleton.
+ * Build a Groq client. Managed and personal clients share these settings.
+ * @param {string} apiKey
+ * @returns {import('groq-sdk').default}
+ */
+function createClient(apiKey) {
+    return new Groq({
+        apiKey,
+        fetch: typeof globalThis.fetch === 'function' ? nativeFetchWithStreamBodies : undefined,
+        // Fail fast: generateMQL's loop is the only retry layer, and no call
+        // may hold a request open for the SDK's long default timeout.
+        maxRetries: 0,
+        timeout: 30_000,
+    });
+}
+
+/**
+ * Get or create the managed Groq client singleton (GROQ_API_KEY, read lazily).
  * @returns {import('groq-sdk').default}
  */
 function getGroqClient() {
@@ -18,16 +35,49 @@ function getGroqClient() {
         if (!apiKey) {
             throw new Error('GROQ_API_KEY environment variable is not set');
         }
-        groqClient = new Groq({
-            apiKey,
-            fetch: typeof globalThis.fetch === 'function' ? nativeFetchWithStreamBodies : undefined,
-            // Fail fast: generateMQL's loop is the only retry layer, and no call
-            // may hold a request open for the SDK's long default timeout.
-            maxRetries: 0,
-            timeout: 30_000,
-        });
+        groqClient = createClient(apiKey);
     }
     return groqClient;
+}
+
+/** HTTP status of an SDK error, or null for network errors and timeouts. */
+function statusOf(err) {
+    return err && typeof err.status === 'number' ? err.status : null;
+}
+
+/** The `retry-after` header of an SDK error in seconds, or null. */
+function retryAfterOf(err) {
+    const headers = err && err.headers;
+    if (!headers) return null;
+    const raw = typeof headers.get === 'function' ? headers.get('retry-after') : headers['retry-after'];
+    const value = raw === undefined || raw === null ? NaN : parseFloat(raw);
+    return Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+const INVALID_KEY_MESSAGE = {
+    personal: 'Your Groq API key was rejected. Update the key or switch to the AtlasMind allowance.',
+    managed: 'The AtlasMind Groq key was rejected. Please contact the operator.',
+};
+
+/**
+ * Validate a personal key with `models.list()`: it costs no tokens and sends
+ * no user data. Resolves when the key works.
+ * @param {string} apiKey
+ * @param {(key: string) => { models: { list: () => Promise<any> } }} [factory] - test seam
+ * @throws {ProviderError} provider_key_invalid (422) or provider_unavailable (502)
+ */
+async function validateApiKey(apiKey, factory = createClient) {
+    try {
+        await factory(apiKey).models.list();
+    } catch (err) {
+        const status = statusOf(err);
+        if (status === 401 || status === 403) {
+            throw new ProviderError('provider_key_invalid', 'Groq rejected this API key. Check it and try again.', 422, { payer: 'personal' });
+        }
+        // Never echo SDK text: it can quote request details.
+        log.warn({ status }, 'Groq key validation failed for a reason other than the key');
+        throw new ProviderError('provider_unavailable', 'Groq could not be reached to check the key. Please try again.', 502, { payer: 'personal' });
+    }
 }
 
 /**
@@ -304,4 +354,4 @@ function setGroqClient(client) {
     groqClient = client;
 }
 
-module.exports = { generateMQL, transcribeAudio, setGroqClient };
+module.exports = { generateMQL, transcribeAudio, setGroqClient, createClient, validateApiKey, statusOf, retryAfterOf, INVALID_KEY_MESSAGE, DEFAULT_MODEL };

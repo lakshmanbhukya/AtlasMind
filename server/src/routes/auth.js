@@ -3,7 +3,8 @@ const express = require('express');
 const router = express.Router();
 const { requireAuth } = require('../middleware/auth');
 const { getConnectionById } = require('../models/UserConnection');
-const { clearSession } = require('../auth/session');
+const { clearSession, readSessionClaims } = require('../auth/session');
+const providerSettings = require('../services/providerSettings');
 const { forRequest } = require('../utils/logger');
 
 /**
@@ -46,10 +47,26 @@ router.get('/me', requireAuth, async (req, res) => {
 /**
  * POST /api/auth/logout
  *
- * Clears the `am_token` cookie, effectively logging the user out.
+ * Clears the `am_token` cookie, effectively logging the user out. When the
+ * cookie still verifies, this sign-in's personal Groq key is revoked first.
+ * A missing or expired cookie still answers 200.
  * The frontend will redirect to the landing page after this call.
  */
-router.post('/logout', (_req, res) => {
+router.post('/logout', async (req, res) => {
+    let claims = null;
+    try {
+        claims = readSessionClaims(req);
+    } catch {
+        // No valid session: nothing to revoke.
+    }
+    if (claims) {
+        try {
+            await providerSettings.revokeSession(claims);
+        } catch (err) {
+            // The cookie is still cleared; the credential expires with the session.
+            forRequest(req).error({ err }, 'Failed to revoke provider credential on logout');
+        }
+    }
     clearSession(res);
     return res.json({ success: true, message: 'Logged out' });
 });

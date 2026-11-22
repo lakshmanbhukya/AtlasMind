@@ -1,102 +1,173 @@
 # Groq personal keys and the AtlasMind allowance
 
-**Resume in a new session.** Work from local branch `plan/groq-byok-allowances`. The checkout is a React/Vite client and a CommonJS Express server with separate package files. This document specifies proposed behavior. Implementation starts with step 1 under “Implementation sequence.” The file map and contracts below are the engineering handoff.
+**Resume in a new session.** Work from local branch `plan/groq-byok-allowances` and create an implementation branch from its tip. Follow `CLAUDE.md` and `AGENTS.md`. Start at step 1 of the implementation sequence (§10).
 
-Proposed first release. Existing connections start in managed mode. Users can explicitly switch to a Groq key for their current sign-in. AtlasMind enforces a configurable daily managed allowance per database connection and an installation-wide budget. Persistent personal accounts, credit purchases and cross-device key recovery are outside this release.
+## Why
 
-## Ownership and storage
+The managed Groq key (`GROQ_API_KEY`) gives roughly **200K tokens per day**. One question costs about 3–6K tokens (system prompt, schema, few-shot examples, up to 2048 output tokens), so the whole installation can fund only **about 40–60 managed questions a day**. Users need to be able to bring their own Groq key, and the managed budget has to be shared fairly between connections.
 
-`server/src/auth/session.js` signs a connection ID. `middleware/auth.js` exposes it to routes. The ID derives from the database URI and database name, so two people can share it. A personal key stored on `UserConnection` would allow either person to spend the other's quota.
+This release:
 
-- Add a random session ID on sign-in and expose the verified ID alongside the connection ID. Older valid cookies retain managed access and require a fresh sign-in to enable personal keys. Keep database authorization and tenant stores scoped to the verified connection ID.
-- Store one credential record per session, filtered by both verified IDs. Encrypt the key with the existing AES-256-GCM helper in `server/src/utils/encryption.js`. Record mode and expiry. Check expiry on reads, use a TTL index for cleanup, and remove credentials on sign-out or key deletion. Treat a new sign-in as a new key setup.
-- Introduce authenticated settings endpoints for reading status, validating and replacing a key, selecting the payer, and deleting a key. Validate a candidate against Groq before replacing a working key. Return only mode, configured status and managed allowance/reset information. Review origin protection for cookie-authenticated mutations and redact secrets from request and SDK error logs.
+- Every connection starts on the **AtlasMind allowance** (managed key) with a daily limit per connection and an installation-wide limit.
+- A user can switch to **their own Groq key** for the current sign-in.
+- Out of scope: user accounts, persistent or cross-device keys, buying credits, per-person allowances. All of these need real user accounts.
 
-## Provider calls
+## Code facts this plan relies on
 
-`server/src/services/groqService.js` caches a process-wide client from `GROQ_API_KEY`. Text enters through `routes/query.js` and reaches `services/engine/naturalLanguageQuery.js`. Voice enters through `routes/voice.js`, calls Whisper, then invokes the query engine.
+- `server/src/auth/session.js`: the JWT carries only `{ connectionId }`, and `readSession` returns a string. Logout (`routes/auth.js`) only clears the cookie. A connection ID derives from URI + DB name, so two people can share one.
+- `server/src/services/groqService.js`: process-wide `groqClient` from `GROQ_API_KEY` with `maxRetries: 0`, a 30 s timeout and `nativeFetchWithStreamBodies`. `generateMQL` retries 429/5xx twice (8 s cap per wait), then falls back to `DEFAULT_MODEL`. `transcribeAudio` falls back from `whisper-large-v3-turbo` to `whisper-large-v3`. `setGroqClient` is the test seam.
+- There are exactly two Groq call sites: `services/engine/naturalLanguageQuery.js` (`generateMQL`) and `routes/voice.js` (`transcribeAudio`).
+- `routes/engineHttp.js` `errorResult` forwards `error.message` verbatim, so SDK error text can reach the client. `RateLimitError` already exists in `services/engineErrors.js`.
+- `utils/encryption.js` already uses AES-256-GCM (`encrypt` / `decrypt`). The `.env.example` comment still says CBC.
+- `client/src/hooks/useVoice.js` has no maximum recording length, and multer accepts up to 25 MB.
+- `client/src/lib/models.js` lists five models, and the server accepts any submitted model ID.
 
-- Resolve one credential selection for each incoming request. Pass the selected client through transcription, query generation, model fallbacks and retries. Retain the cached managed client only for managed traffic. Resolve the managed environment key lazily so a personal-key request can run without it.
-- Classify provider errors before applying existing fallback logic. Invalid keys and exhausted quota should produce actionable responses. Honor retry timing and avoid another model attempt for a rejected credential. A change of payer requires an explicit user action.
-- Keep experiment hooks in `services/experiment.js` working. Meter each actual provider attempt at the SDK call boundary, including fallback calls. Preserve the guarded executor, approved writes and existing model selection.
+## 1. Decisions
 
-## Managed quota
+### Managed budget
 
-- Configure connection and installation limits in `server/.env.example`. Start with UTC calendar-day windows. Track text tokens and audio seconds separately. Choose production budgets from the operator's actual Groq limits and desired headroom. The UI labels them as AtlasMind allowances. Provider minute limits and usage by other apps can still cause a Groq 429.
-- Before a managed call, reserve a conservative input-plus-maximum-output bound, or an audio-duration bound derived from validated media. Update both budget scopes atomically in persistent storage across server instances. One implementation is a MongoDB transaction over daily counter records and a unique attempt record. Verify deployment transaction support before selecting this design.
-- Reconcile against provider usage even when later parsing or query execution fails. Make settlement idempotent. Release confirmed unspent reservations and retain a conservative charge through the window for ambiguous timeouts or crashes. Reserve separately for retries. Voice may consume audio even if the subsequent text call is declined.
-- Personal-key calls bypass managed counters. Keep the existing IP guard and `middleware/rateLimiter.js` per-connection throttle in both modes. Enforce the global cap even when someone creates multiple connections. A true per-person managed allowance requires a durable user identity.
+Limits are enforced from day one. Groq hard-stops at its own limit anyway; enforcing ours makes the split fair and gives users a clear message instead of a raw 429.
 
-## Client and API
-
-- Add a provider-key control in the signed-in app sidebar and API methods in `client/src/services/api.js`. Show the active payer, sign-in lifetime of a personal key, and remaining managed allowance with units and reset time. Clear the key field after submission. Keep secrets out of browser storage, URLs and chat history.
-- Map separate error codes for managed allowance exhaustion, invalid personal key, provider throttling and AtlasMind request throttling. Update `routes/engineHttp.js`, voice error handling and `client/src/hooks/useChat.js` together. Offer reset or key setup when managed usage runs out and explicit switching when a personal key fails. Carry retry timing when available. Show an unknown provider balance when Groq supplies no reliable daily balance.
-- Document endpoints, defaults, limits and session lifecycle in `docs/API.md` and the deployment guide. Update client response mapping and stubbed fixtures in the same change.
-
-## Delivery and acceptance
-
-### Decisions from the repository review
-
-- **Keep payer selection explicit across tabs.** Return a settings revision with the active payer. New clients send their expected revision with text, streaming and multipart voice requests. Reject a stale revision with 409 before contacting Groq and refresh the settings UI. Keep legacy requests compatible in managed-only sessions. Deleting an active personal key should require an explicit switch to managed or leave the session unable to submit paid work. Test a second tab deleting or replacing a key between composing and sending a question.
-- **Define the logout race.** The current logout handler only clears a cookie. Store the personal credential in the central metadata database and bind its expiry to the verified seven-day cookie expiry. On logout, revoke the session's credential and prevent a pending key validation from recreating it. Use a conditional revision update after validation. Preserve idempotent logout for missing or expired cookies. An upstream call already dispatched may finish and consume quota. Disallow new attempts using a revoked credential, including the text stage after transcription.
-- **Preserve the streaming contract.** In `routes/query.js`, a started SSE stream carries failures in the terminal `result` event even though HTTP status is 200. Include error code, payer, and optional retry delay in the JSON body for every transport. Test a pre-stream JSON 429, an in-stream provider 429, and a voice failure through `client/src/lib/queryStream.js` or the voice client as appropriate. Keep retry user-initiated after an ambiguous disconnect and tell the user that an earlier attempt may have consumed quota.
-- **Bound retries and model choice.** The current text retry loop caps waits at eight seconds. If Groq asks for a longer wait, surface that delay immediately. Preserve the shared SDK timeout, disabled SDK retries and streaming-upload adapter when constructing personal clients. Configure allowed managed models on the server so a submitted model ID cannot select an unbudgeted model. Keep any existing supported choices visible only when available to the selected payer.
-- **Validate keys without sending database data.** Use a bounded Groq model-access check and a settings-specific rate limit. Show success as credential verification. Check text and Whisper permissions separately when those features are used. Before activation, explain that query generation sends the question and schema context to Groq, voice sends audio, and personal requests consume the selected organization's quota. Keep settings responses uncached and send sanitized application errors to the UI and logs.
-- **Protect cookie-authenticated spending.** Production cookies use `SameSite=None`. Require a verified browser origin or a session-bound CSRF token on credential mutations and browser requests that initiate spending, including multipart voice. Exercise the configured cross-site production frontend and local Vite proxy in tests. Preserve existing supported API clients through a documented token path when Origin is absent.
-- **Roll out accounting independently.** Start by measuring managed usage without enforcing the proposed daily limits. Before enforcement, confirm the central metadata database supports the chosen atomic reservation strategy, prove both caps under parallel load, and compare settled totals to a dedicated managed Groq project's usage over the same interval. Exercise duration measurement with an actual WebM/Opus recording from `useVoice.js`. When duration or the ledger is unavailable, decline the affected managed call before dispatch. An accounting outage should still allow an authenticated personal-key request if credential resolution succeeds.
-
-### Pilot decisions for the operator
-
-1. How much managed usage can the installation fund each day, and how many active connections should that cover? Set text and audio caps from measured pilot demand and the organization's actual limits. Set the installation cap first, then allocate per-connection allowances. Keep the existing short-window throttle for both payers.
-2. Is entering a personal key again after a fresh database sign-in acceptable? The recommended pilot uses this lifetime. If keys must follow a person across devices or connections, add account ownership before offering persistent keys.
-
-### Implementation sequence
-
-1. Land session identity, encrypted storage and settings routes. Test two sign-ins sharing a connection, older cookies, failed replacement, expiry, logout and secret redaction.
-2. Inject provider selection into both entry points. Use mocked Groq clients to verify simultaneous tenants, model retries and both stages of voice use the intended key. Verify an invalid personal key makes zero managed calls.
-3. Add managed accounting and structured errors. Exercise parallel calls at both caps, UTC rollover, restart, duplicate settlement, malformed model output, ambiguous timeouts and audio followed by a rejected text call.
-4. Ship the settings UI and documentation. Cover explicit switching and exhausted allowances with stubbed Playwright flows. Run server typecheck and Jest, then client lint, Vitest, build and Playwright under Node 24.
-5. Enable for a pilot after reviewing measured token and audio use. Observe aggregate usage and error counts by payer without credentials or question text. If personal-key service is suspended, return an explicit unavailable response to those sessions until the user chooses managed mode.
-
-## File map for implementation
-
-Paths are relative to the repository root. New filenames below are suggestions.
-
-| Area | Existing entry points | Change |
+| Setting | Default | Reason |
 | --- | --- | --- |
-| Session | `server/src/auth/session.js`, `middleware/auth.js` and `types/express.d.ts` under `server/src`, `server/src/routes/{connections,auth}.js` | Extend issued session claims and request types. Preserve the string-returning contract of existing `readSession` callers. Distinguish session claims from write-approval claims during verification. Wire logout to credential revocation. |
-| Storage and bootstrap | `server/src/db/connection.js`, `server/src/stores/tenant.js`, `server/src/index.js` | Use the native MongoDB driver and central `getDb()`. Add settings and allowance stores. Initialize indexes alongside `dashboardStore.initializeIndexes()` before listening. A transaction helper would need the central MongoClient, currently private to the connection module. |
-| Settings | New `server/src/routes/providerSettings.js` and `server/src/services/providerSettings.js`, existing `utils/encryption.js`, `utils/logger.js` and `middleware/rateLimiter.js` under `server/src` | Register the settings router after cookie parsing with `requireAuth`. Use the verified tenant and session, revision-checked updates, encryption and a limit on key validation. |
-| Generation | `server/src/routes/{query,voice}.js`, `server/src/services/queryExecutionEngine.js`, `server/src/services/engine/naturalLanguageQuery.js`, `server/src/services/groqService.js` | Pass server-created payer context through the engine facade to `generateMQL`. Pass it directly to `transcribeAudio` as well. Resolve and meter at dispatch so early clarification, history reads, export and approved writes incur zero provider usage when they make zero provider calls. |
-| Errors | `server/src/services/engineErrors.js`, `server/src/routes/engineHttp.js`, `client/src/lib/{apiError,queryStream,conversation}.js` | Map a typed provider failure to public fields before the adapter logs or serializes it. Today `errorResult` can forward an arbitrary error message. Test sanitized JSON, SSE and voice responses. |
-| UI | `client/src/components/app/{AppShell,Sidebar,ChatThread}.jsx`, `client/src/hooks/{useAuth,useChat,useVoice}.js`, `client/src/services/api.js`, `client/src/lib/models.js` | Share settings state between sidebar and chat, clear it on logout/reconnect and send revisions from both the fetch-based stream and Axios voice path. Intersect the displayed model list with server-supported models. |
+| `GROQ_ALLOWANCE_MODE` | `enforce` (also `observe`, `off`) | 200K/day is too small to run unmetered |
+| `GROQ_GLOBAL_DAILY_TOKENS` | `160000` | 80% of Groq's ~200K/day, leaving headroom for retries, fallbacks and development use of the same key |
+| `GROQ_CONNECTION_DAILY_TOKENS` | `25000` | About 5–6 questions per connection per day; about 6 heavy users use up the pool |
+| `GROQ_GLOBAL_DAILY_AUDIO_SECONDS` | `3600` | 60 minutes of voice for the installation |
+| `GROQ_CONNECTION_DAILY_AUDIO_SECONDS` | `600` | 10 minutes of voice per connection |
+| `MANAGED_MODELS` | `openai/gpt-oss-120b,openai/gpt-oss-20b` | Managed traffic can't select an unbudgeted model |
 
-## Proposed HTTP contract
+The window is a UTC calendar day (resets at 05:30 IST). Groq also has per-minute token limits per model; check the Groq console for the chosen model. `llmLimiter` stays as the short-window guard in both modes, and a Groq 429 is shown as `provider_rate_limited`. Tune the numbers after a week of the usage log (§6).
 
-Mount under `/api/provider-settings`. Return `Cache-Control: no-store`. The only request containing a raw key is the credential replacement request. Validate the candidate before the atomic write. A successful replacement selects personal mode with the user's explicit “Save and use” action.
+### Personal-key lifetime
 
-| Request | Input | Success |
+A personal key lasts as long as the sign-in (the 7-day session cookie). After a fresh database sign-in the user enters it again. That's the right call here: there are no accounts, and anyone with the same URI shares the connection ID, so there is no safe identity to attach a long-lived key to.
+
+- The key is stored encrypted on the server only, never in browser storage, URLs or chat history. Logout revokes it.
+- The sidebar shows "Your Groq key (…a1b2) active until Nov 29", so re-entry isn't a surprise.
+- The key dialog links to console.groq.com/keys. A free Groq key gives each user their own ~200K tokens a day.
+
+## 2. Session identity
+
+- `issueSession` adds `sid: crypto.randomUUID()` to the JWT.
+- Add `readSessionClaims(req)` returning `{ connectionId, sid | null, expiresAt }`. Keep `readSession` returning a string for existing callers.
+- `requireAuth` sets `req.connectionId` and `req.sessionId`. Cookies issued before this change have no `sid`: they keep managed access, and settings return `requiresReconnectForPersonal: true`. Update `types/express.d.ts`.
+- Logout: if the cookie verifies, revoke that session's credential (§3). A missing or expired cookie still returns 200.
+
+## 3. Credential store: `server/src/stores/providerCredentialStore.js`
+
+- Collection `provider_credentials` in the central DB (add it to `db/systemCollections.js`). Document: `{ connectionId, sessionId, mode: 'managed' | 'personal', encryptedKey | null, keyLast4, revoked, expiresAt, updatedAt }`.
+- Unique index on `{ connectionId, sessionId }` and a TTL index on `expiresAt` (set to the JWT `exp`). Reads also check `expiresAt`, because TTL deletion is lazy. Throw without both IDs, like `stores/tenant.js`.
+- Logout race: logout writes a tombstone `{ revoked: true, encryptedKey: null }` instead of deleting. Every write filters on `revoked: { $ne: true }`, so a key validation still in flight can't resurrect the credential (an upsert that hits the tombstone fails on the unique index and is treated as revoked). TTL removes the tombstone later.
+- Initialize indexes in `index.js` next to `dashboardStore.initializeIndexes()`, before listening.
+
+## 4. Settings API: `routes/providerSettings.js` + `services/providerSettings.js`
+
+Mount at `/api/provider-settings` with `requireAuth`. Responses carry `Cache-Control: no-store`. Add a dedicated limiter in `middleware/rateLimiter.js` (10 key validations per hour per session).
+
+| Request | Body | Result |
 | --- | --- | --- |
-| GET /api/provider-settings | Session cookie | 200 with `{success:true,data:{mode,revision,hasKey,sessionExpiresAt,managedAllowance,allowedModels}}`. Legacy sessions also get `requiresReconnectForPersonal:true`. |
-| PUT /api/provider-settings/key | JSON `{apiKey,expectedRevision}` | 200 with updated public settings. Invalid candidates preserve the previous settings and revision. |
-| PATCH /api/provider-settings | JSON `{mode,expectedRevision}` | 200 with new revision. Personal mode requires a usable stored credential. Managed mode is an explicit choice. |
-| DELETE /api/provider-settings/key | JSON `{expectedRevision}` | 200 with new revision. Reject removal while personal is selected with 409 and present “Switch to managed and remove” as an explicit UI action. Switch first, then issue revision-checked deletion. |
+| `GET /` | none | `{ mode, hasKey, keyLast4, keyExpiresAt, managedAllowance: { tokensRemaining, audioSecondsRemaining, resetAt, mode }, allowedModels, requiresReconnectForPersonal? }` |
+| `PUT /key` | `{ apiKey }` | Validates with `client.models.list()`, which costs zero tokens and sends no user data, then stores the key and switches to `personal`. Invalid key: 422 `provider_key_invalid`, previous state unchanged. |
+| `PATCH /` | `{ mode }` | `personal` requires a stored key. |
+| `DELETE /key` | none | Removes the key and sets `mode: managed` in one update. The UI asks the user to confirm the switch to the AtlasMind allowance. |
 
-Use an integer revision starting at zero. Return UTC timestamps in ISO 8601 format. `managedAllowance` contains the connection's remaining text tokens, audio seconds and reset time when enforcement is enabled. Declare accounting mode separately as `observe` or `enforce`. Keep the installation-wide balance private. Personal mode shows that Groq manages the balance.
+The key is never returned, logged or included in an error. Add `apiKey` and `authorization` to the pino redact paths in `utils/logger.js`.
 
-Send `expectedRevision` in the JSON body of query and stream POSTs and as a decimal multipart field on voice POSTs. Parse and validate it once. The server chooses the actual payer from verified settings. Return `{success:false,error:{code,message,payer?,retryAfterSeconds?,resetAt?}}`. Suggested codes are `settings_changed` (409), `provider_key_invalid` (422), `provider_model_unavailable` (422), `managed_allowance_exhausted` (429), `provider_rate_limited` (429) and `managed_accounting_unavailable` (503). Preserve existing session and local limiter codes. A provider credential error must leave the AtlasMind session signed in.
+**Cross-tab safety.** Query, stream and voice requests send `expectedPayer` (`managed` | `personal`) in the JSON body or as a multipart field. If it doesn't match the stored mode, the server returns 409 `settings_changed` before calling Groq, and the client refetches settings. When the field is missing (old clients), the server uses the stored mode.
 
-## Persistence and rollout defaults
+## 5. Provider calls: `services/groqService.js`
 
-- Store settings with a unique compound index on connection ID and session ID, and a separate TTL index on expiry. Keep a revisioned record when the key is removed. Clear ciphertext and mark a credential revoked on logout through session expiry so an in-flight compare-and-swap cannot resurrect it.
-- In the transaction-backed ledger, identify daily counters by UTC day, scope, scope ID and unit. Give each SDK dispatch its own attempt ID. Reserve both counters and insert the attempt in one transaction, call Groq outside it, then conditionally settle a still-pending attempt against its original UTC day. A transaction retry must never replay a provider call. Keep accounting records free of credentials, audio, schema and prompts.
-- Suggested configuration names are `GROQ_ALLOWANCE_MODE` (initially `observe`) and `GROQ_{CONNECTION,GLOBAL}_DAILY_{TOKENS,AUDIO_SECONDS}` (four explicit integer limits). Validate configuration and topology before enabling enforcement. If production limits or topology are unknown, ship code and automated tests with observation as the default and leave production activation to the operator.
+- Add `resolveProvider({ connectionId, sessionId })` returning `{ payer, client, allowedModels }`. Managed uses the cached singleton and reads the env key lazily, so personal traffic works without it. Personal builds a client through a shared `createClient(apiKey)` with the same `maxRetries: 0`, timeout and fetch adapter, cached in a small LRU by session.
+- `generateMQL(..., options.provider)` and `transcribeAudio(buffer, name, provider)` use `provider.client` instead of `getGroqClient()`. Without a provider they behave as today, so experiment code and existing tests keep working.
+- `routes/query.js` (both `POST /` and `POST /stream`) and `routes/voice.js` resolve the provider once per request and pass it through `QueryExecutionEngine.executeNaturalLanguageQuery` to `naturalLanguageQuery.js`. Voice uses the same provider for Whisper and the text stage. Clarifications, history, export and approved writes make no Groq call and cost nothing.
+- Classify provider errors in `groqService` with a new `ProviderError extends QueryEngineError` in `engineErrors.js`:
+  - 401/403 → `provider_key_invalid` (422). No retry, no model fallback, and never a fallback to the managed key.
+  - 429 with `retry-after` above 8 s → `provider_rate_limited` (429) with `retryAfterSeconds`, returned immediately.
+  - Model not found or not permitted → `provider_model_unavailable` (422).
+- Managed requests for a model outside `MANAGED_MODELS` use the default model. Personal mode allows the full client list.
 
-## Verification handoff
+## 6. Managed allowance: `stores/allowanceStore.js` + `services/allowance.js`
 
-Use synthetic keys and mocked SDK calls. Extend server suites `session.test.js`, `authMe.test.js`, `groqService.test.js`, `queryExecutionEngine.test.js`, `queryStream.test.js` and `routesSmoke.test.js` in `server/src/__tests__`. Add focused tests for the new credential store and quota ledger. Run the concurrency and crash-recovery checks against a disposable transaction-capable MongoDB instance before enabling managed enforcement. Update `client/src/lib/__fixtures__`, `client/src/lib/queryStream.test.js`, `client/src/lib/conversation.test.js`, and `client/tests/e2e/chat.spec.ts`. Assert outbound call counts by payer, and inspect captured logs and responses for the synthetic secret on validation failure.
+**No transactions.** One document per UTC day holds both scopes, so a single conditional `updateOne` is atomic on any MongoDB deployment (standalone, replica set or Atlas):
 
-From the repository root on Windows, use Node 24. Install dependencies once per package. Run each line separately and resolve failures before advancing.
+```js
+{
+  _id: '2026-11-22',
+  tokens: 41230, audioSeconds: 310,
+  conn: { '<connectionId>': { tokens: 8200, audioSeconds: 40 } }
+}
+```
+
+- **Reserve** before each SDK attempt, including retries and model fallbacks. First upsert the day document with `$setOnInsert`, then run
+  `updateOne({ _id, tokens: { $lte: G - est }, ['conn.' + id + '.tokens']: { $not: { $gt: C - est } } }, { $inc: { tokens: est, ['conn.' + id + '.tokens']: est } })`.
+  `modifiedCount === 0` → 429 `managed_allowance_exhausted` with `resetAt`.
+  - Text estimate: `ceil(promptChars / 3) + max_tokens`.
+  - Audio estimate: 60 s. The client stops recording at 60 s, and the server rejects managed uploads over 5 MB.
+- **Settle** once, in a `finally`, by `$inc`-ing `(actual − estimate)` on the original day. Actual is `usage.total_tokens` for text and Whisper's `duration` for audio (minimum 10 s, Groq's billing floor).
+  - The provider rejected the call before generating (401/400): release the whole reservation.
+  - Timeout or unknown outcome: keep the estimate.
+  - A crash between reserve and settle leaves the estimate charged. That's acceptable.
+- Personal-key calls skip reserve and settle entirely.
+- `observe` records usage but never rejects. `off` skips accounting.
+- If the ledger is unavailable in `enforce` mode, managed calls get 503 `managed_accounting_unavailable`. Personal-key requests still work.
+- Usage log: one pino line per settled call with `{ payer, unit, estimate, actual, model }`. No question text, no keys. Use it to tune the §1 numbers.
+- Experiment hooks (`options.llm.beforeCall` / `afterCall`) are untouched and run alongside.
+
+## 7. Errors and transport
+
+- Extend `errorResult`. A `ProviderError` maps to `{ success: false, error: { code, message, payer, retryAfterSeconds?, resetAt? } }`. Any non-engine error gets the generic fallback message instead of `error.message`, so SDK text no longer leaks.
+- The body is the same over JSON, the SSE `result` event (HTTP status 200 once the stream has started) and voice.
+
+| Code | Status |
+| --- | --- |
+| `settings_changed` | 409 |
+| `provider_key_invalid` | 422 |
+| `provider_model_unavailable` | 422 |
+| `managed_allowance_exhausted` | 429 |
+| `provider_rate_limited` | 429 |
+| `managed_accounting_unavailable` | 503 |
+
+Existing `too_many_requests` and `rate_limited` stay as they are. A provider error never signs the user out.
+
+## 8. Origin protection
+
+Production cookies are `SameSite=None`, so a cross-site POST to `/api/query` can already spend the managed budget today. Add `middleware/originCheck.js`: a non-GET `/api/*` request that carries an `Origin` header must match `CORS_ALLOWED_ORIGINS` (in development, the Vite origin `http://localhost:5173`), otherwise 403. Requests without `Origin` (curl, server-to-server) pass, as today. One middleware covers settings, query, stream and multipart voice.
+
+## 9. Client
+
+- `services/api.js`: add `getProviderSettings`, `saveProviderKey`, `setProviderMode` and `deleteProviderKey`. Send `expectedPayer` with query, stream (`lib/queryStream.js`) and voice FormData.
+- New `hooks/useProviderSettings.js` (TanStack Query, like `useSchema`), shared by `Sidebar` and `useChat`. Clear it on logout and reconnect in `useAuth`.
+- New `components/app/ProviderKeyPanel.jsx` in the sidebar. It shows the active payer, for example "AtlasMind allowance: 18K tokens / 9 min voice left, resets 05:30" or "Your Groq key (…a1b2) active until Nov 29". The key input is a password field, cleared after submit. Before activation, explain that questions and schema context (and audio for voice) go to Groq on the user's own account.
+- `lib/conversation.js`: map the new codes to turns with actions:
+  - `managed_allowance_exhausted` → "Use your own Groq key", plus the reset time.
+  - `provider_key_invalid` → "Update key" / "Switch to AtlasMind allowance".
+  - `provider_rate_limited` → "Try again in N s".
+  - `settings_changed` → refresh settings and offer to resend.
+- `useVoice.js`: stop recording at 60 s. `lib/models.js`: show only models in `allowedModels`.
+
+## 10. Implementation sequence
+
+Each step is one focused commit with all checks green.
+
+1. Session `sid`, credential store, logout revocation, settings routes, origin check, log redaction.
+2. `resolveProvider` and its injection through query, stream and voice; error classification; managed model allow-list.
+3. Allowance store and service, reserve/settle around every SDK attempt, structured errors in all three transports.
+4. Client panel, hook, conversation mapping, fixtures; `docs/API.md`, `docs/DEPLOYMENT.md` and `server/.env.example` (also fix the CBC comment).
+
+## 11. Verification
+
+Server tests in `server/src/__tests__`. Mock the SDK through `setGroqClient` or a fake client factory, and use the synthetic key `gsk_test_SECRET`.
+
+- `session.test.js`: new cookies carry `sid`; old cookies get managed only; `readSession` still returns a string.
+- New `providerCredentialStore.test.js` and `providerSettings.test.js`: two sessions on one connection are isolated; an invalid key keeps the old state; expiry; a logout tombstone beats an in-flight PUT; `gsk_test_SECRET` never appears in responses or captured logs.
+- `groqService.test.js`: a personal request uses the personal client for both Whisper and text; a 401 makes zero retries, zero fallbacks and zero managed calls; a long `retry-after` is surfaced immediately.
+- New `allowance.test.js` (mongodb-memory-server if available, otherwise the existing test DB pattern): 50 parallel reservations never exceed either cap; UTC rollover; settlement refunds the difference; a timeout keeps the estimate; voice is charged even when the following text call is refused.
+- `queryStream.test.js` and `routesSmoke.test.js`: the same error body for a pre-stream JSON 429, an in-stream `result` event and voice; `settings_changed` makes no Groq call; a foreign `Origin` gets 403.
+
+Client: update `src/lib/__fixtures__`, `src/lib/conversation.test.js` and `src/lib/queryStream.test.js`. In Playwright `tests/e2e/chat.spec.ts`, stub two flows: allowance exhausted → save key → success, and invalid key → switch to managed.
+
+From the repository root on Node 24, run each line and fix failures before moving on:
 
 ```powershell
 npm --prefix server ci
@@ -112,6 +183,8 @@ npm run test:e2e
 Pop-Location
 ```
 
-### Starting prompt for the next session
+Manual check with `start.bat`: ask a question in managed mode and watch the allowance drop; save a real personal Groq key and confirm the managed counter stops moving; log out and confirm the `provider_credentials` document is tombstoned.
 
-> Implement the Groq BYOK and managed-allowance plan in groq-byok-plan.md. Start from plan/groq-byok-allowances and create an implementation branch from its tip. Follow AGENTS.md and the implementation sequence. Use the file map, contracts and acceptance cases in this document. Keep server credentials scoped to a sign-in and managed quotas scoped to a connection and the installation. Use observation mode for the pilot. Complete code, fixtures, docs and local checks. Report any deployment checks that still need the operator's environment.
+## Starting prompt for the next session
+
+> Implement the Groq BYOK and managed-allowance plan in groq-byok-plan.md. Create an implementation branch from the tip of plan/groq-byok-allowances. Follow CLAUDE.md, AGENTS.md and the implementation sequence in §10, one commit per step. Keep personal keys scoped to a sign-in and managed quotas scoped to a connection and the installation. Use the default limits in §1 with enforce mode. Complete code, fixtures, docs and the local checks in §11, and report anything that needs the operator's environment.

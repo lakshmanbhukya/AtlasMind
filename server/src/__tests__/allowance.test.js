@@ -89,12 +89,13 @@ describe('reserve (enforce)', () => {
         expect(mockLedger.docs).toHaveLength(0);
     });
 
-    test('audio reserves 60 s against its own caps', async () => {
+    test('audio reserves measured seconds rounded up with a 10 s floor', async () => {
         process.env.GROQ_CONNECTION_DAILY_AUDIO_SECONDS = '120';
         const meter = allowance.createMeter('conn-a');
-        await meter.reserveAudio();
-        await meter.reserveAudio();
-        await expect(meter.reserveAudio()).rejects.toMatchObject({ code: 'managed_allowance_exhausted' });
+        await meter.reserveAudio({ seconds: 5 });
+        await meter.reserveAudio({ seconds: 54.2 });
+        await meter.reserveAudio({ seconds: 54.2 });
+        await expect(meter.reserveAudio({ seconds: 60 })).rejects.toMatchObject({ code: 'managed_allowance_exhausted' });
         expect(today()).toMatchObject({ audioSeconds: 120, tokens: 0 });
     });
 
@@ -138,9 +139,9 @@ describe('settle', () => {
 
     test('audio is charged by duration, with a 10 s floor', async () => {
         const meter = allowance.createMeter('conn-a');
-        await meter.settle(await meter.reserveAudio(), { outcome: 'ok', actual: 3.2 });
+        await meter.settle(await meter.reserveAudio({ seconds: 60 }), { outcome: 'ok', actual: 3.2 });
         expect(today().audioSeconds).toBe(10);
-        await meter.settle(await meter.reserveAudio(), { outcome: 'ok', actual: 21.4 });
+        await meter.settle(await meter.reserveAudio({ seconds: 60 }), { outcome: 'ok', actual: 21.4 });
         expect(today().audioSeconds).toBe(32);
     });
 

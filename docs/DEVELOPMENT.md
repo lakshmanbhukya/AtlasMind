@@ -20,6 +20,8 @@ AtlasMind/
 └── docs/
 ```
 
+Managed voice transcription and its server tests require FFmpeg on PATH. The server Docker image includes it.
+
 ## Local Commands
 
 Backend:

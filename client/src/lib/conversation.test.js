@@ -221,6 +221,12 @@ describe('error turn actions and voice resend', () => {
 });
 
 describe('voice', () => {
+    it('shows the upload rejection message before a transcript exists', () => {
+        const body = fixture('voice-upload-error-400');
+        const turn = errorTurn(httpError(400, body), { ...at, source: 'voice' });
+        expect(turn).toMatchObject({ kind: 'error', isVoice: true, content: body.error.message });
+    });
+
     it('success: a voice user turn from the transcript, then the answer', () => {
         const state = run([
             { type: 'asked', source: 'voice' },

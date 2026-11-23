@@ -430,7 +430,7 @@ Deletes a specific query history entry.
 ## 6. Voice Transcription & Multimodal API
 
 ### POST `/api/voice`
-Accepts `multipart/form-data` audio recordings and performs Whisper Large v3 Turbo transcription followed by the unified ambiguity and query pipeline.
+Accepts `multipart/form-data` audio recordings and performs Whisper Large v3 Turbo transcription followed by the unified ambiguity and query pipeline. If the managed audio decoder is unavailable, the server returns 503 `audio_processing_unavailable`.
 
 **Form Fields**:
 - `audio`: Audio file blob (`audio/webm`, `audio/mp3`, `audio/wav`, `audio/m4a`).
@@ -441,7 +441,7 @@ Accepts `multipart/form-data` audio recordings and performs Whisper Large v3 Tur
 - `workspaceId` (optional): Saved workspace to scope the query to (same rules as `/api/query`).
 - `expectedPayer` (optional): `managed` or `personal`, as on `/api/query`. One payer covers both the transcription and the query.
 
-**Size limits**: uploads are capped at 25 MB. On the AtlasMind allowance (managed key) a recording over 5 MB is refused with 400 `upload_error` ("Recordings over 5 MB need your own Groq key.") before any Groq call. The client stops recording at 60 seconds.
+**Size limits**: uploads are capped at 25 MB. On the AtlasMind allowance (managed key) a recording over 5 MB is refused with 400 `upload_error` ("Recordings over 5 MB need your own Groq key.") before any Groq call. Managed recordings are decoded on the server and limited to 60 seconds. Each Whisper attempt reserves the decoded duration rounded up to whole seconds, with a 10-second minimum. Unreadable or overlong managed recordings return 400 `upload_error` before transcription.
 
 **Ambiguity Response**:
 If the transcribed speech is ambiguous, returns `{ success: true, needsClarification: true, transcript: "...", questions: [...] }`.

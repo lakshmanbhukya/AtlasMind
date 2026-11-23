@@ -584,7 +584,7 @@ Common Error Codes:
 - `rate_limited` (429): The upstream LLM is rate limited; retry shortly. Only reachable without a provider (in-process evaluation code); HTTP routes report `provider_rate_limited`.
 - `too_many_requests` (429): AtlasMind's own request limiters (`llmLimiter`, the auth limiter, and 10 Groq key checks per hour per sign-in).
 - `execution_error` / `query_error` / `voice_pipeline_error` (500): Unexpected failure while running the query.
-- `upload_error` (400): Voice upload rejected (over 25 MB, or over 5 MB on the AtlasMind allowance).
+- `upload_error` (400): Voice upload rejected (invalid multipart or unsupported format, over 25 MB, or an unreadable recording or one exceeding 5 MB or 60 seconds on the AtlasMind allowance).
 - `origin_not_allowed` (403): A non-GET request from an origin that is not allowed (see the top of this document).
 - `invalid_json` (400): The request body is not valid JSON. Nothing from the body is logged or echoed back.
 

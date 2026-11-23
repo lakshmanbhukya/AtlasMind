@@ -1,5 +1,4 @@
-import { useCallback } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchSchema } from '../services/api';
 
 /**
@@ -18,14 +17,20 @@ export function useSchema(connectionId) {
         enabled: Boolean(connectionId),
     });
 
-    const refreshSchema = useCallback(() => {
-        queryClient.invalidateQueries({ queryKey: ['schema'] });
-    }, [queryClient]);
+    const refresh = useMutation({
+        mutationFn: () => fetchSchema(true),
+        onSuccess: async (freshSchema) => {
+            const queryKey = ['schema', connectionId];
+            await queryClient.cancelQueries({ queryKey, exact: true });
+            queryClient.setQueryData(queryKey, freshSchema);
+        },
+    });
 
     return {
         schema: schema ?? null,
         isLoading,
-        error: error?.message || null,
-        refreshSchema,
+        isRefreshing: refresh.isPending,
+        error: (refresh.error || error)?.message || null,
+        refreshSchema: () => refresh.mutate(),
     };
 }

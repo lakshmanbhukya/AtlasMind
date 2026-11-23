@@ -19,7 +19,7 @@ import { PROVIDER_SETTINGS_KEY } from './useProviderSettings';
 export function useAuth() {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [connectionMeta, setConnectionMeta] = useState(null);
-    const [isLoading, setIsLoading] = useState(true);
+    const [initialLoading, setInitialLoading] = useState(true);
     const queryClient = useQueryClient();
     const clearProviderSettings = useCallback(
         () => queryClient.removeQueries({ queryKey: [PROVIDER_SETTINGS_KEY] }),
@@ -27,7 +27,6 @@ export function useAuth() {
     );
 
     const checkSession = useCallback(async () => {
-        setIsLoading(true);
         try {
             const data = await getSession();
             if (data.success) {
@@ -47,7 +46,7 @@ export function useAuth() {
             setIsAuthenticated(false);
             setConnectionMeta(null);
         } finally {
-            setIsLoading(false);
+            setInitialLoading(false);
         }
     }, []);
 
@@ -74,7 +73,7 @@ export function useAuth() {
     return {
         isAuthenticated,
         connectionMeta,
-        isLoading,
+        initialLoading,
         logout,
         refetch,
     };

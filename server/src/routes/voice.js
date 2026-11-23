@@ -27,8 +27,7 @@ const upload = multer({
         if (allowedMimes.includes(file.mimetype) || file.originalname.match(/\.(mp3|wav|webm|ogg|flac|m4a|mp4)$/i)) {
             cb(null, true);
         } else {
-            // multer's typings declare (error) or (null, accept); it accepts (error, false) at runtime.
-            cb(/** @type {any} */ (new Error(`Unsupported audio format: ${file.mimetype}`)), false);
+            cb(new Error('Unsupported audio format.'));
         }
     },
 });
@@ -59,7 +58,15 @@ function parseMultipartCollections(raw) {
  * 2. Delegates normalized transcript to QueryExecutionEngine with source: 'voice'
  * 3. Enriches outcome with voice transcription metadata for client backwards-compatibility
  */
-router.post('/', upload.single('audio'), async (req, res) => {
+const receiveAudio = upload.single('audio');
+router.post('/', (req, res, next) => {
+    receiveAudio(req, res, (err) => {
+        if (!err) return next();
+        const message = err.code === 'LIMIT_FILE_SIZE' ? 'Audio file too large (max 25 MB)'
+            : err.message === 'Unsupported audio format.' ? err.message : 'Invalid audio upload.';
+        res.status(400).json({ success: false, error: { code: 'upload_error', message } });
+    });
+}, async (req, res) => {
     try {
         if (!req.file) {
             return res.status(400).json({
@@ -89,7 +96,6 @@ router.post('/', upload.single('audio'), async (req, res) => {
             expectedPayer: req.body?.expectedPayer,
         });
 
-        // The managed allowance budgets 60 s of audio per call; longer uploads need a personal key.
         if (provider.payer === 'managed' && size > MANAGED_MAX_UPLOAD_BYTES) {
             return res.status(400).json({
                 success: false,
@@ -146,15 +152,6 @@ router.post('/', upload.single('audio'), async (req, res) => {
         return sendOutcome(res, outcome, voiceData);
     } catch (error) {
         logPipelineError(forRequest(req), error, 'Voice pipeline error');
-        if (error instanceof multer.MulterError) {
-            return res.status(400).json({
-                success: false,
-                error: {
-                    code: 'upload_error',
-                    message: error.code === 'LIMIT_FILE_SIZE' ? 'Audio file too large (max 25 MB)' : error.message,
-                },
-            });
-        }
         return sendError(res, error, 'voice_pipeline_error', 'Failed to process voice query');
     }
 });

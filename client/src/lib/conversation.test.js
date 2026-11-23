@@ -221,6 +221,12 @@ describe('error turn actions and voice resend', () => {
 });
 
 describe('voice', () => {
+    it('shows the upload rejection message before a transcript exists', () => {
+        const body = fixture('voice-upload-error-400');
+        const turn = errorTurn(httpError(400, body), { ...at, source: 'voice' });
+        expect(turn).toMatchObject({ kind: 'error', isVoice: true, content: body.error.message });
+    });
+
     it('success: a voice user turn from the transcript, then the answer', () => {
         const state = run([
             { type: 'asked', source: 'voice' },
@@ -278,14 +284,6 @@ describe('history replay', () => {
         expect(assistant.content).toBe('Generated query against collection "sample_sales".');
     });
 
-    it('replayed replaces the thread; a missing item leaves it as it was', () => {
-        const before = run([ask('q', 1), answer(fixture('answer'), 1)]);
-        const replayed = run([{ type: 'replayStarted' }, { type: 'replayed', item, now: NOW }], before);
-        expect(replayed.turns.map((t) => t.id)).toEqual([`user-${item.id}`, `assistant-${item.id}`]);
-        expect(replayed.pending).toBeNull();
-        const missing = run([{ type: 'replayStarted' }, { type: 'replayed', item: undefined, now: NOW }], before);
-        expect(missing.turns).toBe(before.turns);
-    });
 });
 
 describe('reducer', () => {

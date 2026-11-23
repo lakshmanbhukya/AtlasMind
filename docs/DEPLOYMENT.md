@@ -13,6 +13,8 @@ Create a Render Web Service with:
 - Build command: npm install
 - Start command: npm start
 
+Managed voice transcription requires `ffmpeg` on the server PATH and a writable temporary directory. The supplied server Dockerfile includes FFmpeg.
+
 Set environment variables:
 
 - NODE_ENV=production

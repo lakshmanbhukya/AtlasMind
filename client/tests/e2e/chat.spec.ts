@@ -268,28 +268,109 @@ test.describe('Chat thread', () => {
     await expect(userBubbles(page)).toHaveCount(1);
   });
 
-  test('history replay renders the stored answer and highlights it', async ({ page }) => {
+  test('history options open beside the last row and keep Delete reachable', async ({ page }) => {
+    await page.setViewportSize({ width: 1024, height: 480 });
     await stubApi(page, []);
-    const item = fixture('history').data[0];
+    const entry = fixture('history').data[0];
+    const history = Array.from({ length: 40 }, (_, i) => ({ ...entry, id: String(i), query: `Saved question ${i}` }));
+    await page.route('**/api/query/history', route => route.fulfill({ json: { data: history } }));
     await openApp(page);
+    await page.getByRole('button', { name: 'Saved question 39', exact: true }).hover();
+    const trigger = page.getByRole('button', { name: 'Options for Saved question 39' });
+    await trigger.click();
+    const menu = page.getByRole('menu', { name: 'Options for Saved question 39' });
+    const buttonBox = await trigger.boundingBox();
+    const menuBox = await menu.boundingBox();
+    expect(menuBox!.x).toBeGreaterThan(buttonBox!.x + buttonBox!.width);
+    const remove = menu.getByRole('menuitem', { name: 'Delete' });
+    await expect(remove).toBeInViewport({ ratio: 1 });
+    await remove.click({ trial: true });
+    await page.getByRole('button', { name: 'Saved question 0', exact: true }).scrollIntoViewIfNeeded();
+    await expect(menu).toHaveCount(0);
+    await page.getByRole('button', { name: 'Saved question 39', exact: true }).hover();
+    await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    await trigger.click();
+    await menu.getByRole('menuitem', { name: 'Rename' }).click();
+    await expect(page.getByRole('textbox', { name: 'Rename query' })).toBeFocused();
+  });
 
-    await page.getByRole('button', { name: item.query }).first().click();
-    const answer = page.locator(`#msg-assistant-${item.id}`);
-    await expect(answer).toBeVisible();
+  test('history selection replays locally and a sidebar refresh preserves follow-ups', async ({ page }) => {
+    await stubApi(page, [{ body: fixture('answer') }]);
+    const first = fixture('history').data[0];
+    const second = { ...first, id: 'second', query: 'Second saved question' };
+    let reads = 0;
+    await page.route('**/api/query/history', (route) => {
+      reads++;
+      return route.fulfill({ json: { data: [first, second] } });
+    });
+    await page.route('**/api/query/history/second', (route) => route.fulfill({ json: { success: true } }));
+    await openApp(page);
+    const row = (name: string) => page.getByRole('button', { name, exact: true });
+    await expect(row(first.query)).toBeVisible();
+    const initialReads = reads;
+    const composer = page.getByRole('textbox', { name: 'Question' });
+    await row(first.query).click();
+    await composer.fill('Draft for the first question');
+    await row(second.query).click();
+    await expect(composer).toHaveValue('');
+    await composer.fill('Follow up');
+    await row(first.query).click();
+    await expect(composer).toHaveValue('Draft for the first question');
+    await row(second.query).click();
+    await expect(composer).toHaveValue('Follow up');
+    const answer = page.locator('#msg-assistant-second');
     await expect(answer).toHaveClass(/ring-2/);
     await expect(answer.getByText('Read-only verified')).toBeVisible();
-    await expect(page.locator(`#msg-user-${item.id}`)).toContainText(item.query);
+    expect(reads).toBe(initialReads);
+
+    await composer.press('Enter');
+    await expect(composer).toHaveValue('');
+    await expect.poll(() => reads).toBeGreaterThan(initialReads);
+    await expect(userBubbles(page)).toHaveCount(2);
+    await row('New query').click();
+    await expect(answer).toHaveCount(0);
+    await row(second.query).click();
+    await row('Options for ' + second.query).click();
+    await page.getByRole('menuitem', { name: 'Delete' }).click();
+    await expect(answer).toHaveCount(0);
+    await expect(row(second.query)).toHaveCount(0);
+  });
+
+  test('schema refresh keeps the previous schema on failure and retries with fresh fields', async ({ page }) => {
+    await stubApi(page, []);
+    let attempts = 0;
+    const schema = fixture('schema');
+    schema.data.collections[0].fields.push({ name: 'new_field', type: 'string' });
+    await page.route('**/api/schema/refresh', (route) => {
+      attempts++;
+      return attempts === 1
+        ? route.fulfill({ status: 500, json: { success: false } })
+        : route.fulfill({ json: schema });
+    });
+    await openApp(page);
+    await page.getByRole('button', { name: 'Schema explorer' }).click();
+    await page.getByRole('button', { name: /sample_sales/ }).click();
+    const refresh = page.getByRole('button', { name: 'Refresh schema' });
+    await refresh.click();
+    await expect(page.getByRole('alert')).toBeVisible();
+    await expect(page.getByRole('cell', { name: 'region' })).toBeVisible();
+    await refresh.click();
+    await expect(page.getByRole('cell', { name: 'new_field' })).toBeVisible();
+    await expect(page.getByRole('alert')).toHaveCount(0);
+    expect(attempts).toBe(2);
   });
 });
 
 /** A fake microphone and MediaRecorder: Start records, Send yields a small webm blob. */
-async function fakeMicrophone(page: Page) {
+async function fakeMicrophone(page: Page, deferPermission = false) {
   await page.addInitScript({
     content: `(() => {
-      const stream = { getTracks: () => [{ stop() {} }] };
+      window.stoppedTracks = 0;
+      const stream = { getTracks: () => [{ stop() { window.stoppedTracks++; } }] };
+      const permission = new Promise(resolve => { window.grantMicrophone = () => resolve(stream); });
       Object.defineProperty(navigator, 'mediaDevices', {
         configurable: true,
-        value: { getUserMedia: async () => stream },
+        value: { getUserMedia: async () => ${deferPermission} ? permission : stream },
       });
       class FakeRecorder {
         static isTypeSupported() { return true; }
@@ -306,8 +387,56 @@ async function fakeMicrophone(page: Page) {
   });
 }
 
+for (const deferPermission of [false, true]) {
+  test(`leaving chat releases the microphone with permission ${deferPermission ? 'pending' : 'granted'}`, async ({ page }) => {
+    await fakeMicrophone(page, deferPermission);
+    const { voiceRequests } = await stubApi(page, []);
+    await openApp(page);
+    await page.clock.install();
+    await page.getByRole('button', { name: 'Start voice question' }).click();
+    if (!deferPermission) await expect(page.getByRole('button', { name: 'Cancel', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Schema explorer' }).click();
+    await expect(page.getByRole('button', { name: 'Refresh schema' })).toBeVisible();
+    await page.evaluate(() => (window as unknown as { grantMicrophone(): void }).grantMicrophone());
+    await expect.poll(() => page.evaluate(() => (window as unknown as { stoppedTracks: number }).stoppedTracks)).toBe(1);
+    await page.clock.fastForward(61_000);
+    expect(voiceRequests).toHaveLength(0);
+  });
+}
+
+test('voice limit sends once and releases the microphone', async ({ page }) => {
+  await fakeMicrophone(page);
+  const { voiceRequests } = await stubApi(page, [], undefined, { voiceReplies: [{ body: fixture('voice-answer') }] });
+  await openApp(page);
+  await page.clock.install();
+  await page.getByRole('button', { name: 'Start voice question' }).click();
+  await expect(page.getByRole('button', { name: 'Cancel', exact: true })).toBeVisible();
+  await page.clock.fastForward(60_000);
+  await expect(conversation(page).getByText('Read-only verified')).toBeVisible();
+  expect(voiceRequests).toHaveLength(1);
+  expect(await page.evaluate(() => (window as unknown as { stoppedTracks: number }).stoppedTracks)).toBe(1);
+});
+
 test.describe('Groq payer', () => {
-  const payerPanel = (page: Page) => page.getByRole('region', { name: 'Groq usage' });
+  const payerPanel = (page: Page) => page.getByRole('dialog', { name: 'Settings' });
+  const openSettings = (page: Page) => page.getByRole('button', { name: 'Settings', exact: true }).click();
+  const closeSettings = (page: Page) => payerPanel(page).getByRole('button', { name: 'Close settings' }).click();
+
+  test('closing Settings discards a draft key and returns focus to the gear', async ({ page }) => {
+    const { settingsBodies } = await stubApi(page, [], undefined, { settings: fixture('provider-settings-managed') });
+    await openApp(page);
+    await openSettings(page);
+    const addKey = payerPanel(page).getByRole('button', { name: 'Use your own Groq key' });
+    await addKey.click();
+    const input = payerPanel(page).getByLabel('Groq API key');
+    await input.fill('gsk_unsaved');
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('button', { name: 'Settings', exact: true })).toBeFocused();
+    await openSettings(page);
+    await addKey.click();
+    await expect(input).toHaveValue('');
+    expect(settingsBodies).toHaveLength(0);
+  });
 
   test('allowance exhausted: save your own key, then the retry is paid by it', async ({ page }) => {
     const { queryBodies, settingsBodies } = await stubApi(
@@ -317,7 +446,12 @@ test.describe('Groq payer', () => {
       { settings: fixture('provider-settings-exhausted') }
     );
     await openApp(page);
+    await expect(payerPanel(page)).toHaveCount(0);
+    await openSettings(page);
+    await expect(payerPanel(page).getByRole('heading', { name: 'Usage' })).toBeVisible();
+    await expect(payerPanel(page).getByRole('heading', { name: 'API key' })).toBeVisible();
     await expect(payerPanel(page).getByTestId('payer-title')).toHaveText('AtlasMind allowance');
+    await closeSettings(page);
     await ask(page, 'Total revenue by region');
 
     await expect(conversation(page).getByText('AtlasMind allowance used up')).toBeVisible();
@@ -331,8 +465,7 @@ test.describe('Groq payer', () => {
     await keyInput.fill('gsk_test_SECRET');
     await payerPanel(page).getByRole('button', { name: 'Save and use key' }).click();
 
-    await expect(payerPanel(page).getByTestId('payer-title')).toHaveText('Your Groq key (…CRET)');
-    await expect(payerPanel(page).getByLabel('Groq API key')).toHaveCount(0);
+    await expect(payerPanel(page)).toHaveCount(0);
     expect(settingsBodies).toEqual([{ key: 'PUT provider-settings/key', body: { apiKey: 'gsk_test_SECRET' } }]);
 
     await conversation(page).getByRole('button', { name: 'Retry' }).click();
@@ -352,7 +485,12 @@ test.describe('Groq payer', () => {
       { settings: fixture('provider-settings-personal') }
     );
     await openApp(page);
+    await expect(payerPanel(page)).toHaveCount(0);
+    await openSettings(page);
+    await expect(payerPanel(page).getByRole('heading', { name: 'Usage' })).toBeVisible();
+    await expect(payerPanel(page).getByRole('heading', { name: 'API key' })).toBeVisible();
     await expect(payerPanel(page).getByTestId('payer-title')).toHaveText('Your Groq key (…CRET)');
+    await closeSettings(page);
     await ask(page, 'Total revenue by region');
 
     await expect(conversation(page).getByText('Groq key rejected')).toBeVisible();
@@ -360,7 +498,9 @@ test.describe('Groq payer', () => {
     expect(queryBodies[0]).toMatchObject({ expectedPayer: 'personal' });
 
     await conversation(page).getByRole('button', { name: 'Switch to AtlasMind allowance' }).click();
+    await openSettings(page);
     await expect(payerPanel(page).getByTestId('payer-title')).toHaveText('AtlasMind allowance');
+    await closeSettings(page);
     expect(settingsBodies).toEqual([{ key: 'PATCH provider-settings', body: { mode: 'managed' } }]);
 
     await conversation(page).getByRole('button', { name: 'Retry' }).click();
@@ -371,6 +511,7 @@ test.describe('Groq payer', () => {
   test('removing the key asks first, then switches to the AtlasMind allowance', async ({ page }) => {
     const { settingsBodies } = await stubApi(page, [], undefined, { settings: fixture('provider-settings-personal') });
     await openApp(page);
+    await openSettings(page);
 
     await payerPanel(page).getByRole('button', { name: 'Remove key' }).click();
     expect(settingsBodies).toHaveLength(0);
@@ -382,9 +523,11 @@ test.describe('Groq payer', () => {
   test('managed models only, and a reconnect note on an old cookie', async ({ page }) => {
     await stubApi(page, [], undefined, { settings: fixture('provider-settings-legacy') });
     await openApp(page);
+    await openSettings(page);
 
     await expect(payerPanel(page).getByText(/connect your database again to use your own Groq key/)).toBeVisible();
     await expect(payerPanel(page).getByRole('button', { name: 'Use your own Groq key' })).toHaveCount(0);
+    await page.keyboard.press('Escape');
     await page.getByRole('button', { name: /Model:/ }).click();
     const menu = page.getByRole('menu', { name: 'Model' });
     await expect(menu.getByRole('menuitemradio')).toHaveCount(2);
@@ -420,7 +563,7 @@ test.describe('Groq payer', () => {
     await expect(conversation(page).getByRole('button', { name: 'Retry' })).toBeVisible();
   });
 
-  test('a payer change from the sidebar hides the turn actions too', async ({ page }) => {
+  test('a payer change from Settings hides the turn actions too', async ({ page }) => {
     await stubApi(page, [{ status: 422, body: fixture('provider-key-invalid-422') }], undefined, {
       settings: fixture('provider-settings-personal'),
     });
@@ -428,8 +571,10 @@ test.describe('Groq payer', () => {
     await ask(page, 'Total revenue by region');
     await expect(conversation(page).getByRole('button', { name: 'Update key' })).toBeVisible();
 
+    await openSettings(page);
     await payerPanel(page).getByRole('button', { name: 'Use AtlasMind allowance' }).click();
     await expect(payerPanel(page).getByTestId('payer-title')).toHaveText('AtlasMind allowance');
+    await closeSettings(page);
     await expect(conversation(page).getByRole('button', { name: 'Update key' })).toHaveCount(0);
     await expect(conversation(page).getByRole('button', { name: 'Retry' })).toBeVisible();
   });
@@ -477,13 +622,13 @@ test.describe('Groq payer', () => {
     expect(queryBodies).toHaveLength(2);
   });
 
-  test('phone width: "Use your own Groq key" opens the drawer and the key form', async ({ page }) => {
+  test('phone width: "Use your own Groq key" opens the key form in Settings', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await stubApi(page, [{ status: 429, body: fixture('allowance-exhausted-429') }], undefined, {
       settings: fixture('provider-settings-exhausted'),
     });
     await openApp(page);
-    await expect(payerPanel(page)).not.toBeInViewport();
+    await expect(payerPanel(page)).toHaveCount(0);
     await ask(page, 'Total revenue by region');
 
     await conversation(page).getByRole('button', { name: 'Use your own Groq key' }).click();

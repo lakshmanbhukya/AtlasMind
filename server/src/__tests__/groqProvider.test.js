@@ -6,6 +6,10 @@
  */
 
 const { createFakeCollection } = require('../../test-support/fakeMongo');
+const { execFileSync } = require('node:child_process');
+const { mkdtempSync, readFileSync, rmSync } = require('node:fs');
+const { tmpdir } = require('node:os');
+const { join } = require('node:path');
 
 let mockLedger;
 jest.mock('../db/connection', () => ({ getDb: () => ({ collection: () => mockLedger }) }));
@@ -25,6 +29,23 @@ const {
 const { ProviderError } = require('../services/engineErrors');
 
 const KEY = 'gsk_test_SECRET';
+
+// Streamed WebM matches browser recordings that omit container duration.
+function recording(seconds, outputOptions) {
+    const args = [
+        '-nostdin', '-v', 'error', '-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=mono',
+        '-t', String(seconds),
+    ];
+    if (!outputOptions) return execFileSync('ffmpeg', [...args, '-c:a', 'libopus', '-f', 'webm', 'pipe:1']);
+    const dir = mkdtempSync(join(tmpdir(), 'atlasmind-fixture-'));
+    try {
+        const file = join(dir, 'recording');
+        execFileSync('ffmpeg', [...args, ...outputOptions, file]);
+        return readFileSync(file);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+}
 
 function completion(content) {
     return {
@@ -273,19 +294,56 @@ describe('managed allowance on every Groq attempt', () => {
         expect(onFailure).toHaveBeenCalledTimes(1);
     });
 
+    test.each([
+        ['wav', ['-ar', '16000', '-f', 'wav']],
+        ['mp3', ['-f', 'mp3']],
+        ['ogg', ['-c:a', 'libopus', '-f', 'ogg']],
+        ['flac', ['-f', 'flac']],
+        ['m4a', ['-c:a', 'aac', '-f', 'mp4']],
+    ])('accepts managed %s audio and sends measured PCM to Whisper', async (extension, options) => {
+        const provider = await resolveProvider({ connectionId: 'c', sessionId: 's' });
+        const seconds = extension === 'wav' ? 60 : 1;
+        await transcribeAudio(recording(seconds, options), `recording.${extension}`, provider);
+        const { file } = managed.audio.transcriptions.create.mock.calls[0][0];
+        expect(file.name).toBe('recording.wav');
+        if (extension === 'wav') expect(file.size).toBe(44 + 60 * 32000);
+    });
+
+    test('trims browser timer overrun before reserving and uploading managed voice', async () => {
+        process.env.GROQ_CONNECTION_DAILY_AUDIO_SECONDS = '60';
+        const provider = await resolveProvider({ connectionId: 'c', sessionId: 's' });
+        await transcribeAudio(recording(60.05), 'recording.webm', provider);
+        const { file } = managed.audio.transcriptions.create.mock.calls[0][0];
+        const pcm = Buffer.from(await file.arrayBuffer());
+        expect(pcm.length).toBe(44 + 60 * 32000);
+        expect(pcm.readUInt32LE(4)).toBe(pcm.length - 8);
+        expect(pcm.readUInt32LE(40)).toBe(pcm.length - 44);
+    });
+
+    test.each([
+        ['overlong', () => recording(61)],
+        ['unreadable', () => Buffer.from('invalid')],
+    ])('rejects %s managed audio before reserving or calling Whisper', async (_, makeInput) => {
+        const provider = await resolveProvider({ connectionId: 'c', sessionId: 's' });
+        await expect(transcribeAudio(makeInput(), 'a.webm', provider))
+            .rejects.toMatchObject({ statusCode: 400, code: 'upload_error' });
+        expect(managed.audio.transcriptions.create).not.toHaveBeenCalled();
+        expect(mockLedger.docs).toHaveLength(0);
+    });
+
     test('voice is charged even when the following text call is refused', async () => {
         process.env.GROQ_CONNECTION_DAILY_TOKENS = '100';
         const provider = await resolveProvider({ connectionId: 'c', sessionId: 's' });
-        await transcribeAudio(Buffer.from('abc'), 'a.webm', provider);
+        await transcribeAudio(recording(12.5), 'a.webm', provider);
         const err = await generateMQL('show orders', 'Database: db', [], undefined, { provider }).catch((e) => e);
         expect(err.code).toBe('managed_allowance_exhausted');
         expect(ledgerDay()).toMatchObject({ audioSeconds: 10, tokens: 0 }); // 3 s billed at the 10 s floor
     });
 
     test('an exhausted voice allowance skips both Whisper models', async () => {
-        process.env.GROQ_CONNECTION_DAILY_AUDIO_SECONDS = '30';
+        process.env.GROQ_CONNECTION_DAILY_AUDIO_SECONDS = '12';
         const provider = await resolveProvider({ connectionId: 'c', sessionId: 's' });
-        const err = await transcribeAudio(Buffer.from('abc'), 'a.webm', provider).catch((e) => e);
+        const err = await transcribeAudio(recording(12.5), 'a.webm', provider).catch((e) => e);
         expect(err.code).toBe('managed_allowance_exhausted');
         expect(managed.audio.transcriptions.create).not.toHaveBeenCalled();
     });
@@ -293,9 +351,9 @@ describe('managed allowance on every Groq attempt', () => {
     test('each Whisper attempt reserves; a failed one keeps its estimate', async () => {
         const provider = await resolveProvider({ connectionId: 'c', sessionId: 's' });
         managed.audio.transcriptions.create.mockRejectedValueOnce(sdkError(500));
-        await transcribeAudio(Buffer.from('abc'), 'a.webm', provider);
+        await transcribeAudio(recording(12.5), 'a.webm', provider);
         expect(managed.audio.transcriptions.create).toHaveBeenCalledTimes(2);
-        expect(ledgerDay().audioSeconds).toBe(60 + 10);
+        expect(ledgerDay().audioSeconds).toBe(13 + 10);
     });
 
     test('personal-key calls make no ledger writes', async () => {

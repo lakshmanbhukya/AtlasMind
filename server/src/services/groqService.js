@@ -7,6 +7,7 @@ const { ProviderError } = require('./engineErrors');
 const { managedModels, SUPPORTED_MODELS } = require('./providerConfig');
 const credentialStore = require('../stores/providerCredentialStore');
 const allowance = require('./allowance');
+const { prepareManagedAudio } = require('./managedAudio');
 const log = require('../utils/logger').logger.child({ module: 'groqService' });
 
 /** @type {import('groq-sdk').default|null} */
@@ -544,9 +545,10 @@ async function transcribeAudio(audioBuffer, filename = 'recording.webm', provide
 
     const meter = (provider && provider.meter) || null;
 
+    const managedAudio = provider?.payer === 'personal' ? null : await prepareManagedAudio(audioBuffer);
     const call = async (model) => client.audio.transcriptions.create({
         model,
-        file: await toFile(audioBuffer, filename),
+        file: await toFile(managedAudio?.wav ?? audioBuffer, managedAudio ? 'recording.wav' : filename),
         language: 'en',
         response_format: 'verbose_json',
     }, { timeout: TRANSCRIPTION_TIMEOUT_MS });
@@ -554,7 +556,7 @@ async function transcribeAudio(audioBuffer, filename = 'recording.webm', provide
     /** One Whisper attempt; a managed one is reserved first and settled by `duration`. */
     const transcribe = async (model) => {
         if (!meter) return call(model);
-        const reservation = await meter.reserveAudio({ model });
+        const reservation = await meter.reserveAudio({ model, seconds: managedAudio.seconds });
         /** @type {import('./allowance').Outcome} */
         let outcome = 'unknown';
         let actual;

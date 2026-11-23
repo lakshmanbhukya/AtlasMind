@@ -1,116 +1,97 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+﻿import { useState, useCallback, useEffect, useRef } from 'react';
 
-/**
- * Longest recording, in seconds. The AtlasMind allowance reserves 60 s of voice per
- * question, so a recording stops here and is sent as if the user pressed Send.
- */
 export const MAX_RECORDING_SECONDS = 60;
 
-/**
- * Voice recording hook using MediaRecorder API.
- * Returns recording state and controls.
- *
- * `onLimit(blob)` gets the recording when it reaches MAX_RECORDING_SECONDS
- * (the caller sends it). A Send or Cancel before then clears the limit timer.
- */
+function stopTracks(stream) {
+    stream?.getTracks().forEach((track) => track.stop());
+}
+
+/** A manual Send or the time limit keeps the audio. Cancel and unmount discard it. */
 export function useVoice({ onLimit } = {}) {
     const [isRecording, setIsRecording] = useState(false);
     const [error, setError] = useState(null);
-    const mediaRecorderRef = useRef(null);
-    const chunksRef = useRef([]);
-    const limitTimerRef = useRef(null);
+    const active = useRef(null);
     const onLimitRef = useRef(onLimit);
     useEffect(() => {
         onLimitRef.current = onLimit;
     }, [onLimit]);
 
-    const clearLimitTimer = useCallback(() => {
-        clearTimeout(limitTimerRef.current);
-        limitTimerRef.current = null;
+    const discard = useCallback(() => {
+        const session = active.current;
+        if (!session) return;
+        active.current = null;
+        clearTimeout(session.timer);
+        const recorder = session.recorder;
+        if (recorder) {
+            recorder.onstop = null;
+            recorder.ondataavailable = null;
+            if (recorder.state !== 'inactive') recorder.stop();
+        }
+        stopTracks(session.stream);
+        // Navigation can happen between a Send click and the recorder's stop event.
+        session.resolve?.(null);
     }, []);
 
-    // Unmounting mid-recording must not fire onLimit later.
-    useEffect(() => clearLimitTimer, [clearLimitTimer]);
+    useEffect(() => discard, [discard]);
 
     const stopRecording = useCallback(() => {
-        clearLimitTimer();
+        const session = active.current;
+        if (session?.recorder?.state !== 'recording') return Promise.resolve(null);
+        clearTimeout(session.timer);
         return new Promise((resolve) => {
-            const mediaRecorder = mediaRecorderRef.current;
-
-            if (!mediaRecorder || mediaRecorder.state === 'inactive') {
-                resolve(null);
-                return;
-            }
-
-            mediaRecorder.onstop = () => {
-                const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
-                chunksRef.current = [];
-                setIsRecording(false);
-
-                // Stop all tracks to release microphone
-                mediaRecorder.stream.getTracks().forEach((track) => track.stop());
-
-                resolve(blob);
-            };
-
-            mediaRecorder.stop();
+            session.resolve = resolve;
+            session.recorder.stop();
         });
-    }, [clearLimitTimer]);
+    }, []);
 
     const startRecording = useCallback(async () => {
+        if (active.current) return;
+        const session = { stream: null, recorder: null, timer: null, resolve: null };
+        active.current = session;
         setError(null);
-        chunksRef.current = [];
-
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-            const mediaRecorder = new MediaRecorder(stream, {
+            if (active.current !== session) {
+                stopTracks(stream);
+                return;
+            }
+            session.stream = stream;
+            const recorder = new MediaRecorder(stream, {
                 mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
                     ? 'audio/webm;codecs=opus'
                     : 'audio/webm',
             });
-
-            mediaRecorder.ondataavailable = (event) => {
-                if (event.data.size > 0) {
-                    chunksRef.current.push(event.data);
-                }
+            session.recorder = recorder;
+            const chunks = [];
+            recorder.ondataavailable = (event) => {
+                if (event.data.size > 0) chunks.push(event.data);
             };
-
-            mediaRecorderRef.current = mediaRecorder;
-            mediaRecorder.start();
+            recorder.onstop = () => {
+                active.current = null;
+                clearTimeout(session.timer);
+                stopTracks(stream);
+                setIsRecording(false);
+                session.resolve?.(new Blob(chunks, { type: 'audio/webm' }));
+            };
+            recorder.start();
             setIsRecording(true);
-
-            clearLimitTimer();
-            limitTimerRef.current = setTimeout(() => {
-                limitTimerRef.current = null;
-                stopRecording().then((blob) => {
-                    if (blob) onLimitRef.current?.(blob);
-                });
+            session.timer = setTimeout(async () => {
+                const blob = await stopRecording();
+                if (blob) onLimitRef.current?.(blob);
             }, MAX_RECORDING_SECONDS * 1000);
         } catch (err) {
-            setError('Microphone access denied. Please allow microphone permissions.');
-            console.error('[Voice] Failed to start recording:', err);
+            if (active.current !== session) return;
+            discard();
+            setError(err?.name === 'NotAllowedError'
+                ? 'Microphone access denied. Please allow microphone permissions.'
+                : 'Could not start the microphone. Check your recording device and try again.');
         }
-    }, [clearLimitTimer, stopRecording]);
+    }, [discard, stopRecording]);
 
     const cancelRecording = useCallback(() => {
-        clearLimitTimer();
-        const mediaRecorder = mediaRecorderRef.current;
-
-        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-            mediaRecorder.stream.getTracks().forEach((track) => track.stop());
-            mediaRecorder.stop();
-        }
-
-        chunksRef.current = [];
+        discard();
         setIsRecording(false);
-    }, [clearLimitTimer]);
+    }, [discard]);
 
-    return {
-        isRecording,
-        error,
-        startRecording,
-        stopRecording,
-        cancelRecording,
-    };
+    return { isRecording, error, startRecording, stopRecording, cancelRecording };
 }

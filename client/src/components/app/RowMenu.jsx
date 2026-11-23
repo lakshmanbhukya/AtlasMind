@@ -45,7 +45,8 @@ export default function RowMenu({ title, pinned, onRename, onTogglePin, onDelete
         onClose={() => set(false)}
         anchorRef={btnRef}
         label={`Options for ${title}`}
-        className="right-1 top-[40px] w-[176px]"
+        beside
+        className="w-[176px]"
       >
         <MenuItem icon={Pencil} onSelect={choose(onRename)}>Rename</MenuItem>
         <MenuItem icon={pinned ? PinOff : Pin} onSelect={choose(onTogglePin)}>{pinned ? 'Unpin' : 'Pin'}</MenuItem>

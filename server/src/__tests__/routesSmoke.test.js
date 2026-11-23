@@ -558,6 +558,17 @@ describe('the same provider error body over JSON, voice and the stream', () => {
         expect(errorResult(make(), 'query_error', 'x')).toEqual({ status: 429, body: expected });
     });
 
+    test.each([
+        ['unsupported format', 'note.txt', 10, 'Unsupported audio format.'],
+        ['oversized file', 'speech.wav', 25 * 1024 * 1024 + 1, 'Audio file too large (max 25 MB)'],
+    ])('maps %s to an upload error before provider resolution', async (_, filename, size, message) => {
+        const res = await request(app).post('/api/voice').attach('audio', Buffer.alloc(size), filename);
+        expect(res.status).toBe(400);
+        expect(res.body).toEqual({ success: false, error: { code: 'upload_error', message } });
+        expect(mockResolveProvider).not.toHaveBeenCalled();
+        expect(transcribeAudio).not.toHaveBeenCalled();
+    });
+
     test('voice over 5 MB on the managed allowance is refused before any Groq call', async () => {
         const res = await request(app)
             .post('/api/voice')

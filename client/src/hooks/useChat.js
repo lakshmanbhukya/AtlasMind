@@ -1,8 +1,7 @@
-import { useState, useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
-import { streamQuery, sendVoice, approveWriteQuery, fetchQueryHistory } from '../services/api';
-import { DEFAULT_MODEL_ID } from '../lib/models';
+import { useCallback, useMemo, useReducer, useRef } from 'react';
+import { streamQuery, sendVoice, approveWriteQuery } from '../services/api';
 import { modelsFor, pickModel } from '../lib/providerSettings';
-import { conversationReducer, initialConversation, userTurn } from '../lib/conversation';
+import { conversationReducer, initialConversation, historyToTurns, userTurn } from '../lib/conversation';
 import { useProviderSettings } from './useProviderSettings';
 
 /**
@@ -11,7 +10,7 @@ import { useProviderSettings } from './useProviderSettings';
  *
  * Text questions stream stage progress (`pendingStage`); voice uses the plain request.
  *
- * `selectedQueryId` replays a history item; `onQuerySuccess` fires after a successful
+ * `selectedHistoryItem` replays a history item; `onQuerySuccess` fires after a successful
  * text query, voice query and approved write (the history list refreshes on it).
  *
  * Who pays comes from the provider settings of `connectionId`: each question sends the
@@ -19,9 +18,11 @@ import { useProviderSettings } from './useProviderSettings';
  * and the settings are refetched after every query or voice response (success or not),
  * so the allowance counter moves and a `settings_changed` reply picks up the new mode.
  */
-export function useChat(selectedQueryId, onQuerySuccess, connectionId) {
-    const [{ turns, pending, pendingStage }, dispatch] = useReducer(conversationReducer, initialConversation);
-    const [chosenModel, setSelectedModel] = useState(DEFAULT_MODEL_ID);
+export function useChat(selectedHistoryItem, onQuerySuccess, connectionId, chosenModel) {
+    const [{ turns, pending, pendingStage }, dispatch] = useReducer(
+        conversationReducer, selectedHistoryItem,
+        (item) => item ? { turns: historyToTurns(item, { now: Date.now() }), pending: null } : initialConversation
+    );
     const provider = useProviderSettings(connectionId);
     const { expectedPayer, refresh: refreshProvider } = provider;
     const allowedModels = provider.settings?.allowedModels;
@@ -33,26 +34,6 @@ export function useChat(selectedQueryId, onQuerySuccess, connectionId) {
     // reducer state (a Blob is not chat data) and gone after a reload.
     const failedRecording = useRef(null);
     const newId = useCallback(() => `t${Date.now()}-${(counter.current += 1)}`, []);
-
-    // A history item was opened: replay it as one question and its answer.
-    useEffect(() => {
-        failedRecording.current = null;
-        if (!selectedQueryId) {
-            dispatch({ type: 'cleared' });
-            return;
-        }
-        const replay = async () => {
-            dispatch({ type: 'replayStarted' });
-            try {
-                const history = await fetchQueryHistory();
-                dispatch({ type: 'replayed', item: history.find((h) => h.id === selectedQueryId), now: Date.now() });
-            } catch (err) {
-                if (import.meta.env.DEV) console.warn('Failed to restore query history item:', err.message);
-                dispatch({ type: 'replayFailed' });
-            }
-        };
-        replay();
-    }, [selectedQueryId]);
 
     /**
      * Ask a question. Options: request scope (`collections`, `workspaceId`), `clarifications`,
@@ -162,7 +143,6 @@ export function useChat(selectedQueryId, onQuerySuccess, connectionId) {
         pending,
         pendingStage,
         selectedModel,
-        setSelectedModel,
         models,
         provider,
         sendMessage,

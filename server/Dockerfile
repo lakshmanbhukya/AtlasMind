@@ -6,6 +6,7 @@ RUN npm ci --omit=dev
 
 # Final stage
 FROM node:24-alpine
+RUN apk add --no-cache ffmpeg
 ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=build /app/node_modules ./node_modules

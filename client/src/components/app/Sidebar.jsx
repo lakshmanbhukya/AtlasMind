@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Plus, Search, LayoutDashboard, Database, Folder, ChevronDown, Settings, PanelLeft, LogOut, X,
+  Plus, Search, LayoutDashboard, Database, Folder, ChevronDown, Settings, PanelLeft, X,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { focusRing, LogoMark } from '../ui/vg/primitives';
 import { initials } from '../../lib/turnFormat';
 import ChartTypeIcon from './ChartTypeIcon';
 import RowMenu from './RowMenu';
-import { Menu, MenuItem, MenuSeparator } from './Menu';
-import ProviderKeyPanel from './ProviderKeyPanel';
 
 function NavItem({ icon: Icon, label, active, onClick, ...props }) {
   return (
@@ -93,7 +91,7 @@ function HistoryRow({ item, active, onSelect, onRename, onTogglePin, onDelete })
     >
       <button
         type="button"
-        onClick={() => onSelect(item.id)}
+        onClick={() => onSelect(item)}
         aria-current={active ? 'true' : undefined}
         title={item.query}
         className={cn('h-full flex-1 min-w-0 pl-3 pr-9 rounded-lg text-left truncate', focusRing)}
@@ -118,11 +116,6 @@ function HistoryRow({ item, active, onSelect, onRename, onTogglePin, onDelete })
   );
 }
 
-/**
- * Left column: product mark + collapse, primary nav, Pinned and Recents
- * (single queries from history) with row menus, who pays for Groq calls
- * (ProviderKeyPanel), and the connection footer.
- */
 export default function Sidebar({
   onCollapse,
   onNewQuery,
@@ -137,17 +130,12 @@ export default function Sidebar({
   onTogglePin,
   onDeleteHistory,
   connectionMeta,
-  onLogout,
-  keyFormOpen = false,
-  onKeyFormOpenChange,
-  onKeySaved,
+  onOpenSettings,
 }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [pinnedOpen, setPinnedOpen] = useState(true);
   const [recentsOpen, setRecentsOpen] = useState(true);
-  const [accountOpen, setAccountOpen] = useState(false);
-  const accountRef = useRef(null);
   const searchRef = useRef(null);
 
   useEffect(() => {
@@ -264,51 +252,20 @@ export default function Sidebar({
         </section>
       </div>
 
-      <ProviderKeyPanel
-        connectionId={connectionMeta?.connectionId}
-        formOpen={keyFormOpen}
-        onFormOpenChange={onKeyFormOpenChange}
-        onKeySaved={onKeySaved}
-      />
-
       <div className="relative h-16 shrink-0 px-3 border-t border-vg-line-soft flex items-center gap-3">
         <span aria-hidden="true" className="w-8 h-8 shrink-0 rounded-full bg-[var(--vg-avatar)] flex items-center justify-center text-[12px] font-semibold">
           {initials(label)}
         </span>
         <span className="flex-1 min-w-0 text-[14px] text-vg-text truncate" title={label}>{label}</span>
         <button
-          ref={accountRef}
           type="button"
           aria-label="Settings"
-          aria-haspopup="menu"
-          aria-expanded={accountOpen}
-          onClick={() => setAccountOpen((o) => !o)}
+          aria-haspopup="dialog"
+          onClick={onOpenSettings}
           className={cn('w-8 h-8 rounded-md flex items-center justify-center text-vg-text-3 hover:bg-vg-surface hover:text-vg-text', focusRing)}
         >
           <Settings size={16} aria-hidden="true" />
         </button>
-        <Menu open={accountOpen} onClose={() => setAccountOpen(false)} anchorRef={accountRef} label="Settings" className="right-2 bottom-14 w-[208px]">
-          <MenuItem
-            icon={Folder}
-            onSelect={() => {
-              setAccountOpen(false);
-              onOpenWorkspaces();
-            }}
-          >
-            Manage workspaces
-          </MenuItem>
-          <MenuSeparator />
-          <MenuItem
-            icon={LogOut}
-            danger
-            onSelect={() => {
-              setAccountOpen(false);
-              onLogout();
-            }}
-          >
-            Disconnect
-          </MenuItem>
-        </Menu>
       </div>
     </nav>
   );

@@ -248,7 +248,6 @@ const updateTurn = (turns, id, update) => turns.map((t) => (t.id === id ? { ...t
  *
  * Actions (ids and `now` are supplied by the caller):
  * - `cleared`
- * - `replayStarted` / `replayed { item, now }` / `replayFailed`
  * - `asked { source, userTurn? }`
  * - `progressed { stage }`: a stream progress event for the pending question
  * - `answered { body, source, ids: { assistant, user? }, now }`
@@ -265,19 +264,8 @@ export function conversationReducer(state, action) {
         case 'cleared':
             return initialConversation;
 
-        case 'replayStarted':
         case 'approveStarted':
             return { ...state, pending: 'text' };
-
-        case 'replayed':
-            // An item that no longer exists leaves the thread as it was.
-            return {
-                turns: action.item ? historyToTurns(action.item, { now: action.now }) : state.turns,
-                pending: null,
-            };
-
-        case 'replayFailed':
-            return { ...state, pending: null };
 
         case 'asked':
             return {

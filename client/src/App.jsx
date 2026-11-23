@@ -41,8 +41,24 @@ function LoadingScreen({ message }) {
  *   4. isAuthenticated=false → LandingPage; on connect → refetch() → AppShell
  */
 export default function App() {
-  const { isAuthenticated, connectionMeta, isLoading, logout, refetch } = useAuth();
-  const connectionId = isAuthenticated ? connectionMeta?.connectionId : undefined;
+  const { isAuthenticated, connectionMeta, initialLoading, logout, refetch } = useAuth();
+  if (initialLoading) {
+    return <LoadingScreen message="Checking your session…" />;
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <Suspense fallback={<LoadingScreen message="Loading…" />}>
+        <LandingPage onConnected={refetch} />
+      </Suspense>
+    );
+  }
+
+  return <ConnectedApp key={connectionMeta.connectionId} connectionMeta={connectionMeta} logout={logout} />;
+}
+
+function ConnectedApp({ connectionMeta, logout }) {
+  const { connectionId } = connectionMeta;
   const { workspaces, createWorkspace, updateWorkspace, deleteWorkspace } = useWorkspaces(connectionId);
   const schemaState = useSchema(connectionId);
 
@@ -67,7 +83,7 @@ export default function App() {
   const [pinsLoading, setPinsLoading] = useState(false);
   const [history, setHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(true);
-  const [highlightedMessageId, setHighlightedMessageId] = useState(null);
+  const [selectedHistoryItem, setSelectedHistoryItem] = useState(null);
 
   const loadPins = useCallback(async () => {
     setPinsLoading(true);
@@ -94,11 +110,9 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (isAuthenticated) {
-      loadPins();
-      loadHistory();
-    }
-  }, [isAuthenticated, loadPins, loadHistory]);
+    loadPins();
+    loadHistory();
+  }, [loadPins, loadHistory]);
 
   const handleRemovePin = useCallback(async (pinId) => {
     try {
@@ -111,13 +125,13 @@ export default function App() {
 
   const handleNewQuery = useCallback(() => {
     setActiveView('chat');
-    setHighlightedMessageId(null);
+    setSelectedHistoryItem(null);
     setChatKey((k) => k + 1);
   }, []);
 
-  const handleSelectHistory = useCallback((id) => {
+  const handleSelectHistory = useCallback((item) => {
     setActiveView('chat');
-    setHighlightedMessageId(id);
+    setSelectedHistoryItem(item);
   }, []);
 
   // History row actions: optimistic, reverted by a reload on failure.
@@ -143,8 +157,8 @@ export default function App() {
 
   const handleDeleteHistory = useCallback(async (id) => {
     setHistory((prev) => prev.filter((h) => h.id !== id));
-    if (highlightedMessageId === id) {
-      setHighlightedMessageId(null);
+    if (selectedHistoryItem?.id === id) {
+      setSelectedHistoryItem(null);
       setChatKey((k) => k + 1);
     }
     try {
@@ -153,26 +167,7 @@ export default function App() {
       console.error('Failed to delete history item:', err);
       loadHistory();
     }
-  }, [highlightedMessageId, loadHistory]);
-
-  // Keep the first loading screen until the initial auth check finishes, so
-  // later refetches never unmount the landing page or the app.
-  const [initialLoading, setInitialLoading] = useState(true);
-  useEffect(() => {
-    if (!isLoading) setInitialLoading(false);
-  }, [isLoading]);
-
-  if (initialLoading) {
-    return <LoadingScreen message="Checking your session…" />;
-  }
-
-  if (!isAuthenticated) {
-    return (
-      <Suspense fallback={<LoadingScreen message="Loading…" />}>
-        <LandingPage onConnected={refetch} />
-      </Suspense>
-    );
-  }
+  }, [selectedHistoryItem, loadHistory]);
 
   return (
     <Suspense fallback={<LoadingScreen message="Loading your workspace…" />}>
@@ -186,7 +181,7 @@ export default function App() {
         onNewQuery={handleNewQuery}
         history={history}
         historyLoading={historyLoading}
-        highlightedMessageId={highlightedMessageId}
+        selectedHistoryItem={selectedHistoryItem}
         onSelectHistory={handleSelectHistory}
         onRenameHistory={handleRenameHistory}
         onTogglePin={handleTogglePin}

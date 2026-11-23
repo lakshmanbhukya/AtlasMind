@@ -20,8 +20,6 @@ const log = require('../utils/logger').logger.child({ module: 'allowance' });
 
 /** Whisper's billing floor, in seconds. */
 const AUDIO_MIN_SECONDS = 10;
-/** The client stops recording at 60 s, so that is the audio reservation. */
-const AUDIO_ESTIMATE_SECONDS = 60;
 
 /**
  * @typedef {object} Ticket
@@ -41,7 +39,7 @@ const AUDIO_ESTIMATE_SECONDS = 60;
 /**
  * @typedef {object} Meter
  * @property {(input: { promptChars: number, maxTokens: number, model?: string }) => Promise<Ticket>} reserveText
- * @property {(input?: { model?: string }) => Promise<Ticket>} reserveAudio
+ * @property {(input: { seconds: number, model?: string }) => Promise<Ticket>} reserveAudio
  * @property {(ticket: Ticket, result: { outcome: Outcome, actual?: number }) => Promise<void>} settle
  */
 
@@ -116,8 +114,9 @@ function createMeter(connectionId) {
         reserveText({ promptChars, maxTokens, model }) {
             return reserve('tokens', estimateTokens(promptChars, maxTokens), model);
         },
-        reserveAudio({ model } = {}) {
-            return reserve('audioSeconds', AUDIO_ESTIMATE_SECONDS, model);
+        reserveAudio({ model, seconds }) {
+            if (!Number.isFinite(seconds) || seconds <= 0) throw new RangeError('Invalid audio duration');
+            return reserve('audioSeconds', Math.max(AUDIO_MIN_SECONDS, Math.ceil(seconds)), model);
         },
         async settle(ticket, { outcome, actual }) {
             let charged = ticket.estimate;
@@ -169,4 +168,4 @@ async function getRemaining(connectionId) {
     }
 }
 
-module.exports = { createMeter, getRemaining, outcomeOf, estimateTokens, AUDIO_ESTIMATE_SECONDS, AUDIO_MIN_SECONDS };
+module.exports = { createMeter, getRemaining, outcomeOf, estimateTokens, AUDIO_MIN_SECONDS };

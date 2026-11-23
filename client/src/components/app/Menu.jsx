@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from '../../lib/utils';
 import { useDismiss } from '../../hooks/useDismiss';
 
@@ -9,8 +10,35 @@ const ITEM_SELECTOR = '[role="menuitem"]:not([disabled]),[role="menuitemradio"]:
  * Arrow/Home/End move focus, Esc closes and returns focus to the trigger,
  * Tab and outside clicks close it.
  */
-export function Menu({ open, onClose, anchorRef, label, className, children, focusChecked = true }) {
+export function Menu({ open, onClose, anchorRef, label, className, children, focusChecked = true, beside = false }) {
   const ref = useRef(null);
+
+  useLayoutEffect(() => {
+    if (!open || !beside) return;
+    const menu = ref.current;
+    const anchor = anchorRef.current;
+    const position = () => {
+      const rect = anchor.getBoundingClientRect();
+      const gap = 8;
+      const width = document.documentElement.clientWidth;
+      const height = document.documentElement.clientHeight;
+      const fitsRight = rect.right + gap + menu.offsetWidth <= width - gap;
+      menu.style.left = `${fitsRight ? rect.right + gap : Math.max(gap, rect.left - gap - menu.offsetWidth)}px`;
+      menu.style.top = `${Math.max(gap, Math.min(rect.top, height - menu.offsetHeight - gap))}px`;
+    };
+    position();
+    const visibility = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting) onClose();
+    });
+    visibility.observe(anchor);
+    window.addEventListener('resize', position);
+    window.addEventListener('scroll', position, true);
+    return () => {
+      visibility.disconnect();
+      window.removeEventListener('resize', position);
+      window.removeEventListener('scroll', position, true);
+    };
+  }, [open, beside, anchorRef, onClose]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -49,7 +77,7 @@ export function Menu({ open, onClose, anchorRef, label, className, children, foc
     }
   };
 
-  return (
+  const menu = (
     <div
       ref={ref}
       role="menu"
@@ -57,12 +85,14 @@ export function Menu({ open, onClose, anchorRef, label, className, children, foc
       onKeyDown={onKeyDown}
       className={cn(
         'absolute z-40 p-1 rounded-xl border border-vg-line bg-[var(--vg-menu)] shadow-[0_16px_40px_rgba(0,0,0,0.65)] text-vg-text',
+        beside && 'fixed z-[60] max-h-[calc(100dvh-16px)] overflow-y-auto',
         className
       )}
     >
       {children}
     </div>
   );
+  return beside ? createPortal(menu, document.querySelector('.vg-app') || document.body) : menu;
 }
 
 export function MenuItem({ icon: Icon, children, onSelect, danger, role = 'menuitem', checked, className, hint, ...props }) {

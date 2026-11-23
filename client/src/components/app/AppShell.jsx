@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useRef, useState } from 'react';
+import { Suspense, useCallback, useState } from 'react';
 import { lazyWithReload } from '../../lib/lazyWithReload';
 import { cn } from '../../lib/utils';
 import ErrorBoundary from '../ErrorBoundary';
@@ -8,6 +8,7 @@ import Sidebar from './Sidebar';
 import ThreadHeader from './ThreadHeader';
 import ChatThread from './ChatThread';
 import SchemaView from './SchemaView';
+import SettingsDialog from './SettingsDialog';
 import WorkspacesDialog from './WorkspacesDialog';
 
 // Dashboards (and the Recharts code they share with chat answers) load on demand.
@@ -44,7 +45,7 @@ export default function AppShell({
   const [desktopOpen, setDesktopOpen] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [workspacesOpen, setWorkspacesOpen] = useState(false);
-  const [keyFormOpen, setKeyFormOpen] = useState(false);
+  const [settingsDialog, setSettingsDialog] = useState(null);
 
   const sidebarVisible = isMobile ? drawerOpen : desktopOpen;
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
@@ -52,23 +53,8 @@ export default function AppShell({
 
   useDismiss(isMobile && drawerOpen, closeDrawer, { outside: false });
 
-  // A chat turn ("Use your own Groq key", "Update key") opens the key form in the sidebar.
-  // `onSaved` runs once that form saves a key; closing the form any other way drops it.
-  const keySavedRef = useRef(null);
   const requestKeyEntry = useCallback(({ onSaved } = {}) => {
-    keySavedRef.current = onSaved || null;
-    if (isMobile) setDrawerOpen(true);
-    else setDesktopOpen(true);
-    setKeyFormOpen(true);
-  }, [isMobile]);
-  const handleKeyFormOpenChange = useCallback((open) => {
-    if (!open) keySavedRef.current = null;
-    setKeyFormOpen(open);
-  }, []);
-  const handleKeySaved = useCallback(() => {
-    const onSaved = keySavedRef.current;
-    keySavedRef.current = null;
-    onSaved?.();
+    setSettingsDialog({ editKey: true, onSaved });
   }, []);
 
   // On phones, any sidebar navigation closes the drawer.
@@ -110,10 +96,7 @@ export default function AppShell({
             onTogglePin={onTogglePin}
             onDeleteHistory={onDeleteHistory}
             connectionMeta={connectionMeta}
-            onLogout={onLogout}
-            keyFormOpen={keyFormOpen}
-            onKeyFormOpenChange={handleKeyFormOpenChange}
-            onKeySaved={handleKeySaved}
+            onOpenSettings={afterNav(() => setSettingsDialog({ editKey: false }))}
           />
         </ErrorBoundary>
       </div>
@@ -152,6 +135,14 @@ export default function AppShell({
         )}
       </main>
 
+      {settingsDialog && (
+        <SettingsDialog
+          connectionId={connectionMeta?.connectionId}
+          initialKeyForm={settingsDialog.editKey}
+          onKeySaved={settingsDialog.onSaved}
+          onDismiss={() => setSettingsDialog(null)}
+        />
+      )}
       <WorkspacesDialog
         open={workspacesOpen}
         onClose={() => setWorkspacesOpen(false)}

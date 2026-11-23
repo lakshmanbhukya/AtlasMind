@@ -126,8 +126,10 @@ async function adjust({ day, connectionId, unit, delta }) {
  * @returns {Promise<{ tokens: number, audioSeconds: number, connTokens: number, connAudioSeconds: number }>}
  */
 async function usage({ day, connectionId }) {
-    connPath(connectionId, 'reading managed allowance');
-    const doc = await ledger().findOne({ _id: /** @type {any} */ (day) });
+    const path = connPath(connectionId, 'reading managed allowance');
+    const doc = await ledger().findOne({ _id: /** @type {any} */ (day) }, {
+        projection: { _id: 0, tokens: 1, audioSeconds: 1, [path]: 1 },
+    });
     const conn = (doc && doc.conn && doc.conn[connectionId]) || {};
     return {
         tokens: (doc && doc.tokens) || 0,

@@ -202,11 +202,15 @@ describe('getRemaining', () => {
         await allowance.createMeter('conn-a').reserveText(TEXT_100);
         await allowance.createMeter('conn-b').reserveText({ ...TEXT_100, promptChars: 1500 });
 
+        const read = jest.spyOn(mockLedger, 'findOne');
         await expect(allowance.getRemaining('conn-a')).resolves.toEqual({
             tokensRemaining: 400, // global 1000 − 600 beats connection 800 − 100
             audioSecondsRemaining: 600,
             resetAt: store.dayEnd(store.dayKey()).toISOString(),
             mode: 'enforce',
+        });
+        expect(read).toHaveBeenCalledWith({ _id: store.dayKey() }, {
+            projection: { _id: 0, tokens: 1, audioSeconds: 1, 'conn.conn-a': 1 },
         });
         await expect(allowance.getRemaining('conn-new')).resolves.toMatchObject({ tokensRemaining: 400 });
     });

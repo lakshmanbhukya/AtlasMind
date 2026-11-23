@@ -309,6 +309,17 @@ describe('managed allowance on every Groq attempt', () => {
         if (extension === 'wav') expect(file.size).toBe(44 + 60 * 32000);
     });
 
+    test('trims browser timer overrun before reserving and uploading managed voice', async () => {
+        process.env.GROQ_CONNECTION_DAILY_AUDIO_SECONDS = '60';
+        const provider = await resolveProvider({ connectionId: 'c', sessionId: 's' });
+        await transcribeAudio(recording(60.05), 'recording.webm', provider);
+        const { file } = managed.audio.transcriptions.create.mock.calls[0][0];
+        const pcm = Buffer.from(await file.arrayBuffer());
+        expect(pcm.length).toBe(44 + 60 * 32000);
+        expect(pcm.readUInt32LE(4)).toBe(pcm.length - 8);
+        expect(pcm.readUInt32LE(40)).toBe(pcm.length - 44);
+    });
+
     test.each([
         ['overlong', () => recording(61)],
         ['unreadable', () => Buffer.from('invalid')],

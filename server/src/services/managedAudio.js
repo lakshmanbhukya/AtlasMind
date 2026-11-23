@@ -10,6 +10,7 @@ const { QueryEngineError, ValidationError } = require('./engineErrors');
 
 const run = promisify(execFile);
 const MAX_SECONDS = 60;
+const RECORDER_GRACE_SECONDS = 0.5;
 const BYTES_PER_SECOND = 16000 * 2;
 
 /**
@@ -45,8 +46,16 @@ async function prepareManagedAudio(input) {
             throw new ValidationError('Could not read the audio recording.', 'upload_error');
         }
         const seconds = (wav.length - 44) / BYTES_PER_SECOND;
-        if (seconds > MAX_SECONDS) {
+        if (seconds > MAX_SECONDS + RECORDER_GRACE_SECONDS) {
             throw new ValidationError('Recordings over 60 seconds need your own Groq key.', 'upload_error');
+        }
+        if (seconds > MAX_SECONDS) {
+            // A browser timer can stop the recorder late. Send only the first minute of PCM.
+            const dataBytes = MAX_SECONDS * BYTES_PER_SECOND;
+            const trimmed = wav.subarray(0, 44 + dataBytes);
+            trimmed.writeUInt32LE(trimmed.length - 8, 4);
+            trimmed.writeUInt32LE(dataBytes, 40);
+            return { wav: trimmed, seconds: MAX_SECONDS };
         }
         return { wav, seconds };
     } finally {
